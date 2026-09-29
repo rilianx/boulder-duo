@@ -152,3 +152,39 @@ Evaluación final: 800 vidas con semillas que no se usaron para ajustar.
 - **El A\* supera por mucho a OLETS y MCTS**, pero tiene una ventaja: ve el mapa entero y la política "gemas y después salida" es específica de Boulder Dash.
 - **El predictor de muerte**, entrenado sin reglas escritas a mano, detecta el 46 % de las muertes en niveles no vistos, contra el 21 % de las reglas (F1 0,36 contra 0,08). Es más difícil que en nuestro juego porque los enemigos se mueven al azar.
 - **El CEM sobreajusta** con solo 3 niveles de entrenamiento. Mejora los niveles 0 a 2, pero empeora el nivel 4. Para arreglarlo hay que ajustar sobre muchos niveles generados con el formato de GVGAI y dejar los 5 oficiales solo para la prueba.
+
+### Sin sobreajuste: entrenar y ajustar solo en niveles generados
+
+`boulder/gvgai_levels.py` genera niveles con el formato y las estadísticas de los oficiales. El A\* con reglas a mano gana 16 de 20 de ellos, una dificultad parecida a la de los oficiales. El predictor y los dos CEM usan **solo** 300 niveles generados, con 12 niveles nuevos por generación del CEM. Los 5 oficiales no se tocan hasta la evaluación.
+
+```
+python gvgai_danger.py collect --gen 300 --samples 120000
+python gvgai_danger.py train --gen 300
+python gvgai_danger.py tune --gen 300
+python gvgai_danger.py eval --gen 300 --seeds 20
+```
+
+**El predictor en los 5 oficiales** (126.000 ejemplos de entrenamiento, 101.000 de prueba):
+
+| | Detecta las muertes | Precisión | F1 |
+|---|---|---|---|
+| Reglas a mano | 28,7 % | 5,2 % | 0,09 |
+| Red aprendida | **64,5 %** | **20,5 %** | **0,31** |
+
+La red tiene un AUC de 0,936.
+
+**Victorias en los 5 oficiales × 20 semillas:**
+
+| Agente | Victorias | Por nivel (0 a 4) |
+|---|---|---|
+| OLETS (calibración) | 48 % | — |
+| sampleMCTS (calibración) | 24 % | — |
+| A\* con reglas a mano | 90 % | 17, 13, 20, 20, 20 |
+| A\* con reglas + CEM (generados) | 88 % | 16, 12, 20, 20, 20 |
+| A\* con predictor (generados), sin CEM | 78 % | 17, 17, 17, 20, 7 |
+| **A\* con predictor + CEM (generados)** | **90 %** | 17, 17, 19, 20, 17 |
+
+**Cómo leerlo**
+- **Sin ninguna regla de peligro escrita a mano, y sin ver jamás los niveles oficiales,** el predictor aprendido con el modelo del juego, más el CEM, iguala a las reglas diseñadas a mano (90 %). Casi duplica a OLETS (48 %).
+- **Con niveles generados, el CEM ya no sobreajusta:** antes daba 77,5 % en los niveles 3 y 4 no vistos, ahora da 92,5 %.
+- **Las reglas a mano no mejoran con CEM** (88 % contra 90 %). Sus valores a mano ya estaban cerca de lo mejor.

@@ -84,8 +84,11 @@ class GvgaiBridge:
         return [float(v) for v in self._read()[3:].split()]
 
     def play(self, level: int, seed: int, policy, on_state=None):
-        """policy(state, bridge) → nuestra dirección 0..4 (o ('use',) para el pico). Devuelve (ganó, puntaje, ticks)."""
-        self.p.stdin.write(f"G {LEVELS[level]} {seed}\n"); self.p.stdin.flush()
+        """policy(state, bridge) → nuestra dirección 0..4 (o 'use' para el pico). Devuelve (ganó, puntaje, ticks).
+
+        `level` es un nivel oficial (0–4) o la ruta a un archivo de nivel."""
+        path = LEVELS[level] if isinstance(level, int) else Path(level).resolve()   # nivel oficial 0–4 o un archivo
+        self.p.stdin.write(f"G {path} {seed}\n"); self.p.stdin.flush()
         while True:
             line = self._read()
             if line.startswith("@E"):

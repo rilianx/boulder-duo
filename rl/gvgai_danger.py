@@ -5,6 +5,13 @@
     python gvgai_danger.py tune                        # CEM de c_dirt, w_risk, detour en niveles 0–2
     python gvgai_danger.py eval --seeds 20             # 5 niveles con semillas nuevas; 3 y 4 nunca vistos
 
+Con --gen N todo el entrenamiento y el ajuste usa N niveles generados (boulder/gvgai_levels.py) y los 5
+oficiales quedan solo para la evaluación:
+    python gvgai_danger.py collect --gen 300 --samples 120000
+    python gvgai_danger.py train --gen 300
+    python gvgai_danger.py tune --gen 300              # CEM del predictor y de las reglas a mano
+    python gvgai_danger.py eval --gen 300 --seeds 20
+
 Etiqueta: fracción de 4 copias del modelo del juego en que el avatar muere al entrar a la casilla vecina y
 luego quedarse quieto 3 ticks (los enemigos son aleatorios, por eso es una probabilidad).
 """
@@ -21,14 +28,20 @@ import torch
 
 from boulder.danger import N_IN, DangerModel, DangerNet, features, planes
 from boulder.gvgai_env import GvgaiBridge
-from boulder.gvgai_policy import (GV_DEFAULT, GV_LEARNED_DEFAULT, GV_LEARNED_PARAMS, gv_act, gv_act_learned,
-                                  gv_costs)
+from boulder.gvgai_levels import write_levels
+from boulder.gvgai_policy import (GV_DEFAULT, GV_LEARNED_DEFAULT, GV_LEARNED_PARAMS, GV_PARAMS, gv_act,
+                                  gv_act_learned, gv_costs)
 from boulder.sim import DIRT, E, GEM
 
 RUNS = Path(__file__).parent / "runs"
-DATA = RUNS / "gvgai_danger_data.npz"
+DATA = RUNS / "gvgai_danger_data.npz"          # etiquetas en los 5 niveles oficiales
 MODEL = RUNS / "gvgai_danger.pt"
 TUNED = RUNS / "gvgai_learned_tuned.json"
+GEN_DIR = RUNS / "gvgai_levels"
+DATA_GEN = RUNS / "gvgai_danger_data_gen.npz"  # etiquetas en niveles generados
+MODEL_GEN = RUNS / "gvgai_danger_gen.pt"
+TUNED_GEN = RUNS / "gvgai_learned_tuned_gen.json"
+TUNED_HAND_GEN = RUNS / "gvgai_hand_tuned_gen.json"
 TRAIN_LEVELS, TEST_LEVELS = [0, 1, 2], [3, 4]
 RISKY = {**GV_DEFAULT, "h_under": 0.0, "h_col": 0.0, "h_e1": 0.0, "h_e2": 0.0}   # imprudente: visita peligros
 RULE = {"c_dirt": 1.0, "h_under": 1.0, "h_col": 1.0, "h_e1": 1.0, "h_e2": 0.0, "detour": 0.0}
@@ -36,7 +49,9 @@ RULE = {"c_dirt": 1.0, "h_under": 1.0, "h_col": 1.0, "h_e1": 1.0, "h_e2": 0.0, "
 
 # ------------------------------------------------------------------ datos
 def _collect(job):
-    level, n_target, seed = job
+    levels, n_target, seed = job
+    if not isinstance(levels, list):
+        levels = [levels]
     rnd = random.Random(seed)
     b = GvgaiBridge()
     X, Y, RU = [], [], []
@@ -58,11 +73,22 @@ def _collect(job):
                 if rnd.random() < 0.3:
                     return rnd.randrange(5)
                 return gv_act(st, RISKY)
-            b.play(level, seed * 1000 + game, pol)
+            b.play(levels[game % len(levels)], seed * 1000 + game, pol)
             game += 1
     finally:
         b.close()
-    return level, np.concatenate(X), np.array(Y, np.float32), np.array(RU, np.float32)
+    return levels[0], np.concatenate(X), np.array(Y, np.float32), np.array(RU, np.float32)
+
+
+def collect_gen(n_levels, samples, procs):
+    paths = [str(p) for p in write_levels(n_levels, GEN_DIR, 0)]
+    per = samples // procs
+    with ProcessPoolExecutor(procs) as ex:
+        parts = list(ex.map(_collect, [(paths[k::procs], per, 100 + k) for k in range(procs)]))
+    X = np.concatenate([p[1] for p in parts]); Y = np.concatenate([p[2] for p in parts])
+    RU = np.concatenate([p[3] for p in parts])
+    np.savez_compressed(DATA_GEN, X=X, Y=Y, RU=RU)
+    print(f"{len(Y):,} ejemplos en {n_levels} niveles generados | {100 * (Y > 0.5).mean():.1f}% con p > 0,5")
 
 
 def collect(samples, procs):
@@ -119,16 +145,44 @@ def train(epochs=12, hidden=128):
     print("guardado en", MODEL)
 
 
+def train_gen(epochs=12, hidden=128):
+    g = np.load(DATA_GEN)
+    o = np.load(DATA)                                   # oficiales: solo para medir
+    Xt, Yt = torch.from_numpy(g["X"].astype(np.float32)), torch.from_numpy(g["Y"])
+    Xv, Yv = torch.from_numpy(o["X"].astype(np.float32)), o["Y"]
+    torch.manual_seed(0)
+    net = DangerNet(hidden)
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+    pw = float((1 - Yt.mean()) / max(float(Yt.mean()), 1e-3)) ** 0.5
+    lossf = torch.nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pw))
+    for ep in range(epochs):
+        perm = torch.randperm(len(Yt))
+        for k in range(0, len(perm), 512):
+            b = perm[k:k + 512]
+            loss = lossf(net(Xt[b]), Yt[b])
+            opt.zero_grad(); loss.backward(); opt.step()
+        with torch.no_grad():
+            pv = torch.sigmoid(net(Xv)).numpy()
+        print(f"época {ep + 1:2d}: AUC en los 5 niveles oficiales {auc(Yv > 0.5, pv):.3f}")
+    yb = Yv > 0.5
+    print(f"\nEn los 5 niveles oficiales, nunca vistos (muerte = p > 0,5, {yb.sum()} de {len(yb)} casos):")
+    for name, pred in (("reglas a mano", o["RU"] > 0.5), ("red aprendida", pv > 0.5)):
+        pr, rc, f1 = prf(yb, pred)
+        print(f"{name:>15}: precisión {100 * pr:5.1f}% | exhaustividad {100 * rc:5.1f}% | F1 {f1:.3f}")
+    torch.save({"model": net.state_dict(), "hidden": hidden, "n_in": N_IN, "levels": "generados"}, MODEL_GEN)
+    print("guardado en", MODEL_GEN)
+
+
 # ------------------------------------------------------------------ juego
 _M = None
 
 
 def _play(job):
     global _M
-    kind, P, level, seeds = job
+    kind, P, level, seeds, model_path = job
     if kind == "learned" and _M is None:
         torch.set_num_threads(1)
-        _M = DangerModel(MODEL)
+        _M = DangerModel(model_path)
     pol = (lambda st, br: gv_act_learned(st, P, _M)) if kind == "learned" else (lambda st, br: gv_act(st, P))
     b = GvgaiBridge()
     try:
@@ -137,8 +191,8 @@ def _play(job):
         b.close()
 
 
-def play_many(pool, kind, P, levels, seeds):
-    res = list(pool.map(_play, [(kind, P, lv, list(seeds)) for lv in levels]))
+def play_many(pool, kind, P, levels, seeds, model_path=MODEL):
+    res = list(pool.map(_play, [(kind, P, lv, list(seeds), str(model_path)) for lv in levels]))
     return {lv: rs for lv, rs in res}
 
 
@@ -151,27 +205,50 @@ def summary(label, res):
           f"ticks medios {sum(r[2] for r in allr) / len(allr):4.0f}", flush=True)
 
 
-def tune(procs, gens=8, pop=10, seeds_per=4):
-    names = list(GV_LEARNED_PARAMS)
-    lo = np.array([GV_LEARNED_PARAMS[k][0] for k in names]); hi = np.array([GV_LEARNED_PARAMS[k][1] for k in names])
+def tune(procs, gens=8, pop=10, seeds_per=4, space=GV_LEARNED_PARAMS, kind="learned", out=TUNED,
+         levels_fn=None, model_path=MODEL):
+    """CEM. levels_fn(gen) da los niveles de cada generación (por defecto los oficiales 0–2)."""
+    names = list(space)
+    lo = np.array([space[k][0] for k in names]); hi = np.array([space[k][1] for k in names])
     dec = lambda u: {k: float(v) for k, v in zip(names, lo + np.clip(u, 0, 1) * (hi - lo))}
-    mu = (np.array([GV_LEARNED_DEFAULT[k] for k in names]) - lo) / (hi - lo)
+    mu = (np.array([space[k][2] for k in names]) - lo) / (hi - lo)
     sigma = np.full(len(names), 0.25)
     rng = np.random.default_rng(0)
     with ProcessPoolExecutor(procs) as pool:
         for gen in range(gens):
             U = np.clip(mu + sigma * rng.standard_normal((pop, len(names))), 0, 1); U[0] = mu
             seeds = range(500 + gen * 10, 500 + gen * 10 + seeds_per)
+            levels = levels_fn(gen) if levels_fn else TRAIN_LEVELS
             scores = []
             for u in U:
-                res = play_many(pool, "learned", dec(u), TRAIN_LEVELS, seeds)
+                res = play_many(pool, kind, dec(u), levels, seeds, model_path)
                 rs = [r for v in res.values() for r in v]
                 scores.append(100 * np.mean([r[0] for r in rs]) - np.mean([r[2] for r in rs]) / 100)
             scores = np.array(scores); order = np.argsort(-scores)
             el = U[order[:3]]; mu = el.mean(0); sigma = np.maximum(0.7 * sigma + 0.3 * el.std(0), 0.03)
             print(f"gen {gen + 1}: mejor {scores[order[0]]:6.1f} | centro {scores[0]:6.1f} | "
                   + " ".join(f"{k}={v:.2f}" for k, v in dec(mu).items()), flush=True)
-            TUNED.write_text(json.dumps(dec(mu), indent=1))
+            out.write_text(json.dumps(dec(mu), indent=1))
+
+
+def tune_gen(procs, n_levels):
+    paths = [str(p) for p in write_levels(n_levels, GEN_DIR, 0)]
+    rng = np.random.default_rng(1)
+    pick = lambda gen: list(rng.choice(paths, 12, replace=False))     # 12 niveles nuevos por generación
+    print("CEM del predictor en niveles generados:")
+    tune(procs, gens=10, pop=10, seeds_per=1, levels_fn=pick, out=TUNED_GEN, model_path=MODEL_GEN)
+    print("CEM de las reglas a mano en niveles generados:")
+    tune(procs, gens=10, pop=12, seeds_per=1, space=GV_PARAMS, kind="hand", out=TUNED_HAND_GEN, levels_fn=pick)
+
+
+def evaluate_gen(procs, n):
+    seeds = range(100, 100 + n)
+    with ProcessPoolExecutor(procs) as pool:
+        summary("reglas a mano", play_many(pool, "hand", GV_DEFAULT, range(5), seeds))
+        summary("reglas + CEM (gen.)", play_many(pool, "hand", json.loads(TUNED_HAND_GEN.read_text()), range(5), seeds))
+        summary("predictor (gen.), sin CEM", play_many(pool, "learned", GV_LEARNED_DEFAULT, range(5), seeds, MODEL_GEN))
+        summary("predictor + CEM (gen.)", play_many(pool, "learned", json.loads(TUNED_GEN.read_text()), range(5), seeds,
+                                                    MODEL_GEN))
 
 
 def evaluate(procs, n):
@@ -189,9 +266,14 @@ def main():
     p.add_argument("--samples", type=int, default=40_000)
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--seeds", type=int, default=20)
+    p.add_argument("--gen", type=int, default=0, help="entrenar y ajustar en N niveles generados")
     a = p.parse_args()
-    {"collect": lambda: collect(a.samples, a.procs), "train": train,
-     "tune": lambda: tune(a.procs), "eval": lambda: evaluate(a.procs, a.seeds)}[a.cmd]()
+    if a.gen:
+        {"collect": lambda: collect_gen(a.gen, a.samples, a.procs), "train": train_gen,
+         "tune": lambda: tune_gen(a.procs, a.gen), "eval": lambda: evaluate_gen(a.procs, a.seeds)}[a.cmd]()
+    else:
+        {"collect": lambda: collect(a.samples, a.procs), "train": train,
+         "tune": lambda: tune(a.procs), "eval": lambda: evaluate(a.procs, a.seeds)}[a.cmd]()
 
 
 if __name__ == "__main__":
