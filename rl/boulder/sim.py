@@ -313,6 +313,17 @@ class Sim:
         return self.events
 
     # ------------------------------------------------------------------ utilidades
+    def copy(self) -> "Sim":
+        """Copia independiente del estado, para simular hipótesis (\"¿y si entro ahí?\")."""
+        c = Sim.__new__(Sim)
+        c.__dict__.update({k: (bytearray(v) if isinstance(v, bytearray) else v) for k, v in self.__dict__.items()
+                           if k not in ("agent", "events")})
+        c.events = []
+        c.agent = Agent()
+        for k in Agent.__slots__:
+            setattr(c.agent, k, getattr(self.agent, k))
+        return c
+
     def window(self):
         """Lo que muestra la cámara del PC: VW x VH casillas alrededor del agente (aiWindow en JS)."""
         a = self.agent

@@ -7,11 +7,13 @@ import signal
 import numpy as np
 
 from .env import BoulderEnv
+from .macro import MacroEnv
 
 
-def _worker(conn, n, seed, levels, max_tokens):
+def _worker(conn, n, seed, levels, max_tokens, kind):
     signal.signal(signal.SIGINT, signal.SIG_IGN)      # el proceso principal decide cuándo parar
-    envs = [BoulderEnv(levels=levels, seed=seed * 1000 + k, max_tokens=max_tokens) for k in range(n)]
+    cls = MacroEnv if kind == "macro" else BoulderEnv
+    envs = [cls(levels=levels, seed=seed * 1000 + k, max_tokens=max_tokens) for k in range(n)]
     while True:
         cmd, data = conn.recv()
         if cmd == "reset":
@@ -26,12 +28,12 @@ def _worker(conn, n, seed, levels, max_tokens):
 
 
 class VecEnv:
-    def __init__(self, n_workers=3, envs_per_worker=8, seed=0, levels=range(1, 13), max_tokens=32):
+    def __init__(self, n_workers=3, envs_per_worker=8, seed=0, levels=range(1, 13), max_tokens=32, kind="micro"):
         ctx = mp.get_context("spawn")
         self.conns, self.procs = [], []
         for w in range(n_workers):
             a, b = ctx.Pipe()
-            p = ctx.Process(target=_worker, args=(b, envs_per_worker, seed + w, list(levels), max_tokens), daemon=True)
+            p = ctx.Process(target=_worker, args=(b, envs_per_worker, seed + w, list(levels), max_tokens, kind), daemon=True)
             p.start()
             self.conns.append(a)
             self.procs.append(p)
@@ -40,7 +42,7 @@ class VecEnv:
 
     @staticmethod
     def _stack(obs):
-        return np.stack([o[0] for o in obs]), np.stack([o[1] for o in obs])
+        return tuple(np.stack([o[k] for o in obs]) for k in range(len(obs[0])))
 
     def reset(self):
         for c in self.conns:

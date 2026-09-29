@@ -126,6 +126,7 @@ class Tokenizer:
                 break
         me[89] = a.push / 2
         mask[0] = True
+        self.last_meta = [(sim.CELL, a.y * W + a.x)]      # (tipo de celda, índice) de cada token válido
 
         ents = []
         exit_seen = False
@@ -176,4 +177,5 @@ class Tokenizer:
                 row[20] = float(x + 1 < W and g[j + 1] == E)
             self._local(sim, row, x, y)
             mask[n] = True
+            self.last_meta.append((t, j))
         return out, mask
