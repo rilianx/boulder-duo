@@ -577,7 +577,7 @@ function enemy(i, x, y, t){
 
 function tick(){
   moved.fill(0); landThisTick = false;
-  players.forEach(p => { if (p.ai) aiThink(p); });
+  players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(stepPlayer);
   if (state !== 'play') return;
@@ -739,7 +739,7 @@ const ACT = ['↑','→','↓','←','·'];
 const AI = { Q:new Map(), alpha:.15, gamma:.93, lambda:.3, epsMax:.3, epsMin:.02, decay:.998,
              episodes:0, deaths:0, exits:0, hist:[], blocks:[], cur:{n:0,g:0,x:0,d:0},
              epR:0, last:null, showWin:true };
-let speed = 1, turbo = false, turboTicks = 0;
+let speed = 1, turbo = false, turboTicks = 0, simHook = false;
 
 /* Storage: IndexedDB holds the whole brain (the Map is stored as-is by structured clone, no size-limited JSON).
    localStorage is only the fallback, and the old v2 save is migrated once. */
@@ -1241,7 +1241,7 @@ function render(){ updateCams(); renderView(0); renderView(1); }
 let last = performance.now(), acc = 0;
 function loop(now){
   const dt = Math.min(250, now - last); last = now;
-  if (turbo) { acc = 0; drawTurbo(); drawAiPanel(); requestAnimationFrame(loop); return; }
+  if (turbo || simHook) { acc = 0; if (turbo) { drawTurbo(); drawAiPanel(); } else render(); requestAnimationFrame(loop); return; }
   if (state === 'play') {
     acc += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
@@ -1316,6 +1316,29 @@ $('ai-reset').onclick = () => {
   else { resetArm = Date.now(); b.textContent = '¿SEGURO? CLIC OTRA VEZ'; setTimeout(() => { if (Date.now() - resetArm >= 2900) b.textContent = 'BORRAR APRENDIZAJE'; }, 3000); }
 };
 window.addEventListener('pagehide', aiSave);
+
+/* Test hook: drives the simulation tick by tick from outside (rl/tests/gen_js_traces.mjs).
+   Inert unless something calls it; the normal game never does. */
+window.__sim = {
+  start(n){
+    if (turbo) setTurbo(false);
+    simHook = true; mode = 'train'; speed = 1e9;
+    players = [newPlayer(0), newPlayer(1)]; players[0].lives = 0;
+    players[1].ai = true; players[1].external = true;
+    initLevel(n); return this.hash();
+  },
+  step(a){ const p = players[1]; p.held = a < 4 ? [a] : []; tick(); return this.hash(); },
+  hash(){
+    let h = 0x811C9DC5 >>> 0;
+    const mix = v => { h = Math.imul(h ^ (v & 0xFF), 0x01000193) >>> 0; };
+    [grid, fall, dir, aux].forEach(arr => { for (let i = 0; i < arr.length; i++) mix(arr[i]); });
+    const a = players[1];
+    [a.x, a.y, +a.alive, +a.exited, a.gems, a.immune, a.respawn, a.push, timeLeft].forEach(mix);
+    return h;
+  },
+  state(){ const a = players[1]; return { grid: Array.from(grid), fall: Array.from(fall), dir: Array.from(dir), aux: Array.from(aux),
+    agent: { x:a.x, y:a.y, alive:a.alive, exited:a.exited, gems:a.gems, immune:a.immune, respawn:a.respawn, push:a.push }, timeLeft, level }; }
+};
 
 /* demo board behind the menu so the first frame shows a real mine */
 players = [newPlayer(0), newPlayer(1)];

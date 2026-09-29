@@ -23,3 +23,13 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 - **Estado:** resume su pantalla de 17×12 casillas. Incluye qué hay en cada dirección y el tipo de peligro, el peligro en su propia casilla, el primer paso de la ruta segura más corta (BFS) hacia la gema o la salida más cercana con su distancia, el enemigo más cercano, si le cae una roca encima y cuántas gemas tiene a la vista.
 - **Recompensas:** +5 por gema, +60 por salir, −40 por morir, −0,05 por paso, −0,3 por chocar con algo, y +0,4 por cada casilla que se acerca al objetivo.
 - **Guardado:** lo aprendido se guarda en IndexedDB del navegador cada 15 segundos, con localStorage como respaldo.
+
+## Entrenamiento fuera del navegador
+
+`rl/` tiene lo necesario para entrenar al rival fuera del navegador:
+- una copia en Python de la simulación, verificada tick a tick contra este `index.html`,
+- un tokenizador de entidades,
+- un transformer con PPO,
+- un baseline con A\*.
+
+Ver [`rl/README.md`](rl/README.md).

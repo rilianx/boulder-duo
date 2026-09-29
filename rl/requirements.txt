@@ -1,0 +1,4 @@
+numpy>=1.26
+torch>=2.2
+pytest>=8
+onnx>=1.15        # solo para export_onnx.py
