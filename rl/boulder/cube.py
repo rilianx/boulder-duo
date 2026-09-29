@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import heapq
 import math
+import time
 
 import numpy as np
 import torch
@@ -58,46 +59,70 @@ class CubeNavigator(Navigator):
         self.risk, self.Hz, self.reps, self.pred = risk, horizon, reps, danger
 
     def plan(self, st, goal, strict=True):
+        """A* sobre (casilla, tick) dentro de una ventana centrada en el avatar, con tope de tiempo.
+
+        Heurística y cola del camino: distancia al destino por BFS inverso (sin peligro). Fuera de la ventana
+        o del horizonte se completa con esa distancia. Si se acaba el tiempo (P["budget_ms"]), devuelve la
+        primera acción del mejor nodo encontrado hasta ahí."""
+        t_start = time.perf_counter()
+        budget = self.P.get("budget_ms", 25.0) / 1000
+        Rw = int(self.P.get("win", 8))
         cube = self._cube(st)                                # cube[k] = máscaras dentro de k+1 ticks
-        W, N = st.W, len(st.masks)
+        W, Hh, N = st.W, st.H, len(st.masks)
         K = self.know
         offs = (-W, 1, W, -1, 0)
         H = len(cube)
+        bm = 0
+        for t in set(K.passed) | set(K.blocked):
+            if K.is_blocking(t):
+                bm |= 1 << t
+        C = np.array(cube, dtype=np.int64) if H else np.zeros((0, N), np.int64)
+        blocked = (C & bm) != 0                              # [H, N]
         R = [self.risk.grid(c) for c in cube]
-        blocked = [[any(m >> t & 1 and K.is_blocking(t) for t in range(63)) for m in c] for c in cube]
+        now_blocked = (np.array(st.masks, dtype=np.int64) & bm) != 0
+        dist = self._dist_to_goal(st, goal, now_blocked)
+        if dist[st.pos] is None:
+            return None
+        ax, ay = st.pos % W, st.pos // W
+        inwin = lambda c: abs(c % W - ax) <= Rw and abs(c // W - ay) <= Rw
         w = self.P["w_risk"]
         pred = {}
         if self.pred is not None:
-            pred = self.pred.probs(st, [j for j in range(N) if not blocked[0][j]])
-        gx, gy = goal % W, goal // W
-        h = lambda c: abs(c % W - gx) + abs(c // W - gy)
+            pred = self.pred.probs(st, [j for j in range(N) if not now_blocked[j] and inwin(j)])
         start = (st.pos, 0)
         best = {start: 0.0}; first = {start: -1}
-        pq = [(h(st.pos), 0.0, st.pos, 0)]
-        tail_cache = {}
+        pq = [(dist[st.pos], 0.0, st.pos, 0)]
+        best_partial = (math.inf, None)
+        n_pop = 0
         while pq:
             f, g, c, k = heapq.heappop(pq)
-            if c == goal:
+            if c == goal or k == -1:
                 return g, first[(c, k)]
             if g > best.get((c, k), math.inf):
                 continue
-            if k == H:                                       # fuera del horizonte: completar sin peligro
-                if c not in tail_cache:
-                    tail_cache[c] = self._tail(st, c, goal)
-                d = tail_cache[c]
-                if d is not None:
-                    heapq.heappush(pq, (g + d, g + d, goal, k))
-                    best[(goal, k)] = min(best.get((goal, k), math.inf), g + d)
-                    first[(goal, k)] = first[(c, k)]
+            n_pop += 1
+            if dist[c] is not None and dist[c] < best_partial[0] and first[(c, k)] != -1:
+                best_partial = (dist[c], first[(c, k)])
+            if n_pop % 64 == 0 and time.perf_counter() - t_start > budget:
+                return (best_partial[0], best_partial[1]) if best_partial[1] is not None else None
+            if k == H or not inwin(c):                       # fuera del horizonte o de la ventana: completar
+                if dist[c] is not None:
+                    node = (goal, -1)
+                    ng = g + dist[c]
+                    if ng < best.get(node, math.inf):
+                        best[node] = ng; first[node] = first[(c, k)]
+                        heapq.heappush(pq, (ng, ng, goal, -1))
                 continue
             x, y = c % W, c // W
             for d in range(5):
                 if d < 4:
                     xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
-                    if not (0 <= xx < W and 0 <= yy < st.H):
+                    if not (0 <= xx < W and 0 <= yy < Hh):
                         continue
                 j = c + offs[d]
                 if blocked[k][j] and j != goal:
+                    continue
+                if dist[j] is None:
                     continue
                 p = float(R[k][j])
                 if d < 4 and pred:
@@ -106,9 +131,30 @@ class CubeNavigator(Navigator):
                 node = (j, k + 1)
                 if ng < best.get(node, math.inf):
                     best[node] = ng
-                    first[node] = (d if d < 4 else 4) if k == 0 else first[(c, k)]
-                    heapq.heappush(pq, (ng + h(j), ng, j, k + 1))
+                    first[node] = d if k == 0 else first[(c, k)]
+                    heapq.heappush(pq, (ng + dist[j], ng, j, k + 1))
         return None
+
+    def _dist_to_goal(self, st, goal, blocked):
+        """BFS desde el destino sobre lo transitable ahora: distancia (sin peligro) de cada casilla."""
+        W, N = st.W, len(st.masks)
+        dist = [None] * N
+        dist[goal] = 0
+        fr = [goal]
+        while fr:
+            nx = []
+            for i in fr:
+                x, y = i % W, i // W
+                for d, o in enumerate((-W, 1, W, -1)):
+                    xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
+                    j = i + o
+                    if 0 <= xx < W and 0 <= yy < st.H and dist[j] is None and not blocked[j]:
+                        dist[j] = dist[i] + 1
+                        nx.append(j)
+            fr = nx
+        if dist[st.pos] is None and not blocked[st.pos]:
+            pass
+        return dist
 
     def _cube(self, st):
         return self._br.future(self.Hz, self.reps)
