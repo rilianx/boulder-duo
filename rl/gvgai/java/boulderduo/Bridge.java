@@ -26,6 +26,9 @@ import java.util.HashMap;
 public class Bridge {
     static BufferedReader in;
     static PrintStream out;
+    /** modo genérico: la grilla va como conjuntos de tipos de sprite (sin traducir a Boulder Dash) */
+    static boolean generic = false;
+    static boolean sentTypes = false;
     static final Types.ACTIONS[] ACTS = {Types.ACTIONS.ACTION_NIL, Types.ACTIONS.ACTION_UP, Types.ACTIONS.ACTION_DOWN,
             Types.ACTIONS.ACTION_LEFT, Types.ACTIONS.ACTION_RIGHT, Types.ACTIONS.ACTION_USE};
     // orden de nuestras direcciones (↑ → ↓ ←) y quieto
@@ -38,11 +41,13 @@ public class Bridge {
         System.setOut(new PrintStream(System.err, true));
         in = new BufferedReader(new InputStreamReader(System.in));
         String game = args[0];
+        generic = args.length > 1 && args[1].equals("generic");
         String line;
         while ((line = in.readLine()) != null) {
             String[] p = line.trim().split(" ");
             if (p[0].equals("Q")) break;
             if (p[0].equals("G")) {
+                sentTypes = false;
                 double[] r = ArcadeMachine.runOneGame(game, p[1], false, "boulderduo.PyAgent", null, Integer.parseInt(p[2]), 0);
                 // r = {ganó, puntaje, ticks}
                 out.println("@E " + (int) r[0] + " " + r[1] + " " + (int) r[2]);
@@ -99,6 +104,41 @@ public class Bridge {
             if (reg.getRegisteredSpriteKey(k).equals("diamond")) gems = res.get(k);
         return so.getGameTick() + " " + so.getGameScore() + " " + ax + " " + ay + " " + gems + " " + W + " " + H + " "
                 + new String(cells) + " " + (rocks.length() > 0 ? rocks : "-");
+    }
+
+    /**
+     * Estado genérico: tick puntaje ax ay tipoAvatar W H celdas recursos
+     * celdas = máscara hexadecimal de itypes por casilla (fila por fila, separadas por comas),
+     * recursos = itype:cantidad;... (o "-"). La primera vez por partida antes va "@T itype nombre categoría ...".
+     */
+    static String encodeGeneric(StateObservation so) {
+        int bs = so.getBlockSize();
+        ArrayList<Observation>[][] g = so.getObservationGrid();
+        int W = g.length, H = g[0].length;
+        StringBuilder sb = new StringBuilder();
+        java.util.HashMap<Integer, Integer> cat = new java.util.HashMap<>();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                long m = 0;
+                for (Observation o : g[x][y]) { if (o.itype < 63) m |= 1L << o.itype; cat.put(o.itype, o.category); }
+                if (x + y > 0) sb.append(',');
+                sb.append(Long.toHexString(m));
+            }
+        if (!sentTypes) {
+            VGDLRegistry reg = VGDLRegistry.GetInstance();
+            StringBuilder t = new StringBuilder("@T");
+            for (int i = 0; i < reg.numSpriteTypes(); i++)
+                t.append(' ').append(i).append(':').append(reg.getRegisteredSpriteKey(i)).append(':')
+                 .append(cat.getOrDefault(i, -1));
+            out.println(t);
+            sentTypes = true;
+        }
+        StringBuilder res = new StringBuilder();
+        for (java.util.Map.Entry<Integer, Integer> e : so.getAvatarResources().entrySet())
+            res.append(e.getKey()).append(':').append(e.getValue()).append(';');
+        int ax = (int) Math.round(so.getAvatarPosition().x / bs), ay = (int) Math.round(so.getAvatarPosition().y / bs);
+        return so.getGameTick() + " " + so.getGameScore() + " " + ax + " " + ay + " " + so.getAvatarType() + " " + W + " "
+                + H + " " + sb + " " + (res.length() > 0 ? res : "-");
     }
 
     static String labels(StateObservation so, int k, int reps) {

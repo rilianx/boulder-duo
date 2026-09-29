@@ -12,7 +12,7 @@ public class PyAgent extends AbstractPlayer {
     @Override
     public Types.ACTIONS act(StateObservation so, ElapsedCpuTimer t) {
         try {
-            Bridge.out.println("@S " + Bridge.encode(so));
+            Bridge.out.println(Bridge.generic ? "@G " + Bridge.encodeGeneric(so) : "@S " + Bridge.encode(so));
             Bridge.out.flush();
             while (true) {
                 String line = Bridge.in.readLine();
