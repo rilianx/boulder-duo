@@ -15,8 +15,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from boulder.generic import (GDanger, GDangerNet, GenericAgent, GenericBridge, Knowledge, gfeatures, gplanes,
-                             value_params)
+from boulder.generic import (DEFAULT_W, WEIGHTS, GDanger, GDangerNet, GenericAgent, GenericBridge, Knowledge,
+                             gfeatures, gplanes)
 from boulder.gvgai_levels import write_levels
 
 RUNS = Path(__file__).parent / "runs" / "generic"
@@ -34,8 +34,12 @@ def train_levels(game):
     return [0, 1, 2]
 
 
-def random_values(rng, names):
-    return {n: float(rng.uniform(-5, 25)) if n.startswith("a_") else float(rng.uniform(-10, 20)) for n in names}
+def random_weights(rng):
+    """Pesos al azar con mucha curiosidad: para explorar y tocar de todo mientras se juntan datos."""
+    P = {k: float(rng.uniform(lo, hi)) for k, (lo, hi, _) in WEIGHTS.items()}
+    P["k_new"] = float(rng.uniform(10, 20))
+    P["lam"] = float(rng.uniform(0.02, 0.2))        # ir lejos: para llegar a juntar todo y probar la salida
+    return P
 
 
 # ------------------------------------------------------------------ 1. datos + transitabilidad
@@ -49,14 +53,12 @@ def _collect(job):
     g = 0
     try:
         while len(Y) < n_target:
-            ag = GenericAgent({}, know=K, rng=rng, eps=0.3)
+            ag = GenericAgent(random_weights(rng), know=K, rng=rng, eps=0.3)
 
             def pol(st, br):
                 nonlocal T
                 if T is None:
                     T = max(st.types) + 1
-                if ag.P == {} and K.avatar_types:
-                    ag.P = random_values(rng, value_params(st.types, K)[2])
                 a = ag(st, br)
                 W, N = st.W, len(st.masks)
                 cand = [(d, st.pos + o) for d, o in enumerate((-W, 1, W, -1)) if 0 <= st.pos + o < N]
@@ -82,15 +84,22 @@ def collect(game, samples, procs):
     X = np.concatenate([p[0] for p in parts]); Y = np.concatenate([p[1] for p in parts])
     K = Knowledge()
     for p in parts:                                  # combinar lo aprendido por cada proceso
-        k = Knowledge.from_json(p[2])
-        for t, v in k.passed.items(): K.passed[t] = K.passed.get(t, 0) + v
-        for t, v in k.blocked.items(): K.blocked[t] = K.blocked.get(t, 0) + v
-        K.floor |= k.floor; K.avatar_types |= k.avatar_types
+        K.merge(Knowledge.from_json(p[2]))
     d = paths(game)
     np.savez_compressed(d / "data.npz", X=X, Y=Y, T=parts[0][3])
     (d / "knowledge.json").write_text(json.dumps(K.to_json()))
     print(f"{game}: {len(Y):,} ejemplos | {100 * (Y > 0.5).mean():.1f}% con p > 0,5 | "
           f"bloquean: {sorted(t for t in set(K.passed) | set(K.blocked) if K.is_blocking(t))}")
+    describe(game, K)
+
+
+def describe(game, K):
+    b = GenericBridge(game); b.play(train_levels(game)[0], 0, lambda st, br: 4); types = b.types; b.close()
+    for t in sorted(K.eff):
+        ds, dr, da, pd, n = K.effect(t)
+        wins = {k: v for k, v in K.term.get(t, {}).items() if v[1]}
+        print(f"   {types[t][0]:>14}: tocado {n:5d} | Δpuntaje {ds:+.2f} | Δrecursos {dr:+.2f} | cambia avatar {da:.2f} | "
+              f"muere {pd:.2f}" + (f" | gana con (avatar|recursos) {sorted(wins)[:4]}" if wins else ""))
 
 
 # ------------------------------------------------------------------ 2. predictor
@@ -145,12 +154,10 @@ def score_of(rs):
 def tune(game, procs, gens=10, pop=16, elite=4):
     d = paths(game)
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
-    b = GenericBridge(game); b.play(train_levels(game)[0], 0, lambda st, br: 4); types = b.types; b.close()
-    names = value_params(types, K)[2] + ["w_risk"]
-    lo = np.array([0.0 if n == "w_risk" else (-10.0 if n.startswith("a_") else -20.0) for n in names])
-    hi = np.array([60.0 if n == "w_risk" else 30.0 for n in names])
+    names = list(WEIGHTS)
+    lo = np.array([WEIGHTS[n][0] for n in names]); hi = np.array([WEIGHTS[n][1] for n in names])
     dec = lambda u: {n: float(v) for n, v in zip(names, lo + np.clip(u, 0, 1) * (hi - lo))}
-    mu = (np.array([20.0 if n == "w_risk" else 0.0 for n in names]) - lo) / (hi - lo)
+    mu = (np.array([DEFAULT_W[n] for n in names]) - lo) / (hi - lo)
     sigma = np.full(len(names), 0.3)
     rng = np.random.default_rng(0)
     lv = train_levels(game)
@@ -176,7 +183,6 @@ def tune(game, procs, gens=10, pop=16, elite=4):
 def evaluate(game, procs, n_seeds=20):
     d = paths(game)
     P = json.loads((d / "values.json").read_text())
-    names = {k: v for k, v in GenericBridge.__dict__.items()}
     seeds = list(range(100, 100 + n_seeds))
     with ProcessPoolExecutor(procs) as pool:
         for label, use in (("genérico con predictor", True), ("genérico sin predictor", False)):
@@ -198,6 +204,12 @@ def main():
     p.add_argument("--seeds", type=int, default=20)
     a = p.parse_args()
     steps = ["collect", "train", "tune", "eval"] if a.cmd == "all" else [a.cmd]
+    d = paths(a.game)
+    if a.cmd == "all":                                # reanudable: salta lo que ya está hecho
+        if (d / "data.npz").exists() and (d / "knowledge.json").exists():
+            steps.remove("collect")
+        if (d / "danger.pt").exists() and "collect" not in steps:
+            steps.remove("train")
     for s in steps:
         {"collect": lambda: collect(a.game, a.samples, a.procs), "train": lambda: train(a.game),
          "tune": lambda: tune(a.game, a.procs), "eval": lambda: evaluate(a.game, a.procs, a.seeds)}[s]()

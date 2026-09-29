@@ -107,22 +107,31 @@ public class Bridge {
     }
 
     /**
-     * Estado genérico: tick puntaje ax ay tipoAvatar W H celdas recursos
+     * Estado genérico: tick puntaje ax ay tipoAvatar W H celdas enMovimiento recursos
      * celdas = máscara hexadecimal de itypes por casilla (fila por fila, separadas por comas),
+ * enMovimiento = igual, solo con los sprites que están entre dos casillas,
      * recursos = itype:cantidad;... (o "-"). La primera vez por partida antes va "@T itype nombre categoría ...".
      */
     static String encodeGeneric(StateObservation so) {
         int bs = so.getBlockSize();
         ArrayList<Observation>[][] g = so.getObservationGrid();
         int W = g.length, H = g[0].length;
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(), fr = new StringBuilder();
         java.util.HashMap<Integer, Integer> cat = new java.util.HashMap<>();
         for (int y = 0; y < H; y++)
             for (int x = 0; x < W; x++) {
-                long m = 0;
-                for (Observation o : g[x][y]) { if (o.itype < 63) m |= 1L << o.itype; cat.put(o.itype, o.category); }
-                if (x + y > 0) sb.append(',');
+                long m = 0, f = 0;
+                for (Observation o : g[x][y]) {
+                    if (o.itype < 63) {
+                        m |= 1L << o.itype;
+                        // entre dos casillas = en movimiento (p. ej. una roca que cae 0,2 casillas por tick)
+                        if (o.position.x % bs != 0 || o.position.y % bs != 0) f |= 1L << o.itype;
+                    }
+                    cat.put(o.itype, o.category);
+                }
+                if (x + y > 0) { sb.append(','); fr.append(','); }
                 sb.append(Long.toHexString(m));
+                fr.append(Long.toHexString(f));
             }
         if (!sentTypes) {
             VGDLRegistry reg = VGDLRegistry.GetInstance();
@@ -138,7 +147,7 @@ public class Bridge {
             res.append(e.getKey()).append(':').append(e.getValue()).append(';');
         int ax = (int) Math.round(so.getAvatarPosition().x / bs), ay = (int) Math.round(so.getAvatarPosition().y / bs);
         return so.getGameTick() + " " + so.getGameScore() + " " + ax + " " + ay + " " + so.getAvatarType() + " " + W + " "
-                + H + " " + sb + " " + (res.length() > 0 ? res : "-");
+                + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-");
     }
 
     static String labels(StateObservation so, int k, int reps) {
