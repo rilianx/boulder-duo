@@ -188,3 +188,34 @@ La red tiene un AUC de 0,936.
 - **Sin ninguna regla de peligro escrita a mano, y sin ver jamás los niveles oficiales,** el predictor aprendido con el modelo del juego, más el CEM, iguala a las reglas diseñadas a mano (90 %). Casi duplica a OLETS (48 %).
 - **Con niveles generados, el CEM ya no sobreajusta:** antes daba 77,5 % en los niveles 3 y 4 no vistos, ahora da 92,5 %.
 - **Las reglas a mano no mejoran con CEM** (88 % contra 90 %). Sus valores a mano ya estaban cerca de lo mejor.
+
+## Agente genérico: sin conocimiento del juego (`boulder/generic.py`, `generic_train.py`)
+
+El agente solo usa lo que da el motor de GVGAI:
+- la grilla como conjuntos de tipos de sprite, con su categoría VGDL,
+- la posición, el tipo y los recursos del avatar,
+- el modelo del juego, para preguntar "¿muero si hago X?".
+
+Todo lo demás lo aprende jugando:
+
+| Qué aprende | Cómo |
+|---|---|
+| Qué se puede pisar | Por experiencia, sin contar los giros en el lugar de los avatares orientados |
+| Los efectos de tocar cada tipo | Puntaje, recursos, cambio de avatar, y si gana o muere según los recursos y el avatar |
+| Dónde hay peligro | Un predictor de muerte sobre planos por tipo: tick actual, tick anterior y sprites en movimiento |
+
+En cada tick el objetivo se elige como **valor − `lam` · costo de la ruta**. El valor combina los efectos con 8 pesos globales, ajustados con CEM: en niveles generados para Boulder Dash, y en los niveles 0 a 2 para los demás juegos.
+
+**Resultados en 5 niveles × 20 semillas:**
+
+| Juego | Genérico | Genérico sin predictor | OLETS (nuestro montaje) | Agente específico |
+|---|---|---|---|---|
+| Boulder Dash | **68 %** (niveles 3 y 4: 82,5 %) | 9 % | 48 % | 90 % |
+| Zelda | 49 % (niveles 3 y 4: 27,5 %) | 49 % | 88 % | — |
+| Frogs | 0 % | 0 % | 96 % | — |
+
+**Observaciones**
+- **Sin saber nada de Boulder Dash**, el agente genérico supera a OLETS. Descubrió solo que tocar la salida con 10 recursos gana.
+- **Los pesos a mano no sirven.** Probé 5 combinaciones razonadas y dieron entre 0 % y 20 %. Los del CEM (`w_risk` 6,9, `k_new` 11,3, `lam` 0,17) no se habrían adivinado.
+- **En Zelda los 8 pesos se sobreajustan** a los 3 niveles de entrenamiento.
+- **Frogs necesita planificar en el tiempo:** los troncos y los camiones se mueven, y el A\* planifica sobre una foto fija.
