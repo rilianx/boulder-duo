@@ -328,3 +328,23 @@ Con eso arma el cubo y usa el mismo A\* espacio-tiempo, con horizonte de 20 tick
 - **Sin consultar el modelo mientras juega,** extrapolar los objetos y sumar el predictor da las tasas de muerte más bajas de todas en Boulder Dash (5 %) y en Zelda (10 %).
 - **El costo es la prudencia:** muchas más órdenes terminan por tiempo, porque el navegador espera o rodea. Falta ajustar `w_risk` para equilibrar muerte y tiempo.
 - **Todavía no cabe en 40 ms en Boulder Dash ni en Frogs.** Pendiente: una ventana centrada en el avatar y búsqueda con tope de tiempo.
+
+### Un solo navegador, dos parámetros por juego (`alpha`, `w_risk`)
+
+El riesgo de un paso es **máx(cubo de objetos, α · predictor)**. El cubo mira lo que viene hacia el avatar, extrapolando los objetos. El predictor mira lo que provoca el propio avatar. `α` y `w_risk` se ajustan con una grilla de 3 × 3 en los niveles de entrenamiento: niveles generados en Boulder Dash, y niveles 0 a 2 en Zelda y Frogs.
+
+**Evaluación en los niveles oficiales**, sin modelo del juego en ejecución:
+
+| Juego | α | `w_risk` | Llega | Muere | Tiempo agotado | Tiempo por decisión (media / p95) |
+|---|---|---|---|---|---|---|
+| Boulder Dash | 1 | 12 | 54 % | **5,4 %** | 36 % | 10 / 18 ms |
+| Zelda | 1 | 20 | 75 % | **8,3 %** | 17 % | 7 / 15 ms |
+| Frogs | 0,3 | 20 | 55 % | 14,4 % | 31 % | 14 / 25 ms |
+| Frogs, solo objetos (α = 0), corrida anterior | 0 | 20 | **73 %** | **10 %** | 17 % | 8 / 16 ms |
+
+Sin peligro, las muertes eran 36 % (Boulder Dash), 38 % (Zelda) y 95 % (Frogs).
+
+**Qué muestran**
+- **El predictor pesa donde el peligro lo provoca el avatar** (Boulder Dash: α = 1). En Frogs pesa poco (α = 0,3), porque su pregunta, "¿muero si entro y me quedo 3 ticks?", castiga cruzar un carril en el momento justo.
+- **En Frogs la grilla eligió α = 0,3**, pero en los niveles oficiales α = 0 anduvo mejor. Con solo 3 niveles de entrenamiento, el ajuste es ruidoso.
+- **Todo cabe en el presupuesto de 40 ms** de GVGAI.
