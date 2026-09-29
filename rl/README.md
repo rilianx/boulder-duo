@@ -219,3 +219,28 @@ En cada tick el objetivo se elige como **valor − `lam` · costo de la ruta**. 
 - **Los pesos a mano no sirven.** Probé 5 combinaciones razonadas y dieron entre 0 % y 20 %. Los del CEM (`w_risk` 6,9, `k_new` 11,3, `lam` 0,17) no se habrían adivinado.
 - **En Zelda los 8 pesos se sobreajustan** a los 3 niveles de entrenamiento.
 - **Frogs necesita planificar en el tiempo:** los troncos y los camiones se mueven, y el A\* planifica sobre una foto fija.
+
+## El A\* como subordinado: seguir órdenes sin morir (`boulder/nav.py`, `nav_bench.py`)
+
+El A\* no decide qué conviene. Recibe órdenes "ve a la casilla X" de un agente de alto nivel, que puede ser la red de punteros, una persona o un LLM, y tiene que cumplirlas sin morir. Solo sabe qué se puede pisar (aprendido) y dónde hay peligro (predictor de muerte aprendido).
+
+**Cómo se mide.** Se dan órdenes al azar hacia destinos a 5 a 25 pasos, en los 5 niveles oficiales de GVGAI, unas 300 órdenes por fila. Cada orden termina en uno de cuatro resultados:
+- **llegó:** alcanzó el destino con vida,
+- **murió,**
+- **tiempo agotado:** pasaron más de 3 × la distancia más corta + 20 ticks,
+- **inalcanzable:** no hay ruta.
+
+| Juego | Navegador | Llega | Muere | Tiempo agotado | Inalcanzable | Ruta / más corta |
+|---|---|---|---|---|---|---|
+| Boulder Dash | sin peligro | 49,8 % | **40,0 %** | 8,5 % | 1,6 % | 1,56 |
+| Boulder Dash | predictor | 63,4 % | **18,8 %** | 13,1 % | 4,8 % | 1,81 |
+| Boulder Dash | predictor + grilla (`w_risk` 40, `p_max` 0,5) | 58,4 % | **18,8 %** | 18,8 % | 4,1 % | 1,81 |
+| Zelda | sin peligro | 61,9 % | **38,1 %** | 0 % | 0 % | 1,40 |
+| Zelda | predictor | 68,7 % | **31,3 %** | 0 % | 0 % | 1,64 |
+| Frogs | sin peligro | 4,3 % | **95,7 %** | 0 % | 0 % | 1,00 |
+| Frogs | predictor | 13,9 % | **86,1 %** | 0 % | 0 % | 1,00 |
+
+**Qué muestran**
+- **Boulder Dash:** las muertes por orden bajan a menos de la mitad (40 % → 19 %). La grilla sobre niveles generados no mejoró a los valores a mano: prohíbe más pasos, así que más órdenes terminan por tiempo sin que bajen las muertes.
+- **Zelda:** los enemigos se mueven al azar y el avatar no usa la espada, así que la mejora es menor (38 % → 31 %).
+- **Frogs:** el peligro depende del tiempo. El predictor ve bien cada casilla, pero un A\* sobre una foto fija no puede sincronizarse con los troncos. Hace falta planificar en espacio y tiempo.

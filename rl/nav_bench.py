@@ -144,7 +144,7 @@ def tune(game, procs, orders=100):
     """Búsqueda en grilla de w_risk y p_max en niveles de entrenamiento (son solo 2 parámetros)."""
     lv = train_levels(game)
     rng = np.random.default_rng(0)
-    levels = list(rng.choice(lv, min(len(lv), 12), replace=False))
+    levels = [x.item() if hasattr(x, "item") else x for x in rng.choice(lv, min(len(lv), 12), replace=False)]
     best = (-1e9, None)
     for w in (5.0, 10.0, 20.0, 40.0):
         for pmax in (0.5, 0.8, 1.0):
