@@ -19,6 +19,7 @@ import torch
 
 from boulder.generic import GDanger, GenericBridge, Knowledge
 from boulder.gvgai_levels import write_levels
+from boulder.cube import CellRisk, CubeNavigator
 from boulder.nav import NAV_DEFAULT, NAV_PARAMS, Navigator, shortest
 
 RUNS = Path(__file__).parent / "runs" / "generic"
@@ -50,11 +51,14 @@ class OrderGiver:
 
     def _finish(self, how, st=None):
         self.stats[how] += 1
+        self.stats.setdefault("by_row", {}).setdefault(f"{self.goal // self.W}:{how}", 0)
+        self.stats["by_row"][f"{self.goal // self.W}:{how}"] += 1
         if how == "reached":
             self.stats["stretch"].append((st.tick - self.t0) / max(self.dist, 1))
         self.goal = None
 
     def __call__(self, st, br):
+        self.W = st.W
         if self.goal is not None:
             if st.pos == self.goal:
                 self._finish("reached", st)
@@ -64,14 +68,14 @@ class OrderGiver:
             self._new_order(st)
             if self.goal is None:
                 return 4
-        act, ok = self.nav.step(st, self.goal)
+        act, ok = self.nav.step(st, self.goal, br)
         if not ok:
             self.stats["unreachable"] += 1
             self.goal = None
         return act
 
     def end(self, won):
-        if self.goal is not None:
+        if self.goal is not None and hasattr(self, "W"):
             self._finish("died" if won != 1 else "reached_win")
         self.nav.last = None
 
@@ -81,9 +85,10 @@ _D = {}
 
 def run(job):
     game, P, levels, seeds, use_danger, n_orders = job
+    cube = use_danger == "cube"
     torch.set_num_threads(1)
     d = RUNS / game
-    if use_danger and game not in _D:
+    if use_danger and not cube and game not in _D:
         _D[game] = GDanger(d / "danger.pt")
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
     stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "stretch": []}
@@ -92,7 +97,10 @@ def run(job):
     try:
         k = 0
         while stats["orders"] < n_orders:
-            nav = Navigator(K, _D.get(game) if use_danger else None, P)
+            if cube:
+                nav = CubeNavigator(K, CellRisk(d / "cell_risk.pt"), P)
+            else:
+                nav = Navigator(K, _D.get(game) if use_danger else None, P)
             b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats))
             k += 1
     finally:
@@ -103,9 +111,14 @@ def run(job):
 def merge(parts):
     out = {k: 0 for k in ("orders", "reached", "died", "timeout", "unreachable", "reached_win")}
     out["stretch"] = []
+    out["by_row"] = {}
     for p in parts:
         for k in out:
-            out[k] = out[k] + p[k]
+            if k == "by_row":
+                for kk, v in p.get("by_row", {}).items():
+                    out["by_row"][kk] = out["by_row"].get(kk, 0) + v
+            else:
+                out[k] = out[k] + p[k]
     return out
 
 
@@ -115,6 +128,11 @@ def report(label, s):
     print(f"{label:>26}: órdenes {s['orders']:4d} | llegó {100 * reached / n:5.1f}% | murió {100 * s['died'] / n:5.1f}% | "
           f"tiempo {100 * s['timeout'] / n:5.1f}% | inalcanzable {100 * s['unreachable'] / n:4.1f}% | "
           f"ruta / más corta {np.median(s['stretch']) if s['stretch'] else float('nan'):.2f}", flush=True)
+    if s.get("by_row") and label.endswith("(filas)"):
+        rows = sorted({int(k.split(':')[0]) for k in s["by_row"]})
+        for r in rows:
+            cnt = {k.split(':')[1]: v for k, v in s["by_row"].items() if int(k.split(':')[0]) == r}
+            print(f"      fila {r:2d}: {cnt}", flush=True)
 
 
 def test_levels(game):
@@ -164,12 +182,19 @@ def main():
     p.add_argument("--orders", type=int, default=300)
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--tune", action="store_true")
+    p.add_argument("--only-cube", action="store_true")
     a = p.parse_args()
+    if a.only_cube:
+        return report(f"{a.game} cubo + escudo (filas)", bench(a.game, {**NAV_DEFAULT, "shield": 0.25}, a.orders, a.procs,
+                                                        "cube", test_levels(a.game)))
     if a.tune:
         return tune(a.game, a.procs)
     lv = test_levels(a.game)
     report(f"{a.game} sin peligro", bench(a.game, {**NAV_DEFAULT, "w_risk": 0.0}, a.orders, a.procs, False, lv))
+    report(f"{a.game} solo escudo", bench(a.game, {**NAV_DEFAULT, "w_risk": 0.0, "shield": 0.25}, a.orders, a.procs, False, lv))
     report(f"{a.game} predictor (a mano)", bench(a.game, NAV_DEFAULT, a.orders, a.procs, True, lv))
+    report(f"{a.game} predictor + escudo", bench(a.game, {**NAV_DEFAULT, "shield": 0.25}, a.orders, a.procs, True, lv))
+    report(f"{a.game} cubo + escudo", bench(a.game, {**NAV_DEFAULT, "shield": 0.25}, a.orders, a.procs, "cube", lv))
     f = RUNS / a.game / "nav.json"
     if f.exists():
         report(f"{a.game} predictor + CEM", bench(a.game, json.loads(f.read_text()), a.orders, a.procs, True, lv))

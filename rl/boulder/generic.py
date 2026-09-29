@@ -88,6 +88,12 @@ class GenericBridge:
             if line.startswith("@"):
                 return line.rstrip("\n")
 
+    def future(self, h=30, reps=3):
+        """Cubo del futuro: máscaras por casilla para cada uno de los próximos h ticks (avatar quieto)."""
+        self.p.stdin.write(f"F {h} {reps}\n"); self.p.stdin.flush()
+        n = int(self._read().split()[1])
+        return [[int(v, 16) for v in self.p.stdout.readline().strip().split(",")] for _ in range(n)]
+
     def labels(self, k=3, reps=4):
         self.p.stdin.write(f"L {k} {reps}\n"); self.p.stdin.flush()
         return [float(v) for v in self._read()[3:].split()]

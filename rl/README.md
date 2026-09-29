@@ -244,3 +244,32 @@ El A\* no decide qué conviene. Recibe órdenes "ve a la casilla X" de un agente
 - **Boulder Dash:** las muertes por orden bajan a menos de la mitad (40 % → 19 %). La grilla sobre niveles generados no mejoró a los valores a mano: prohíbe más pasos, así que más órdenes terminan por tiempo sin que bajen las muertes.
 - **Zelda:** los enemigos se mueven al azar y el avatar no usa la espada, así que la mejora es menor (38 % → 31 %).
 - **Frogs:** el peligro depende del tiempo. El predictor ve bien cada casilla, pero un A\* sobre una foto fija no puede sincronizarse con los troncos. Hace falta planificar en espacio y tiempo.
+
+### Esperar: escudo de un paso y cubo del futuro
+
+- **Escudo** (`shield` en `nav.py`): antes de cada paso, pregunta al modelo del juego si moverse en cada dirección o quedarse quieto lo mata (4 copias, 3 ticks). Si el paso elegido es riesgoso y hay una opción más segura, la toma, y a igual riesgo prefiere esperar.
+- **Cubo del futuro** (`boulder/cube.py`): simula 30 ticks con el avatar quieto (3 simulaciones, conservando la unión) y busca con A\* sobre (casilla, tick), donde las acciones son 4 movimientos o esperar. El riesgo de cada casilla en cada tick sale de una regresión logística por tipo de sprite. Un sprite entre dos casillas marca las dos.
+
+**Muertes por orden** (unas 200 órdenes por fila; unas 170 en las filas del cubo):
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| sin peligro | 38 % | 36 % | 96 % |
+| solo escudo | 29 % | 15 % | 18 % |
+| predictor | **18 %** | 29 % | 87 % |
+| predictor + escudo | 19 % | **8 %** | 10 % |
+| cubo + escudo | 21 % | **7 %** | **8 %** |
+
+**Órdenes cumplidas (llega):**
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| sin peligro | 52 % | 64 % | 5 % |
+| predictor | **65 %** | 71 % | 14 % |
+| predictor + escudo | 63 % | 89 % | 33 % |
+| cubo + escudo | 45 % | **92 %** | **46 %** |
+
+**Qué muestran**
+- **En Zelda y Frogs** el peligro viene hacia el avatar (enemigos, camiones), y saber esperar es lo que más baja las muertes.
+- **En Boulder Dash** el peligro lo provoca el propio avatar al cavar. Ahí gana el predictor, que mira la geometría local, y el cubo no ayuda: simula con el avatar quieto, así que no ve las rocas que el avatar liberaría.
+- **En Frogs sigue alto el tiempo agotado** (45 %) con el cubo. La exploración nunca llegó al río, así que no hay datos de agua ni de troncos, y además los troncos arrastran al avatar. Falta una segunda pasada de datos.

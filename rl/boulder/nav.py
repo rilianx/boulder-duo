@@ -6,13 +6,17 @@ o tiempo agotado. No sabe nada de qué conviene en el juego: solo qué se puede 
 peligro (predictor de muerte aprendido), con estos parámetros:
   w_risk  costo extra de un paso = w_risk · (−log(1 − p_muerte))
   p_max   un paso con p_muerte ≥ p_max se prohíbe salvo que no haya otra ruta
+  shield  si > 0, escudo de un paso: antes de moverse pregunta al modelo del juego (4 copias, 3 ticks) cuán
+          mortal es cada movimiento y quedarse quieto; si el paso elegido tiene riesgo ≥ shield y hay una
+          opción más segura (esperar primero, o hacerse a un lado), la toma. Así puede dejar pasar un
+          enemigo o una roca en vez de meterse.
 """
 from __future__ import annotations
 
 import heapq
 import math
 
-NAV_PARAMS = {"w_risk": (0.0, 60.0, 20.0), "p_max": (0.3, 1.0, 1.0)}
+NAV_PARAMS = {"w_risk": (0.0, 60.0, 20.0), "p_max": (0.3, 1.0, 1.0), "shield": (0.0, 1.0, 0.0)}
 NAV_DEFAULT = {k: v[2] for k, v in NAV_PARAMS.items()}
 
 
@@ -63,7 +67,7 @@ class Navigator:
             return self.plan(st, goal, strict=False)     # sin ruta "segura": la menos mala
         return None
 
-    def step(self, st, goal):
+    def step(self, st, goal, br=None):
         """Acción para acercarse a goal (4 = quieto si no hay ruta). Aprende transitabilidad al vuelo."""
         W = st.W
         offs = (-W, 1, W, -1)
@@ -74,6 +78,16 @@ class Navigator:
                 self.know.record_move(mask, moved)
         r = self.plan(st, goal)
         act = r[1] if r is not None and r[1] >= 0 else 4
+        thr = self.P.get("shield", 0.0)
+        if thr > 0 and br is not None and act < 4:
+            lab = br.labels(3, 4)                      # riesgo real de ↑ → ↓ ← y quieto según el modelo
+            if lab[act] >= thr:
+                blocked = self._blocked(st)
+                opts = [4] + [d for d in range(4) if 0 <= st.pos + offs[d] < len(st.masks) and not blocked[st.pos + offs[d]]]
+                safest = min(opts, key=lambda d: (lab[d], d != 4))   # a igual riesgo, esperar
+                if lab[safest] < lab[act]:
+                    act = safest
+                    self.stats_wait = getattr(self, "stats_wait", 0) + (safest == 4)
         if act < 4 and 0 <= st.pos + offs[act] < len(st.masks):
             self.last = (st.pos, act, st.masks[st.pos + offs[act]], self.last_dir == act)
             self.last_dir = act

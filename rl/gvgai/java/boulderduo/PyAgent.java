@@ -19,6 +19,10 @@ public class PyAgent extends AbstractPlayer {
                 if (line == null) return Types.ACTIONS.ACTION_NIL;
                 String[] p = line.trim().split(" ");
                 if (p[0].equals("A")) return Bridge.ACTS[Integer.parseInt(p[1])];
+                if (p[0].equals("F")) {
+                    Bridge.future(so, Integer.parseInt(p[1]), Integer.parseInt(p[2]));
+                    continue;
+                }
                 if (p[0].equals("L")) {
                     Bridge.out.println("@L" + Bridge.labels(so, Integer.parseInt(p[1]), Integer.parseInt(p[2])));
                     Bridge.out.flush();

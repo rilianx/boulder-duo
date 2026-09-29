@@ -150,6 +150,45 @@ public class Bridge {
                 + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-");
     }
 
+    /**
+     * Cubo del futuro: simula h ticks con el avatar quieto, reps veces, y devuelve por tick la unión de las
+     * máscaras de tipos por casilla ("@F" y luego h líneas "t mascara,mascara,...").
+     */
+    static void future(StateObservation so, int h, int reps) {
+        ArrayList<long[]> acc = new ArrayList<>();
+        for (int r = 0; r < reps; r++) {
+            StateObservation c = so.copy();
+            for (int t = 0; t < h; t++) {
+                if (c.isGameOver()) break;
+                c.advance(Types.ACTIONS.ACTION_NIL);
+                ArrayList<Observation>[][] g = c.getObservationGrid();
+                int W = g.length, H = g[0].length;
+                if (acc.size() <= t) acc.add(new long[W * H]);
+                long[] m = acc.get(t);
+                int bs = c.getBlockSize();
+                for (int y = 0; y < H; y++)
+                    for (int x = 0; x < W; x++)
+                        for (Observation o : g[x][y]) {
+                            if (o.itype >= 63) continue;
+                            m[y * W + x] |= 1L << o.itype;
+                            // un sprite entre dos casillas ocupa ambas (p. ej. un camión a medio camino)
+                            int fx = (int) Math.floor(o.position.x / bs), fy = (int) Math.floor(o.position.y / bs);
+                            if (o.position.x % bs != 0 && fx + 1 < W) m[Math.max(0, fy) * W + fx + 1] |= 1L << o.itype;
+                            if (o.position.y % bs != 0 && fy + 1 < H) m[(fy + 1) * W + Math.max(0, fx)] |= 1L << o.itype;
+                        }
+            }
+        }
+        StringBuilder sb = new StringBuilder("@F ").append(acc.size());
+        out.println(sb);
+        for (int t = 0; t < acc.size(); t++) {
+            StringBuilder l = new StringBuilder();
+            long[] m = acc.get(t);
+            for (int i = 0; i < m.length; i++) { if (i > 0) l.append(','); l.append(Long.toHexString(m[i])); }
+            out.println(l);
+        }
+        out.flush();
+    }
+
     static String labels(StateObservation so, int k, int reps) {
         StringBuilder sb = new StringBuilder();
         for (Types.ACTIONS a : DIRS) {
