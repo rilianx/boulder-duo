@@ -273,3 +273,27 @@ El A\* no decide qué conviene. Recibe órdenes "ve a la casilla X" de un agente
 - **En Zelda y Frogs** el peligro viene hacia el avatar (enemigos, camiones), y saber esperar es lo que más baja las muertes.
 - **En Boulder Dash** el peligro lo provoca el propio avatar al cavar. Ahí gana el predictor, que mira la geometría local, y el cubo no ayuda: simula con el avatar quieto, así que no ve las rocas que el avatar liberaría.
 - **En Frogs sigue alto el tiempo agotado** (45 %) con el cubo. La exploración nunca llegó al río, así que no hay datos de agua ni de troncos, y además los troncos arrastran al avatar. Falta una segunda pasada de datos.
+
+### Tiempo por decisión (`nav_bench.py <juego> --timing`)
+
+Se mide solo el paso del navegador, incluidas las consultas al modelo del juego. La máquina estaba libre, con 2 procesos. El límite de la competencia GVGAI es 40 ms por acción.
+
+**Media / p95 en ms:**
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| sin peligro | 1,1 / 1,7 | 0,4 / 0,6 | 1,3 / 2,7 |
+| predictor | 11,1 / 17,1 | 3,8 / 6,0 | 15,7 / 24,2 |
+| predictor + escudo | 21,2 / 32,5 | 7,2 / 12,7 | 19,1 / 29,7 |
+| cubo + escudo | 48,3 / 65,5 | 16,1 / 25,3 | 44,1 / 79,8 |
+
+**Decisiones que pasan de 40 ms:**
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| sin peligro | 0 % | 0 % | 0 % |
+| predictor | 0,6 % | 0 % | 2,1 % |
+| predictor + escudo | 2,9 % | 0,1 % | 1,6 % |
+| cubo + escudo | **85,5 %** | 1,2 % | **50,0 %** |
+
+**Conclusión.** El predictor y el escudo caben en el presupuesto de la competencia. El cubo sobre la grilla completa no cabe en Boulder Dash ni en Frogs, así que su ventaja ahí no es comparable con la de OLETS. Además, el reloj de GVGAI solo mide el hilo de Java, por lo que hay que medir nuestro lado para comparar de forma justa.

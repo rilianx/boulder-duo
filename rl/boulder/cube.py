@@ -51,9 +51,11 @@ class CellRisk:
 
 
 class CubeNavigator(Navigator):
-    def __init__(self, know, risk: CellRisk, P, horizon=H_DEFAULT, reps=3, **kw):
+    def __init__(self, know, risk: CellRisk, P, horizon=H_DEFAULT, reps=3, danger=None, **kw):
+        """danger (opcional): predictor de muerte sobre la grilla actual; el riesgo de un paso pasa a ser
+        max(cubo, predictor), para ver también el peligro que provoca el propio avatar (cavar bajo una roca)."""
         super().__init__(know, None, P, **kw)
-        self.risk, self.Hz, self.reps = risk, horizon, reps
+        self.risk, self.Hz, self.reps, self.pred = risk, horizon, reps, danger
 
     def plan(self, st, goal, strict=True):
         cube = self._br.future(self.Hz, self.reps)          # cube[k] = máscaras dentro de k+1 ticks
@@ -64,6 +66,9 @@ class CubeNavigator(Navigator):
         R = [self.risk.grid(c) for c in cube]
         blocked = [[any(m >> t & 1 and K.is_blocking(t) for t in range(63)) for m in c] for c in cube]
         w = self.P["w_risk"]
+        pred = {}
+        if self.pred is not None:
+            pred = self.pred.probs(st, [j for j in range(N) if not blocked[0][j]])
         gx, gy = goal % W, goal // W
         h = lambda c: abs(c % W - gx) + abs(c // W - gy)
         start = (st.pos, 0)
@@ -95,6 +100,8 @@ class CubeNavigator(Navigator):
                 if blocked[k][j] and j != goal:
                     continue
                 p = float(R[k][j])
+                if d < 4 and pred:
+                    p = max(p, pred.get((j, d), 0.0))
                 ng = g + 1.0 + w * -math.log(max(1e-4, 1 - p))
                 node = (j, k + 1)
                 if ng < best.get(node, math.inf):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -58,6 +59,9 @@ class OrderGiver:
         self.goal = None
 
     def __call__(self, st, br):
+        return self._decide(st, br)
+
+    def _decide(self, st, br):
         self.W = st.W
         if self.goal is not None:
             if st.pos == self.goal:
@@ -68,7 +72,9 @@ class OrderGiver:
             self._new_order(st)
             if self.goal is None:
                 return 4
+        t0 = time.perf_counter()                          # solo el navegador, no la generación de órdenes
         act, ok = self.nav.step(st, self.goal, br)
+        self.stats.setdefault("ms", []).append(1000 * (time.perf_counter() - t0))
         if not ok:
             self.stats["unreachable"] += 1
             self.goal = None
@@ -85,10 +91,10 @@ _D = {}
 
 def run(job):
     game, P, levels, seeds, use_danger, n_orders = job
-    cube = use_danger == "cube"
+    cube = use_danger in ("cube", "hybrid")
     torch.set_num_threads(1)
     d = RUNS / game
-    if use_danger and not cube and game not in _D:
+    if use_danger and use_danger != "cube" and game not in _D:
         _D[game] = GDanger(d / "danger.pt")
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
     stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "stretch": []}
@@ -98,7 +104,8 @@ def run(job):
         k = 0
         while stats["orders"] < n_orders:
             if cube:
-                nav = CubeNavigator(K, CellRisk(d / "cell_risk.pt"), P)
+                nav = CubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
+                                    danger=_D.get(game) if use_danger == "hybrid" else None)
             else:
                 nav = Navigator(K, _D.get(game) if use_danger else None, P)
             b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats))
@@ -112,9 +119,12 @@ def merge(parts):
     out = {k: 0 for k in ("orders", "reached", "died", "timeout", "unreachable", "reached_win")}
     out["stretch"] = []
     out["by_row"] = {}
+    out["ms"] = []
     for p in parts:
         for k in out:
-            if k == "by_row":
+            if k == "ms":
+                out["ms"] += p.get("ms", [])
+            elif k == "by_row":
                 for kk, v in p.get("by_row", {}).items():
                     out["by_row"][kk] = out["by_row"].get(kk, 0) + v
             else:
@@ -183,7 +193,22 @@ def main():
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--tune", action="store_true")
     p.add_argument("--only-cube", action="store_true")
+    p.add_argument("--only-hybrid", action="store_true")
+    p.add_argument("--timing", action="store_true", help="tiempo por decisión de cada navegador")
     a = p.parse_args()
+    if a.timing:
+        lv = test_levels(a.game)
+        for label, P, kind in (("sin peligro", {**NAV_DEFAULT, "w_risk": 0.0}, False), ("predictor", NAV_DEFAULT, True),
+                               ("predictor + escudo", {**NAV_DEFAULT, "shield": 0.25}, True),
+                               ("cubo + escudo", {**NAV_DEFAULT, "shield": 0.25}, "cube")):
+            s = bench(a.game, P, a.orders, a.procs, kind, lv)
+            ms = np.array(s["ms"])
+            print(f"{a.game:>11} {label:>20}: {len(ms):6d} decisiones | media {ms.mean():6.1f} ms | p50 {np.median(ms):6.1f} | "
+                  f"p95 {np.percentile(ms, 95):6.1f} | máx {ms.max():7.1f} | sobre 40 ms {100 * (ms > 40).mean():5.1f}%", flush=True)
+        return
+    if a.only_hybrid:
+        return report(f"{a.game} híbrido + escudo (filas)", bench(a.game, {**NAV_DEFAULT, "shield": 0.25}, a.orders,
+                                                                  a.procs, "hybrid", test_levels(a.game)))
     if a.only_cube:
         return report(f"{a.game} cubo + escudo (filas)", bench(a.game, {**NAV_DEFAULT, "shield": 0.25}, a.orders, a.procs,
                                                         "cube", test_levels(a.game)))
