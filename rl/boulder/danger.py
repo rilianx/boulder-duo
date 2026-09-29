@@ -26,14 +26,18 @@ for t, c in ((E, 0), (DIRT, 1), (WALL, 2), (STEEL, 2), (EXIT, 2), (ROCK, 3), (GE
     _CLASS[t] = c
 
 
-def planes(sim: Sim) -> np.ndarray:
-    """Tensor [N_CH, H+2R, W+2R] con la grilla codificada y un borde sólido de R casillas."""
-    g = np.frombuffer(bytes(sim.grid), np.uint8).reshape(H, W)
-    f = np.frombuffer(bytes(sim.fall), np.uint8).reshape(H, W)
-    d = np.frombuffer(bytes(sim.dir), np.uint8).reshape(H, W)
-    out = np.zeros((N_CH, H + 2 * R, W + 2 * R), np.float32)
+def planes(sim) -> np.ndarray:
+    """Tensor [N_CH, H+2R, W+2R] con la grilla codificada y un borde sólido de R casillas.
+
+    Sirve para nuestro Sim (40×22) y para GvgaiState (26×13): toma W y H del estado si los tiene."""
+    Wd, Hd = getattr(sim, "W", W), getattr(sim, "H", H)
+    g = np.frombuffer(bytes(sim.grid), np.uint8).reshape(Hd, Wd)
+    f = np.frombuffer(bytes(sim.fall), np.uint8).reshape(Hd, Wd)
+    d = np.frombuffer(bytes(sim.dir), np.uint8).reshape(Hd, Wd)
+    H_, W_ = Hd, Wd
+    out = np.zeros((N_CH, H_ + 2 * R, W_ + 2 * R), np.float32)
     out[2] = 1                                                    # fuera del mapa = sólido
-    inner = out[:, R:R + H, R:R + W]
+    inner = out[:, R:R + H_, R:R + W_]
     inner[2] = 0
     cls = _CLASS[g]
     for c in range(N_CLASS):
@@ -45,10 +49,10 @@ def planes(sim: Sim) -> np.ndarray:
     return out
 
 
-def features(pl: np.ndarray, cells, dirs) -> np.ndarray:
-    """Entrada de la red para (casilla destino, dirección del paso)."""
+def features(pl: np.ndarray, cells, dirs, width: int = W) -> np.ndarray:
+    """Entrada de la red para (casilla destino, dirección del paso). `width` = ancho de la grilla."""
     cells = np.asarray(cells); dirs = np.asarray(dirs)
-    ys, xs = cells // W, cells % W
+    ys, xs = cells // width, cells % width
     win = np.lib.stride_tricks.sliding_window_view(pl, (PATCH, PATCH), axis=(1, 2))   # [C, H, W, 7, 7]
     patches = win[:, ys, xs].transpose(1, 0, 2, 3).reshape(len(cells), -1)
     X = np.zeros((len(cells), N_IN), np.float32)
@@ -84,19 +88,21 @@ class DangerModel:
 
     def __init__(self, path):
         ck = torch.load(path, weights_only=False)
+        self.meta = ck
         self.net = DangerNet(ck["hidden"])
         self.net.load_state_dict(ck["model"])
         self.net.eval()
         torch.set_num_threads(1)
 
-    def window_probs(self, sim: Sim):
+    def window_probs(self, sim):
         """dict {(j, d): p} para toda casilla transitable de la pantalla entrada desde su vecino en d."""
         g = sim.grid
+        Wd, Hd = getattr(sim, "W", W), getattr(sim, "H", H)
         x0, y0, x1, y1 = sim.window()
         cells, dirs = [], []
-        for y in range(max(1, y0), min(H - 1, y1 + 1)):
-            for x in range(max(1, x0), min(W - 1, x1 + 1)):
-                j = y * W + x
+        for y in range(max(1, y0), min(Hd - 1, y1 + 1)):
+            for x in range(max(1, x0), min(Wd - 1, x1 + 1)):
+                j = y * Wd + x
                 if g[j] in (E, DIRT, GEM):
                     for d in range(4):
                         cells.append(j); dirs.append(d)
@@ -104,5 +110,5 @@ class DangerModel:
             return {}
         pl = planes(sim)
         with torch.no_grad():
-            p = torch.sigmoid(self.net(torch.from_numpy(features(pl, cells, dirs)))).numpy()
+            p = torch.sigmoid(self.net(torch.from_numpy(features(pl, cells, dirs, Wd)))).numpy()
         return {(j, d): float(q) for j, d, q in zip(cells, dirs, p)}

@@ -104,3 +104,51 @@ Cada fila de A\* promedia 300 vidas.
   - **Un costo alto (25)** equilibra las dos cosas.
 
 Siguiente paso: acciones de alto nivel. La red apunta a un token (gema, salida, lado de una roca empujable, casilla de refugio o esperar), A\* con costos de peligro recalcula la ruta en cada tick, la acción termina al llegar, al desaparecer el destino o por peligro, y el entrenamiento es PPO semi-Markov. El baseline de A\* es la vara a superar.
+
+## Destinos, CEM y predictor de muerte (nuestro juego)
+
+Evaluación final: 800 vidas con semillas que no se usaron para ajustar.
+
+| Agente | Gemas por vida | Salida | Muere | Se le acaba el tiempo |
+|---|---|---|---|---|
+| Red con destinos (PPO semi-Markov, unas 420.000 decisiones) | 16,9 | 68 % | 26 % | 6 % |
+| A\* con reglas a mano | 12,1 | 74 % | 26 % | 0 % |
+| A\* con reglas + CEM (`tune_astar.py`) | 20,1 | **100 %** | **0 %** | 0 % |
+| A\* con predictor de muerte, sin CEM | 13,4 | 49 % | 0 % | 51 % |
+| **A\* con predictor de muerte + CEM** | **29,2** | 93,5 % | **0 %** | 6,5 % |
+
+- **El predictor de muerte** (`train_danger.py`) es una red que recibe un parche de 7×7 alrededor de la casilla. Sus etiquetas son contrafactuales, y salen de simular: "¿muere si entra ahí y se queda quieto 3 ticks?".
+- **En niveles no vistos detecta más muertes que las reglas:** 87 % contra 70 % (F1 0,85 contra 0,75), con la misma precisión.
+
+## GVGAI: el Boulder Dash de los papers
+
+`gvgai/` conecta con el motor Java real de GVGAI (`bash gvgai/build.sh`) por medio de un puente: en cada tick, Python recibe el estado y devuelve la acción. También puede preguntarle al modelo del juego si una acción es mortal. Las reglas son las oficiales (`boulderdash.txt`):
+- 1 vida,
+- 9 diamantes y salir,
+- 2.000 ticks,
+- rocas que no ruedan,
+- enemigos que se mueven al azar,
+- 5 niveles de 26×13.
+
+**Calibración** (`gvgai_baselines.py`, 25 partidas por agente con la máquina libre, 40 ms por acción):
+
+| Agente | Nuestro montaje | Publicado ([GVGAI-LLM](https://arxiv.org/html/2508.08501v3)) |
+|---|---|---|
+| OLETS | 48 % | 56 % |
+| sampleMCTS | 24 % | 28 % |
+
+**Resultados** (`gvgai_eval.py` y `gvgai_danger.py eval`, 5 niveles × 20 semillas nuevas). El predictor y el CEM usaron solo los niveles 0 a 2; los niveles 3 y 4 son de prueba.
+
+| Agente | Victorias | Por nivel (0 a 4) | Niveles no vistos (3 y 4) |
+|---|---|---|---|
+| OLETS (calibración) | 48 % | 1, 3, 1, 3, 4 de 5 | — |
+| sampleMCTS (calibración) | 24 % | 0, 3, 1, 0, 2 de 5 | — |
+| A\* sin costos de peligro | 17 % | 0, 8, 1, 0, 8 de 20 | — |
+| **A\* con reglas de peligro a mano** | **90 %** | 17, 13, 20, 20, 20 de 20 | 100 % |
+| A\* con predictor, sin CEM | 77 % | 0, 19, 18, 20, 20 de 20 | 100 % |
+| A\* con predictor + CEM (niveles 0 a 2) | 88 % | 20, 17, 20, 20, 11 de 20 | 77,5 % |
+
+**Cómo leerlo**
+- **El A\* supera por mucho a OLETS y MCTS**, pero tiene una ventaja: ve el mapa entero y la política "gemas y después salida" es específica de Boulder Dash.
+- **El predictor de muerte**, entrenado sin reglas escritas a mano, detecta el 46 % de las muertes en niveles no vistos, contra el 21 % de las reglas (F1 0,36 contra 0,08). Es más difícil que en nuestro juego porque los enemigos se mueven al azar.
+- **El CEM sobreajusta** con solo 3 niveles de entrenamiento. Mejora los niveles 0 a 2, pero empeora el nivel 4. Para arreglarlo hay que ajustar sobre muchos niveles generados con el formato de GVGAI y dejar los 5 oficiales solo para la prueba.

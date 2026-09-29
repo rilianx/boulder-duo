@@ -1,12 +1,15 @@
 """Calibración: agentes de GVGAI (OLETS, sampleMCTS, ...) en los 5 niveles oficiales de Boulder Dash.
 
     python gvgai_baselines.py --agents olets,sampleMCTS --seeds 5
-Cada agente usa el límite de la competencia: 40 ms de CPU por acción, 2000 ticks por partida.
+Cada agente usa el límite de la competencia: 40 ms por acción (descalificado si pasa de 50 ms), 2000 ticks.
+Correrlo con la máquina libre: con la CPU saturada los agentes se pasan del tiempo y quedan descalificados.
 """
 import argparse
 import os
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
 
 from boulder.gvgai_env import GAME, LEVELS, ROOT
 
@@ -33,11 +36,13 @@ def main():
         with ThreadPoolExecutor(a.procs) as ex:
             res = list(ex.map(lambda lv: (lv, run(ag, lv, range(1, a.seeds + 1))), range(5)))
         allr = [r for _, rs in res for r in rs]
-        per = " ".join(f"n{lv}:{sum(r[0] for r in rs):.0f}/{len(rs)}" for lv, rs in res)
-        print(f"{ag:>11}: victorias {100 * sum(r[0] for r in allr) / len(allr):5.1f}% ({per}) | "
-              f"puntaje medio {sum(r[1] for r in allr) / len(allr):5.1f} | ticks medios {sum(r[2] for r in allr) / len(allr):5.0f}",
+        # GVGAI: 1 gana, 0 pierde, -100 descalificado (se pasó del tiempo por acción)
+        per = " ".join(f"n{lv}:{sum(r[0] == 1 for r in rs)}/{len(rs)}" for lv, rs in res)
+        disq = sum(r[0] == -100 for r in allr)
+        print(f"{ag:>11}: victorias {100 * sum(r[0] == 1 for r in allr) / len(allr):5.1f}% ({per}) | "
+              f"descalificadas {disq}/{len(allr)} | puntaje medio (sin descalificadas) "
+              f"{np.mean([r[1] for r in allr if r[0] != -100] or [0]):5.1f} | ticks medios {np.mean([r[2] for r in allr]):5.0f}",
               flush=True)
-
 
 if __name__ == "__main__":
     main()

@@ -63,7 +63,7 @@ def gv_costs(st, P):
     return cost
 
 
-def gv_dijkstra(st, goals, cost):
+def gv_dijkstra(st, goals, cost, edge=None):
     W, g = st.W, st.grid
     a = st.agent
     start = a.y * W + a.x
@@ -84,6 +84,8 @@ def gv_dijkstra(st, goals, cost):
             step = 1.0 if (j in goals and g[j] == EXIT) else cost[j]
             if step == math.inf:
                 continue
+            if edge is not None:
+                step += edge.get((j, d), 0.0)
             nc = c + step
             if nc < best.get(j, math.inf):
                 best[j] = nc
@@ -103,4 +105,35 @@ def gv_act(st, P=GV_DEFAULT):
         r = rg if rg and (rex is None or rg[0] <= P["detour"]) else rex
     else:
         r = gv_dijkstra(st, gems, cost)
+    return r[1] if r is not None else STAY
+
+
+# ---------------------------------------------------------------- peligro aprendido (sin reglas)
+GV_LEARNED_PARAMS = {
+    "c_dirt": (0.5, 3.0, 1.0),
+    "w_risk": (0.0, 80.0, 20.0),      # costo extra = w_risk · (−log(1 − p_muerte))
+    "detour": (0.0, 20.0, 0.0),
+}
+GV_LEARNED_DEFAULT = {k: v[2] for k, v in GV_LEARNED_PARAMS.items()}
+
+
+def gv_act_learned(st, P, model):
+    """A* sin reglas de peligro: el costo de cada paso sale del predictor de muerte."""
+    g = st.grid
+    cost = [math.inf] * len(g)
+    for j, t in enumerate(g):
+        if t == E or t == GEM:
+            cost[j] = 1.0
+        elif t == DIRT:
+            cost[j] = P["c_dirt"]
+    w = P["w_risk"]
+    edge = {k: -w * math.log(max(1e-4, 1.0 - p)) for k, p in model.window_probs(st).items()}
+    gems = {i for i in range(len(g)) if g[i] == GEM}
+    exits = {i for i in range(len(g)) if g[i] == EXIT}
+    if st.exit_open():
+        rex = gv_dijkstra(st, exits, cost, edge)
+        rg = gv_dijkstra(st, gems, cost, edge) if P["detour"] > 0 and gems else None
+        r = rg if rg and (rex is None or rg[0] <= P["detour"]) else rex
+    else:
+        r = gv_dijkstra(st, gems, cost, edge)
     return r[1] if r is not None else STAY
