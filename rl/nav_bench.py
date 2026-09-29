@@ -178,12 +178,13 @@ def tune_objects(game, procs, orders=100):
     rng = np.random.default_rng(0)
     levels = [x.item() if hasattr(x, "item") else x for x in rng.choice(lv, min(len(lv), 12), replace=False)]
     best = (-1e9, None)
-    for w in (1.0, 3.0, 6.0, 12.0, 20.0):
-        P = {**NAV_DEFAULT, "w_risk": w}
-        s = bench(game, P, orders, procs, "objects+pred", levels, seed0=700)
-        report(f"w_risk={w:g} (entren.)", s)
-        if nav_score(s) > best[0]:
-            best = (nav_score(s), P)
+    for w in (6.0, 12.0, 20.0):
+        for alpha in (0.0, 0.3, 1.0):
+            P = {**NAV_DEFAULT, "w_risk": w, "alpha": alpha}
+            s = bench(game, P, orders, procs, "objects+pred", levels, seed0=700)
+            report(f"w_risk={w:g} alpha={alpha:g} (entren.)", s)
+            if nav_score(s) > best[0]:
+                best = (nav_score(s), P)
     (RUNS / game / "nav_objects.json").write_text(json.dumps(best[1], indent=1))
     print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 3·morir = {best[0]:.3f})", flush=True)
 
@@ -216,7 +217,8 @@ def main():
     p.add_argument("--only-hybrid", action="store_true")
     p.add_argument("--timing", action="store_true", help="tiempo por decisión de cada navegador")
     p.add_argument("--no-model", action="store_true", help="escenario B: sin modelo del juego en ejecución")
-    p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk para objetos + predictor")
+    p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk y alpha para objetos + predictor")
+    p.add_argument("--only-tuned", action="store_true", help="con --no-model: solo la variante ajustada")
     a = p.parse_args()
     if a.tune_objects:
         return tune_objects(a.game, a.procs)
@@ -227,6 +229,8 @@ def main():
         f = RUNS / a.game / "nav_objects.json"
         if f.exists():
             variants.append(("objetos + predictor ajust.", json.loads(f.read_text()), "objects+pred"))
+        if a.only_tuned:
+            variants = variants[-1:]
         for label, P, kind in variants:
             s = bench(a.game, P, a.orders, a.procs, kind, lv)
             report(f"{a.game} {label}", s)

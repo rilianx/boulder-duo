@@ -27,6 +27,30 @@ from nav_bench import OrderGiver
 RUNS = Path(__file__).parent / "runs" / "generic"
 
 
+class NoveltyOrderGiver(OrderGiver):
+    """Como OrderGiver, pero prefiere destinos con tipos de sprite poco vistos en los datos (sin nombrarlos)."""
+
+    def __init__(self, nav, rng, stats, counts):
+        super().__init__(nav, rng, stats)
+        self.counts = counts                       # itype → ejemplos etiquetados con ese tipo en la casilla
+
+    def _new_order(self, st):
+        K = self.nav.know
+        N = len(st.masks)
+        rare = [j for j in range(N) if j != st.pos and not any(st.masks[j] >> t & 1 and K.is_blocking(t) for t in range(63))
+                and any(st.masks[j] >> t & 1 and self.counts.get(t, 0) < 500 for t in range(63)
+                        if t not in K.avatar_types)]
+        if rare and self.rng.random() < 0.8:
+            j = int(self.rng.choice(rare))
+            from boulder.nav import shortest
+            d = shortest(st, K, j)
+            if d is not None and d >= 1:
+                self.goal, self.dist, self.t0 = j, d, st.tick
+                self.stats["orders"] += 1
+                return
+        super()._new_order(st)
+
+
 def _collect(job):
     game, levels, n_target, seed = job
     torch.set_num_threads(1)
@@ -36,13 +60,17 @@ def _collect(job):
     risk = CellRisk(d / "cell_risk.pt")
     rng = np.random.default_rng(seed)
     X, Y = [], []
+    with np.load(d / "data.npz") as z:                # cuántas veces vimos cada tipo en la casilla destino
+        T0 = int(z["T"])
+        pres = z["X"][:, [t * 49 + 24 for t in range(T0)]].sum(0)
+    counts = {t: int(pres[t]) for t in range(T0)}
     b = GenericBridge(game)
     T = None
     stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "stretch": []}
     try:
         g = 0
         while len(Y) < n_target:
-            og = OrderGiver(ObjectCubeNavigator(K, risk, NAV_DEFAULT, danger=D), rng, stats)
+            og = NoveltyOrderGiver(ObjectCubeNavigator(K, risk, NAV_DEFAULT, danger=D), rng, stats, counts)
 
             def pol(st, br):
                 nonlocal T
@@ -58,6 +86,10 @@ def _collect(job):
                     lab = br.labels(3, 4)
                     X.append(gfeatures(gplanes(st, T), [j for _, j in cand], [dd for dd, _ in cand], W).astype(np.uint8))
                     Y.extend(lab[dd] for dd, _ in cand)
+                    for _, j in cand:
+                        for t in range(T):
+                            if st.masks[j] >> t & 1:
+                                counts[t] = counts.get(t, 0) + 1
                 return a
             pol.end = og.end
             b.play(levels[g % len(levels)], seed * 1000 + g, pol)
@@ -79,10 +111,11 @@ def main():
                                        for k in range(a.procs)]))
     Xn = np.concatenate([q[0] for q in parts]); Yn = np.concatenate([q[1] for q in parts])
     d = RUNS / a.game
-    old = np.load(d / "data.npz")
-    np.savez_compressed(d / "data_first_pass.npz", X=old["X"], Y=old["Y"], T=old["T"])
-    np.savez_compressed(d / "data.npz", X=np.concatenate([old["X"], Xn]), Y=np.concatenate([old["Y"], Yn]), T=old["T"])
-    print(f"{a.game}: {len(Yn):,} ejemplos nuevos ({100 * (Yn > 0.5).mean():.1f}% con p > 0,5); total {len(Yn) + len(old['Y']):,}")
+    with np.load(d / "data.npz") as z:                # leer todo antes de sobrescribir el archivo
+        Xo, Yo, T = z["X"], z["Y"], z["T"]
+    np.savez_compressed(d / "data_first_pass.npz", X=Xo, Y=Yo, T=T)
+    np.savez_compressed(d / "data.npz", X=np.concatenate([Xo, Xn]), Y=np.concatenate([Yo, Yn]), T=T)
+    print(f"{a.game}: {len(Yn):,} ejemplos nuevos ({100 * (Yn > 0.5).mean():.1f}% con p > 0,5); total {len(Yn) + len(Yo):,}")
     train(a.game)
     w, b = fit_cell_risk(d / "data.npz", d / "cell_risk.pt")
     print("riesgo por casilla reajustado; sesgo", round(b, 2))

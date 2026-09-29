@@ -126,7 +126,9 @@ class CubeNavigator(Navigator):
                     continue
                 p = float(R[k][j])
                 if d < 4 and pred:
-                    p = max(p, pred.get((j, d), 0.0))
+                    # alpha: cuánto pesa el predictor ("¿muero si entro y me quedo?") frente al cubo;
+                    # alto donde el peligro lo provoca el avatar (Boulder Dash), bajo con peligro que pasa (Frogs)
+                    p = max(p, self.P.get("alpha", 1.0) * pred.get((j, d), 0.0))
                 ng = g + 1.0 + w * -math.log(max(1e-4, 1 - p))
                 node = (j, k + 1)
                 if ng < best.get(node, math.inf):
