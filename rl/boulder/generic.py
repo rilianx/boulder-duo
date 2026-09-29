@@ -55,6 +55,12 @@ class GState:
             for kv in f[9].strip(";").split(";"):
                 k, v = kv.split(":")
                 self.res[int(k)] = int(v)
+        # objetos móviles observados: id → (itype, x, y) en casillas (con decimales)
+        self.objects = {}
+        if len(f) > 10 and f[10] != "-":
+            for tok in f[10].strip(";").split(";"):
+                t, oid, x, y = tok.split(":")
+                self.objects[int(oid)] = (int(t), float(x), float(y))
         self.types = types                 # itype → (nombre, categoría)
         self.prev = None                   # máscaras del tick anterior
 

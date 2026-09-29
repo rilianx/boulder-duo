@@ -297,3 +297,34 @@ Se mide solo el paso del navegador, incluidas las consultas al modelo del juego.
 | cubo + escudo | **85,5 %** | 1,2 % | **50,0 %** |
 
 **Conclusión.** El predictor y el escudo caben en el presupuesto de la competencia. El cubo sobre la grilla completa no cabe en Boulder Dash ni en Frogs, así que su ventaja ahí no es comparable con la de OLETS. Además, el reloj de GVGAI solo mide el hilo de Java, por lo que hay que medir nuestro lado para comparar de forma justa.
+
+### Escenario B: sin modelo del juego en ejecución (`boulder/objcube.py`, `nav_bench.py <juego> --no-model`)
+
+El navegador solo usa lo observado:
+- la grilla actual,
+- los objetos móviles, con su posición exacta, que manda el puente.
+
+Sigue cada objeto por su id, estima su velocidad con los últimos 8 ticks y extrapola dónde estará. Si un tipo se mueve al azar, su zona de peligro crece con el tiempo, con un tope de 2 casillas. Si reaparece por el borde, la extrapolación da la vuelta.
+
+Con eso arma el cubo y usa el mismo A\* espacio-tiempo, con horizonte de 20 ticks. No hay escudo, porque el escudo consulta el modelo. El predictor está entrenado de antemano, pero sus etiquetas salieron del simulador.
+
+**Unas 150 órdenes por fila, 4 procesos. Muere / llega / tiempo agotado:**
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| sin peligro | 36 / 56 / 7 % | 38 / 62 / 0 % | 95 / 5 / 0 % |
+| predictor | 16 / 68 / 13 % | 26 / 74 / 0 % | 87 / 14 / 0 % |
+| objetos | 16 / 53 / 29 % | 14 / 75 / 11 % | 70 / 26 / 5 % |
+| objetos + predictor | **5** / 42 / 52 % | **10** / 69 / 22 % | **14** / 19 / 67 % |
+
+**Tiempo por decisión, media / p95 (ms):**
+
+| Navegador | Boulder Dash | Zelda | Frogs |
+|---|---|---|---|
+| objetos | 26 / 44 | 11 / 24 | 38 / 73 |
+| objetos + predictor | 41 / 77 | 16 / 32 | 40 / 64 |
+
+**Qué muestran**
+- **Sin consultar el modelo mientras juega,** extrapolar los objetos y sumar el predictor da las tasas de muerte más bajas de todas en Boulder Dash (5 %) y en Zelda (10 %).
+- **El costo es la prudencia:** muchas más órdenes terminan por tiempo, porque el navegador espera o rodea. Falta ajustar `w_risk` para equilibrar muerte y tiempo.
+- **Todavía no cabe en 40 ms en Boulder Dash ni en Frogs.** Pendiente: una ventana centrada en el avatar y búsqueda con tope de tiempo.

@@ -21,6 +21,7 @@ import torch
 from boulder.generic import GDanger, GenericBridge, Knowledge
 from boulder.gvgai_levels import write_levels
 from boulder.cube import CellRisk, CubeNavigator
+from boulder.objcube import ObjectCubeNavigator
 from boulder.nav import NAV_DEFAULT, NAV_PARAMS, Navigator, shortest
 
 RUNS = Path(__file__).parent / "runs" / "generic"
@@ -91,10 +92,10 @@ _D = {}
 
 def run(job):
     game, P, levels, seeds, use_danger, n_orders = job
-    cube = use_danger in ("cube", "hybrid")
+    cube = use_danger in ("cube", "hybrid", "objects", "objects+pred")
     torch.set_num_threads(1)
     d = RUNS / game
-    if use_danger and use_danger != "cube" and game not in _D:
+    if use_danger and use_danger not in ("cube", "objects") and game not in _D:
         _D[game] = GDanger(d / "danger.pt")
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
     stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "stretch": []}
@@ -103,7 +104,10 @@ def run(job):
     try:
         k = 0
         while stats["orders"] < n_orders:
-            if cube:
+            if use_danger in ("objects", "objects+pred"):
+                nav = ObjectCubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
+                                          danger=_D.get(game) if use_danger == "objects+pred" else None)
+            elif cube:
                 nav = CubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
                                     danger=_D.get(game) if use_danger == "hybrid" else None)
             else:
@@ -195,7 +199,18 @@ def main():
     p.add_argument("--only-cube", action="store_true")
     p.add_argument("--only-hybrid", action="store_true")
     p.add_argument("--timing", action="store_true", help="tiempo por decisión de cada navegador")
+    p.add_argument("--no-model", action="store_true", help="escenario B: sin modelo del juego en ejecución")
     a = p.parse_args()
+    if a.no_model:
+        lv = test_levels(a.game)
+        for label, P, kind in (("sin peligro", {**NAV_DEFAULT, "w_risk": 0.0}, False), ("predictor", NAV_DEFAULT, True),
+                               ("objetos", NAV_DEFAULT, "objects"), ("objetos + predictor", NAV_DEFAULT, "objects+pred")):
+            s = bench(a.game, P, a.orders, a.procs, kind, lv)
+            report(f"{a.game} {label}", s)
+            ms = np.array(s["ms"])
+            print(f"{'':>26}  tiempo media {ms.mean():5.1f} ms | p95 {np.percentile(ms, 95):5.1f} | sobre 40 ms {100 * (ms > 40).mean():4.1f}%",
+                  flush=True)
+        return
     if a.timing:
         lv = test_levels(a.game)
         for label, P, kind in (("sin peligro", {**NAV_DEFAULT, "w_risk": 0.0}, False), ("predictor", NAV_DEFAULT, True),

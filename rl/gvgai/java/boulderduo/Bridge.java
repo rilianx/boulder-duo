@@ -145,9 +145,18 @@ public class Bridge {
         StringBuilder res = new StringBuilder();
         for (java.util.Map.Entry<Integer, Integer> e : so.getAvatarResources().entrySet())
             res.append(e.getKey()).append(':').append(e.getValue()).append(';');
+        // objetos que se mueven (NPC y móviles, sin el avatar): itype:id:x:y en casillas, con decimales
+        StringBuilder objs = new StringBuilder();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+                for (Observation o : g[x][y])
+                    if (o.category == Types.TYPE_NPC || o.category == Types.TYPE_MOVABLE)
+                        objs.append(o.itype).append(':').append(o.obsID).append(':')
+                            .append(String.format(java.util.Locale.ROOT, "%.2f", o.position.x / bs)).append(':')
+                            .append(String.format(java.util.Locale.ROOT, "%.2f", o.position.y / bs)).append(';');
         int ax = (int) Math.round(so.getAvatarPosition().x / bs), ay = (int) Math.round(so.getAvatarPosition().y / bs);
         return so.getGameTick() + " " + so.getGameScore() + " " + ax + " " + ay + " " + so.getAvatarType() + " " + W + " "
-                + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-");
+                + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-") + " " + (objs.length() > 0 ? objs : "-");
     }
 
     /**

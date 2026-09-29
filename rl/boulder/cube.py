@@ -58,7 +58,7 @@ class CubeNavigator(Navigator):
         self.risk, self.Hz, self.reps, self.pred = risk, horizon, reps, danger
 
     def plan(self, st, goal, strict=True):
-        cube = self._br.future(self.Hz, self.reps)          # cube[k] = máscaras dentro de k+1 ticks
+        cube = self._cube(st)                                # cube[k] = máscaras dentro de k+1 ticks
         W, N = st.W, len(st.masks)
         K = self.know
         offs = (-W, 1, W, -1, 0)
@@ -109,6 +109,9 @@ class CubeNavigator(Navigator):
                     first[node] = (d if d < 4 else 4) if k == 0 else first[(c, k)]
                     heapq.heappush(pq, (ng + h(j), ng, j, k + 1))
         return None
+
+    def _cube(self, st):
+        return self._br.future(self.Hz, self.reps)
 
     def _tail(self, st, c, goal):
         class _S:  # estado mínimo para shortest() desde otra casilla
