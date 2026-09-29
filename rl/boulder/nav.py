@@ -27,8 +27,7 @@ class Navigator:
         self.last_dir = None
 
     def _blocked(self, st):
-        K = self.know
-        return [any(m >> t & 1 and K.is_blocking(t) for t in range(63)) for m in st.masks]
+        return self.know.blocked_cells(st)
 
     def plan(self, st, goal, strict=True):
         """(costo, primera dirección) hacia goal; se puede terminar en goal aunque esté "bloqueado"."""
@@ -72,10 +71,17 @@ class Navigator:
         W = st.W
         offs = (-W, 1, W, -1)
         if self.last is not None and self.learn:
-            pos0, d, mask, same = self.last
+            pos0, d, mask, same, res, free = self.last
             moved = st.pos == pos0 + offs[d]
             if moved or same:
-                self.know.record_move(mask, moved)
+                self.know.record_move(mask, moved, res)
+            if not same and free:
+                self.know.record_turn(moved)
+        if getattr(self, "_waited", None) is not None and self.learn:
+            p0, otypes = self._waited
+            if otypes:
+                moved = abs(st.fx - p0[0]) + abs(st.fy - p0[1]) > 0.01
+                self.know.record_carry(otypes, moved)
         r = self.plan(st, goal)
         act = r[1] if r is not None and r[1] >= 0 else 4
         thr = self.P.get("shield", 0.0)
@@ -89,18 +95,47 @@ class Navigator:
                     act = safest
                     self.stats_wait = getattr(self, "stats_wait", 0) + (safest == 4)
         if act < 4 and 0 <= st.pos + offs[act] < len(st.masks):
-            self.last = (st.pos, act, st.masks[st.pos + offs[act]], self.last_dir == act)
+            j = st.pos + offs[act]
+            free = not self.know.blocked_cells(st)[j]
+            self.last = (st.pos, act, st.masks[j], self.last_dir == act, dict(st.res), free)
             self.last_dir = act
         else:
             self.last = None
+        # quieto: ¿qué objetos comparten la casilla del avatar? (para aprender si lo arrastran)
+        if act == 4:
+            ax, ay = st.pos % st.W, st.pos // st.W
+            self._waited = ((st.fx, st.fy), {t for t, x, y in getattr(st, "objects", {}).values()
+                                     if round(x) == ax and round(y) == ay})
+        else:
+            self._waited = None
         return act, r is not None
+
+
+class MCTSNavigator:
+    """Referencia con el mismo presupuesto: UCT en Java con el modelo del juego (Bridge.mcts), yendo a goal.
+
+    Recibe el mismo campo de distancias sin peligro que nuestro A* (transitabilidad aprendida) para valorar
+    las simulaciones que no llegan. Parámetros: ms (tiempo por decisión) y depth (profundidad de simulación)."""
+
+    def __init__(self, know, P):
+        self.know, self.P = know, P
+        self.last = None
+
+    def step(self, st, goal, br):
+        from .cube import CubeNavigator
+        blocked = self.know.blocked_cells(st)
+        dist = CubeNavigator._dist_to_goal(self, st, goal, blocked)
+        if dist[st.pos] is None:
+            return 4, False
+        br.mcts(goal, dist, self.P.get("ms", 35.0), int(self.P.get("depth", 10)))
+        return None, True
 
 
 def shortest(st, know, goal):
     """Distancia sin considerar peligro (para medir cuánto alarga la ruta la prudencia)."""
     W, N = st.W, len(st.masks)
     offs = (-W, 1, W, -1)
-    blocked = [any(m >> t & 1 and know.is_blocking(t) for t in range(63)) for m in st.masks]
+    blocked = know.blocked_cells(st)
     seen = {st.pos: 0}; fr = [st.pos]
     while fr:
         nx = []

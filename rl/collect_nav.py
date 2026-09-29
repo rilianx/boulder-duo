@@ -34,13 +34,35 @@ class NoveltyOrderGiver(OrderGiver):
         super().__init__(nav, rng, stats)
         self.counts = counts                       # itype → ejemplos etiquetados con ese tipo en la casilla
 
+    linger = 0
+    bank = False
+
+    def _decide(self, st, br):
+        if self.linger > 0:                          # quedarse en la orilla juntando etiquetas
+            self.linger -= 1
+            return 4
+        return super()._decide(st, br)
+
+    def _finish(self, how, st=None):
+        if how == "reached" and self.bank:
+            self.linger = 10
+        super()._finish(how, st)
+
     def _new_order(self, st):
         K = self.nav.know
-        N = len(st.masks)
-        rare = [j for j in range(N) if j != st.pos and not any(st.masks[j] >> t & 1 and K.is_blocking(t) for t in range(63))
-                and any(st.masks[j] >> t & 1 and self.counts.get(t, 0) < 500 for t in range(63)
-                        if t not in K.avatar_types)]
-        if rare and self.rng.random() < 0.8:
+        N, W = len(st.masks), st.W
+        blocked = K.blocked_cells(st)
+        is_rare = [any(st.masks[j] >> t & 1 and self.counts.get(t, 0) < 2000 for t in range(63)
+                       if t not in K.avatar_types) for j in range(N)]
+        rare = [j for j in range(N) if j != st.pos and not blocked[j] and is_rare[j]]
+        # orilla: casillas pisables, no raras, con una vecina rara (desde ahí se etiqueta entrar a lo raro)
+        near = [j for j in range(N) if j != st.pos and not blocked[j] and not is_rare[j]
+                and any(0 <= j + o < N and is_rare[j + o] for o in (-W, 1, W, -1))]
+        self.bank = False
+        u = self.rng.random()
+        if near and u < 0.5:
+            rare, self.bank = near, True
+        if rare and u < 0.85:
             j = int(self.rng.choice(rare))
             from boulder.nav import shortest
             d = shortest(st, K, j)
@@ -70,7 +92,9 @@ def _collect(job):
     try:
         g = 0
         while len(Y) < n_target:
-            og = NoveltyOrderGiver(ObjectCubeNavigator(K, risk, NAV_DEFAULT, danger=D), rng, stats, counts)
+            f = d / "nav_objects.json"
+            P = {**(json.loads(f.read_text()) if f.exists() else NAV_DEFAULT), "patience": 10}
+            og = NoveltyOrderGiver(ObjectCubeNavigator(K, risk, P, danger=D), rng, stats, counts)
 
             def pol(st, br):
                 nonlocal T
@@ -81,7 +105,7 @@ def _collect(job):
                     a = int(rng.integers(5))          # algo de azar para ver también errores
                 W, N = st.W, len(st.masks)
                 cand = [(dd, st.pos + o) for dd, o in enumerate((-W, 1, W, -1)) if 0 <= st.pos + o < N]
-                cand = [(dd, j) for dd, j in cand if not any(st.masks[j] >> t & 1 and K.is_blocking(t) for t in range(63))]
+                cand = [(dd, j) for dd, j in cand if not K.blocked_cells(st)[j]]
                 if cand:
                     lab = br.labels(3, 4)
                     X.append(gfeatures(gplanes(st, T), [j for _, j in cand], [dd for dd, _ in cand], W).astype(np.uint8))

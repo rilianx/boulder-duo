@@ -48,8 +48,11 @@ public class Bridge {
             if (p[0].equals("Q")) break;
             if (p[0].equals("G")) {
                 sentTypes = false;
+                resetTiming();
                 double[] r = ArcadeMachine.runOneGame(game, p[1], false, "boulderduo.PyAgent", null, Integer.parseInt(p[2]), 0);
                 // r = {ganó, puntaje, ticks}
+                if (generic)   // tiempo por decisión medido en Java, incluyendo a Python: n, >40 ms, máx y suma (ms)
+                    out.println("@M " + decisions + " " + over40 + " " + maxNs / 1e6 + " " + sumNs / 1e6);
                 out.println("@E " + (int) r[0] + " " + r[1] + " " + (int) r[2]);
                 out.flush();
             }
@@ -156,7 +159,10 @@ public class Bridge {
                             .append(String.format(java.util.Locale.ROOT, "%.2f", o.position.y / bs)).append(';');
         int ax = (int) Math.round(so.getAvatarPosition().x / bs), ay = (int) Math.round(so.getAvatarPosition().y / bs);
         return so.getGameTick() + " " + so.getGameScore() + " " + ax + " " + ay + " " + so.getAvatarType() + " " + W + " "
-                + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-") + " " + (objs.length() > 0 ? objs : "-");
+                + H + " " + sb + " " + fr + " " + (res.length() > 0 ? res : "-") + " " + (objs.length() > 0 ? objs : "-")
+                // posición exacta del avatar, en casillas (para ver arrastres de menos de una casilla por tick)
+                + " " + String.format(java.util.Locale.ROOT, "%.3f:%.3f", so.getAvatarPosition().x / bs,
+                                      so.getAvatarPosition().y / bs);
     }
 
     /**
@@ -196,6 +202,99 @@ public class Bridge {
             out.println(l);
         }
         out.flush();
+    }
+
+    // ------------------------------------------------------------ tiempo por decisión, medido en Java
+    static long decisions = 0, over40 = 0, maxNs = 0, sumNs = 0;
+
+    static void resetTiming() { decisions = over40 = maxNs = sumNs = 0; }
+
+    static void recordDecision(long ns) {
+        decisions++; sumNs += ns; maxNs = Math.max(maxNs, ns);
+        if (ns > 40_000_000L) over40++;
+    }
+
+    // ------------------------------------------------------------ baseline: MCTS que navega a una casilla
+    /**
+     * UCT con el modelo del juego, para comparar el navegador con el mismo presupuesto por decisión.
+     * Acciones: quieto y las 4 direcciones (sin USAR, igual que nuestro navegador). Valor de una simulación:
+     * 1 si el avatar pisa la meta, 0 si pierde, y si no 0,5·(1 − d/dmax), con d la distancia al destino
+     * (el mismo campo de distancias sin peligro que usa nuestro A*, mandado por Python).
+     */
+    static final Types.ACTIONS[] NAV_ACTS = {Types.ACTIONS.ACTION_NIL, Types.ACTIONS.ACTION_UP, Types.ACTIONS.ACTION_DOWN,
+            Types.ACTIONS.ACTION_LEFT, Types.ACTIONS.ACTION_RIGHT};
+    static java.util.Random mctsRng = new java.util.Random(1);
+
+    static class Node {
+        Node[] ch = new Node[NAV_ACTS.length];
+        int n = 0;
+        double v = 0;
+    }
+
+    static double navValue(StateObservation s, int[] dist, int goal, int dmax) {
+        if (s.isGameOver() && s.getGameWinner() == Types.WINNER.PLAYER_LOSES) return 0;
+        int bs = s.getBlockSize(), W = s.getObservationGrid().length;
+        int ax = (int) Math.round(s.getAvatarPosition().x / bs), ay = (int) Math.round(s.getAvatarPosition().y / bs);
+        int c = ay * W + ax;
+        if (c == goal) return 1;
+        if (s.isGameOver()) return 0.5;                     // ganó la partida sin llegar: neutro
+        int d = (c >= 0 && c < dist.length && dist[c] >= 0) ? dist[c] : dmax;
+        return 0.5 * (1 - Math.min(d, dmax) / (double) dmax);
+    }
+
+    /** Devuelve el índice en ACTS (0 NIL, 1 ↑, 2 ↓, 3 ←, 4 →) de la acción más visitada. */
+    static int mcts(StateObservation so, int[] dist, int goal, double ms, int depth) {
+        long end = System.nanoTime() + (long) (ms * 1e6);
+        int dmax = 1;
+        for (int d : dist) dmax = Math.max(dmax, d);
+        dmax += depth;
+        Node root = new Node();
+        double C = Math.sqrt(2);
+        while (System.nanoTime() < end) {
+            StateObservation s = so.copy();
+            ArrayList<Node> path = new ArrayList<>();
+            Node nd = root;
+            path.add(nd);
+            int t = 0;
+            double val = -1;
+            // selección / expansión
+            while (t < depth && !s.isGameOver()) {
+                int a = -1;
+                for (int k = 0; k < NAV_ACTS.length; k++) if (nd.ch[k] == null) { a = k; break; }
+                boolean expand = a >= 0;
+                if (!expand) {
+                    double best = -1e9;
+                    for (int k = 0; k < NAV_ACTS.length; k++) {
+                        Node c = nd.ch[k];
+                        double u = c.v / c.n + C * Math.sqrt(Math.log(nd.n + 1) / c.n) + 1e-6 * mctsRng.nextDouble();
+                        if (u > best) { best = u; a = k; }
+                    }
+                }
+                s.advance(NAV_ACTS[a]);
+                t++;
+                if (expand) nd.ch[a] = new Node();
+                nd = nd.ch[a];
+                path.add(nd);
+                double v = navValue(s, dist, goal, dmax);
+                if (v == 1 || v == 0) { val = v; break; }
+                if (expand) break;
+            }
+            // simulación al azar
+            if (val < 0) {
+                while (t < depth && !s.isGameOver()) {
+                    s.advance(NAV_ACTS[mctsRng.nextInt(NAV_ACTS.length)]);
+                    t++;
+                    double v = navValue(s, dist, goal, dmax);
+                    if (v == 1 || v == 0) { val = v; break; }
+                }
+                if (val < 0) val = navValue(s, dist, goal, dmax);
+            }
+            for (Node p : path) { p.n++; p.v += val; }
+        }
+        int best = 0, bn = -1;
+        for (int k = 0; k < NAV_ACTS.length; k++)
+            if (root.ch[k] != null && root.ch[k].n > bn) { bn = root.ch[k].n; best = k; }
+        return best;
     }
 
     static String labels(StateObservation so, int k, int reps) {

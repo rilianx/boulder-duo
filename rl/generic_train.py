@@ -31,7 +31,8 @@ def paths(game):
 def train_levels(game):
     if game == "boulderdash":
         return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels", 0)]
-    return [0, 1, 2]
+    # Zelda y Frogs: niveles generados (antes solo los oficiales 0–2, y el ajuste sobreajustaba)
+    return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
 
 
 def random_weights(rng):

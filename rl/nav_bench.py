@@ -22,7 +22,7 @@ from boulder.generic import GDanger, GenericBridge, Knowledge
 from boulder.gvgai_levels import write_levels
 from boulder.cube import CellRisk, CubeNavigator
 from boulder.objcube import ObjectCubeNavigator
-from boulder.nav import NAV_DEFAULT, NAV_PARAMS, Navigator, shortest
+from boulder.nav import NAV_DEFAULT, NAV_PARAMS, MCTSNavigator, Navigator, shortest
 
 RUNS = Path(__file__).parent / "runs" / "generic"
 
@@ -37,7 +37,7 @@ class OrderGiver:
     def _new_order(self, st):
         K = self.nav.know
         W, N = st.W, len(st.masks)
-        blocked = [any(m >> t & 1 and K.is_blocking(t) for t in range(63)) for m in st.masks]
+        blocked = K.blocked_cells(st)
         interesting = [j for j in range(N) if not blocked[j] and j != st.pos
                        and any(st.masks[j] >> t & 1 for t in range(63) if t not in K.floor and t not in K.avatar_types)]
         free = [j for j in range(N) if not blocked[j] and j != st.pos]
@@ -52,7 +52,7 @@ class OrderGiver:
         self.goal = None
 
     def _finish(self, how, st=None):
-        self.stats[how] += 1
+        self.stats[how] = self.stats.get(how, 0) + 1
         self.stats.setdefault("by_row", {}).setdefault(f"{self.goal // self.W}:{how}", 0)
         self.stats["by_row"][f"{self.goal // self.W}:{how}"] += 1
         if how == "reached":
@@ -67,6 +67,8 @@ class OrderGiver:
         if self.goal is not None:
             if st.pos == self.goal:
                 self._finish("reached", st)
+            elif self.nav.know.blocked_cells(st)[self.goal]:
+                self._finish("invalid")                  # el mundo tapó el destino (p. ej. cayó una roca)
             elif st.tick - self.t0 > 3 * self.dist + 20:
                 self._finish("timeout")
         if self.goal is None:
@@ -98,13 +100,16 @@ def run(job):
     if use_danger and use_danger not in ("cube", "objects") and game not in _D:
         _D[game] = GDanger(d / "danger.pt")
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
-    stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "stretch": []}
+    stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "invalid": 0,
+             "stretch": []}
     b = GenericBridge(game)
     rng = np.random.default_rng(seeds[0])
     try:
         k = 0
         while stats["orders"] < n_orders:
-            if use_danger in ("objects", "objects+pred"):
+            if use_danger == "mcts":
+                nav = MCTSNavigator(K, P)
+            elif use_danger in ("objects", "objects+pred"):
                 nav = ObjectCubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
                                           danger=_D.get(game) if use_danger == "objects+pred" else None)
             elif cube:
@@ -113,27 +118,67 @@ def run(job):
             else:
                 nav = Navigator(K, _D.get(game) if use_danger else None, P)
             b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats))
+            jt = stats.setdefault("java_t", [0, 0, 0.0, 0.0])   # decisiones, >40 ms, máx, suma (ms), desde Java
+            n, over, mx, tot = getattr(b, "timing", (0, 0, 0.0, 0.0))
+            jt[0] += n; jt[1] += over; jt[2] = max(jt[2], mx); jt[3] += tot
             k += 1
     finally:
         b.close()
+    stats["know"] = K.to_json()                  # lo aprendido al vuelo (transitabilidad, giros)
     return stats
 
 
 def merge(parts):
-    out = {k: 0 for k in ("orders", "reached", "died", "timeout", "unreachable", "reached_win")}
+    out = {k: 0 for k in ("orders", "reached", "died", "timeout", "unreachable", "reached_win", "invalid")}
     out["stretch"] = []
     out["by_row"] = {}
     out["ms"] = []
+    out["java_t"] = [0, 0, 0.0, 0.0]
     for p in parts:
         for k in out:
-            if k == "ms":
+            if k == "java_t":
+                jt = p.get("java_t", [0, 0, 0.0, 0.0])
+                out[k] = [out[k][0] + jt[0], out[k][1] + jt[1], max(out[k][2], jt[2]), out[k][3] + jt[3]]
+            elif k == "ms":
                 out["ms"] += p.get("ms", [])
             elif k == "by_row":
                 for kk, v in p.get("by_row", {}).items():
                     out["by_row"][kk] = out["by_row"].get(kk, 0) + v
             else:
-                out[k] = out[k] + p[k]
+                out[k] = out[k] + p.get(k, 0)
     return out
+
+
+def learn_knowledge(game, procs, orders=200):
+    """Actualiza knowledge.json jugando órdenes en niveles de entrenamiento: transitabilidad según recursos y
+    si el avatar gira antes de moverse. No usa nada del resultado de la evaluación."""
+    lv = train_levels(game)
+    P = {**json.loads((RUNS / game / "nav_objects.json").read_text()), "patience": 10}
+    per = max(orders // procs, 1)
+    with ProcessPoolExecutor(procs) as ex:
+        parts = list(ex.map(run, [(game, P, lv[k::procs][:30] or lv, [300 + k], "objects+pred", per) for k in range(procs)]))
+    f = RUNS / game / "knowledge.json"
+    base = Knowledge.from_json(json.loads(f.read_text()))
+    K0 = Knowledge.from_json(json.loads(f.read_text()))
+    for p in parts:                                  # cada parte = base + lo nuevo: sumar solo lo nuevo
+        k = Knowledge.from_json(p["know"])
+        k.by_res = {t: {n: v for n, v in d.items()} for t, d in k.by_res.items()}
+        for t, d in k.by_res.items():
+            for n, v in d.items():
+                old = K0.by_res.get(t, {}).get(n, [0, 0])
+                m = base.by_res.setdefault(t, {}).setdefault(n, [0, 0])
+                m[0] += v[0] - old[0]; m[1] += v[1] - old[1]
+        base.turns = [base.turns[0] + k.turns[0] - K0.turns[0], base.turns[1] + k.turns[1] - K0.turns[1]]
+        for t, v in k.carry.items():
+            old = K0.carry.get(t, [0, 0])
+            m = base.carry.setdefault(t, [0, 0])
+            m[0] += v[0] - old[0]; m[1] += v[1] - old[1]
+    f.write_text(json.dumps(base.to_json()))
+    print(f"{game}: giro cuesta un tick = {base.turn_cost} "
+          f"(giros {base.turns}); transitabilidad por recursos:", flush=True)
+    print(f"   arrastran: {sorted(base.carriers())} ({base.carry})", flush=True)
+    for t, d in base.by_res.items():
+        print(f"   tipo {t}: " + ", ".join(f"{n}:{v}" for n, v in sorted(d.items())), flush=True)
 
 
 def report(label, s):
@@ -141,6 +186,7 @@ def report(label, s):
     reached = s["reached"] + s["reached_win"]
     print(f"{label:>26}: órdenes {s['orders']:4d} | llegó {100 * reached / n:5.1f}% | murió {100 * s['died'] / n:5.1f}% | "
           f"tiempo {100 * s['timeout'] / n:5.1f}% | inalcanzable {100 * s['unreachable'] / n:4.1f}% | "
+          f"invalidada {100 * s.get('invalid', 0) / n:4.1f}% | "
           f"ruta / más corta {np.median(s['stretch']) if s['stretch'] else float('nan'):.2f}", flush=True)
     if s.get("by_row") and label.endswith("(filas)"):
         rows = sorted({int(k.split(':')[0]) for k in s["by_row"]})
@@ -156,7 +202,8 @@ def test_levels(game):
 def train_levels(game):
     if game == "boulderdash":
         return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels", 0)]
-    return [0, 1, 2]
+    # Zelda y Frogs: niveles generados (antes solo los oficiales 0–2, y el ajuste sobreajustaba)
+    return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
 
 
 def bench(game, P, orders, procs, use_danger, levels, seed0=500):
@@ -172,7 +219,7 @@ def nav_score(s):
     return (s["reached"] + s["reached_win"]) / n - 3 * s["died"] / n
 
 
-def tune_objects(game, procs, orders=100):
+def tune_objects(game, procs, orders=160):
     """Grilla de w_risk para "objetos + predictor" (escenario sin modelo) en niveles de entrenamiento."""
     lv = train_levels(game)
     rng = np.random.default_rng(0)
@@ -180,7 +227,7 @@ def tune_objects(game, procs, orders=100):
     best = (-1e9, None)
     for w in (6.0, 12.0, 20.0):
         for alpha in (0.0, 0.3, 1.0):
-            P = {**NAV_DEFAULT, "w_risk": w, "alpha": alpha}
+            P = {**NAV_DEFAULT, "w_risk": w, "alpha": alpha, "patience": 10}
             s = bench(game, P, orders, procs, "objects+pred", levels, seed0=700)
             report(f"w_risk={w:g} alpha={alpha:g} (entren.)", s)
             if nav_score(s) > best[0]:
@@ -219,7 +266,10 @@ def main():
     p.add_argument("--no-model", action="store_true", help="escenario B: sin modelo del juego en ejecución")
     p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk y alpha para objetos + predictor")
     p.add_argument("--only-tuned", action="store_true", help="con --no-model: solo la variante ajustada")
+    p.add_argument("--learn-know", action="store_true", help="actualizar knowledge.json (recursos, giros)")
     a = p.parse_args()
+    if a.learn_know:
+        return learn_knowledge(a.game, a.procs)
     if a.tune_objects:
         return tune_objects(a.game, a.procs)
     if a.no_model:

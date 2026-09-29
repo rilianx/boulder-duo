@@ -70,12 +70,109 @@ def generate(seed: int) -> str:
     return "\n".join("".join(r) for r in g)
 
 
-def write_levels(n: int, out: Path, first_seed: int = 0):
+def _reachable(g, start):
+    Hh, Ww = len(g), len(g[0])
+    seen = {start}; fr = [start]
+    while fr:
+        x, y = fr.pop()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            xx, yy = x + dx, y + dy
+            if 0 <= xx < Ww and 0 <= yy < Hh and (xx, yy) not in seen and g[yy][xx] != "w":
+                seen.add((xx, yy)); fr.append((xx, yy))
+    return seen
+
+
+def generate_zelda(seed: int) -> str:
+    """Zelda de GVGAI (13×9 como los oficiales): muros internos, llave '+', puerta 'g', avatar y 2–4 monstruos,
+    todo alcanzable desde el avatar."""
+    R = random.Random(seed)
+    Wz, Hz = 13, 9
+    while True:
+        g = [["w" if x in (0, Wz - 1) or y in (0, Hz - 1) else "." for x in range(Wz)] for y in range(Hz)]
+        for _ in range(R.randint(3, 7)):
+            horiz = R.random() < 0.5
+            x, y = R.randint(1, Wz - 2), R.randint(1, Hz - 2)
+            for k in range(R.randint(1, 5)):
+                xx, yy = (x + k, y) if horiz else (x, y + k)
+                if 0 < xx < Wz - 1 and 0 < yy < Hz - 1:
+                    g[yy][xx] = "w"
+        free = [(x, y) for y in range(1, Hz - 1) for x in range(1, Wz - 1) if g[y][x] == "."]
+        R.shuffle(free)
+        ax, ay = free.pop()
+        g[ay][ax] = "A"
+        reach = _reachable(g, (ax, ay))
+        cand = [c for c in free if c in reach and abs(c[0] - ax) + abs(c[1] - ay) >= 3]
+        n_mon = R.randint(2, 4)
+        if len(cand) < 2 + n_mon or len(reach) < 0.7 * len(free):
+            continue
+        for sym in "+g" + "".join(R.choice("123") for _ in range(n_mon)):
+            x, y = cand.pop()
+            g[y][x] = sym
+        return "\n".join("".join(r) for r in g)
+
+
+def generate_frogs(seed: int) -> str:
+    """Frogs de GVGAI (28 de ancho): meta entre muros arriba, 2–4 filas de río (agua '0' y troncos '=', con el
+    generador de troncos en la última columna), orilla con huecos, 2–4 carriles de camiones (una dirección por
+    carril, rápidos y lentos), a veces una franja de pasto intermedia, y el avatar abajo."""
+    R = random.Random(seed)
+    Wf = 28
+    rows = ["w" * Wf]
+    gx = R.randint(1, Wf - 3)
+    rows.append("".join("w" if x in (gx - 1, gx + 1) else "g" if x == gx else "+" for x in range(Wf)))
+
+    def river_row():
+        dens = R.uniform(0.3, 0.6)
+        r, x = [], 0
+        while x < Wf - 1:
+            if R.random() < dens:
+                L = R.randint(2, 6); r += ["="] * L; x += L
+            else:
+                L = R.randint(1, 4); r += ["0"] * L; x += L
+        r = r[: Wf - 1]
+        spawn = R.choice("1234")                    # 1/3 agua con generador denso/ralo, 2/4 con tronco
+        return "".join(r) + spawn
+
+    def road_row():
+        slow, fast = R.choice([("-", "x"), ("_", "l")])
+        dens = R.uniform(0.2, 0.45)
+        r, x = [], 0
+        while x < Wf:
+            if R.random() < dens:
+                L = R.randint(1, 4); sym = fast if R.random() < 0.4 else slow; r += [sym] * L; x += L
+            else:
+                L = R.randint(1, 4); r += ["."] * L; x += L
+        return "".join(r[:Wf])
+
+    n_river = R.randint(2, 4)
+    split = R.random() < 0.3 and n_river >= 3
+    for k in range(n_river):
+        rows.append(river_row())
+        if split and k == n_river // 2 - 1:
+            rows.append("+" * (Wf - 1) + "w")
+    bank = ["w"] * Wf
+    for _ in range(R.randint(3, 6)):
+        x = R.randint(1, Wf - 4)
+        for k in range(R.randint(2, 4)):
+            bank[x + k] = "+"
+    rows.append("".join(bank))
+    for _ in range(R.randint(2, 4)):
+        rows.append(road_row())
+    ax = R.randint(1, Wf - 2)
+    rows.append("".join("w" if x in (0, Wf - 1) else "A" if x == ax else "+" for x in range(Wf)))
+    rows.append("w" * Wf)
+    return "\n".join(rows)
+
+
+GENERATORS = {"boulderdash": generate, "zelda": generate_zelda, "frogs": generate_frogs}
+
+
+def write_levels(n: int, out: Path, first_seed: int = 0, game: str = "boulderdash"):
     out.mkdir(parents=True, exist_ok=True)
     paths = []
     for k in range(n):
         p = out / f"gen_{first_seed + k:04d}.txt"
-        p.write_text(generate(first_seed + k))
+        p.write_text(GENERATORS[game](first_seed + k))
         paths.append(p)
     return paths
 

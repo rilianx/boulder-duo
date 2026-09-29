@@ -61,6 +61,9 @@ class GState:
             for tok in f[10].strip(";").split(";"):
                 t, oid, x, y = tok.split(":")
                 self.objects[int(oid)] = (int(t), float(x), float(y))
+        self.fx, self.fy = float(self.ax), float(self.ay)       # posición exacta del avatar
+        if len(f) > 11:
+            self.fx, self.fy = (float(v) for v in f[11].split(":"))
         self.types = types                 # itype → (nombre, categoría)
         self.prev = None                   # máscaras del tick anterior
 
@@ -100,6 +103,11 @@ class GenericBridge:
         n = int(self._read().split()[1])
         return [[int(v, 16) for v in self.p.stdout.readline().strip().split(",")] for _ in range(n)]
 
+    def mcts(self, goal, dist, ms=35.0, depth=10):
+        """Baseline: la acción la elige un MCTS en Java, con el modelo del juego, navegando a goal."""
+        self.p.stdin.write(f"N {ms} {depth} {goal} {','.join(str(-1 if d is None else d) for d in dist)}\n")
+        self.p.stdin.flush()
+
     def labels(self, k=3, reps=4):
         self.p.stdin.write(f"L {k} {reps}\n"); self.p.stdin.flush()
         return [float(v) for v in self._read()[3:].split()]
@@ -110,6 +118,10 @@ class GenericBridge:
         prev = None
         while True:
             line = self._read()
+            if line.startswith("@M"):
+                n, over, mx, tot = line.split()[1:]
+                self.timing = (int(n), int(over), float(mx), float(tot))
+                continue
             if line.startswith("@E"):
                 _, won, score, ticks = line.split(" ")
                 if hasattr(policy, "end"):
@@ -119,6 +131,8 @@ class GenericBridge:
             st.prev = prev
             prev = st.masks
             a = policy(st, self)
+            if a is None:                  # la acción ya la eligió Java (p. ej. el MCTS de referencia)
+                continue
             self.p.stdin.write(f"A {5 if a == 'use' else TO_BRIDGE[a]}\n"); self.p.stdin.flush()
 
     def close(self):
@@ -126,7 +140,11 @@ class GenericBridge:
             self.p.stdin.write("Q\n"); self.p.stdin.flush()
         except OSError:
             pass
-        self.p.wait(timeout=10)
+        try:
+            self.p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self.p.kill()
+            self.p.wait()
 
 
 # ------------------------------------------------------------------ conocimiento aprendido por experiencia
@@ -142,6 +160,10 @@ class Knowledge:
         self.eff = {}
         # partidas terminadas al tocar el tipo: (tipo de avatar, recursos) → [toques, victorias]
         self.term = {}
+        # transitabilidad según cuántos recursos de ese mismo tipo lleva el avatar: tipo → cantidad → [pasó, no]
+        self.by_res = {}
+        self.turns = [0, 0]                 # cambios de dirección: [se movió, solo giró]
+        self.carry = {}                     # tipo de objeto bajo el avatar quieto → [lo movió, no lo movió]
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -200,11 +222,35 @@ class Knowledge:
                 if sum(1 for m in st.masks if m >> t & 1) > 0.5 * n:
                     self.floor.add(t)
 
-    def is_blocking(self, t):
+    def is_blocking(self, t, res=None):
+        """¿Bloquea el tipo t? Si el avatar lleva recursos de ese mismo tipo, se mira lo aprendido con esa
+        cantidad exacta (p. ej. un recurso que no se puede recoger más allá de su tope deja de ser pisable)."""
+        if res is not None:
+            n = res.get(t)
+            if n is not None:
+                pb = self.by_res.get(t, {}).get(n)
+                if pb is not None and pb[0] + pb[1] >= 3:
+                    return pb[1] > 2 * pb[0] + 1
         return self.blocked.get(t, 0) > 2 * self.passed.get(t, 0) + 1
 
-    def record_move(self, mask, moved):
+    def blocking_bits(self, res=None):
+        bm = 0
+        for t in set(self.passed) | set(self.blocked):
+            if self.is_blocking(t, res):
+                bm |= 1 << t
+        return bm
+
+    def blocked_cells(self, st):
+        bm = self.blocking_bits(getattr(st, "res", None))
+        return [(m & bm) != 0 for m in st.masks]
+
+    def record_move(self, mask, moved, res=None):
         types = [t for t in range(63) if mask >> t & 1 and t not in self.avatar_types]
+        if res:
+            for t in types:
+                if t in res:
+                    pb = self.by_res.setdefault(t, {}).setdefault(res[t], [0, 0])
+                    pb[0 if moved else 1] += 1
         if moved:
             for t in types:
                 self.passed[t] = self.passed.get(t, 0) + 1
@@ -213,9 +259,29 @@ class Knowledge:
             for t in suspects:
                 self.blocked[t] = self.blocked.get(t, 0) + 1
 
+    def record_turn(self, moved):
+        """Intento de moverse cambiando de dirección hacia una casilla pisable: ¿se movió o solo giró?"""
+        self.turns[0 if moved else 1] += 1
+
+    def record_carry(self, types, moved):
+        for t in types:
+            c = self.carry.setdefault(t, [0, 0])
+            c[0 if moved else 1] += 1
+
+    def carriers(self):
+        """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
+        return {t for t, (a, b) in self.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
+
+    @property
+    def turn_cost(self):
+        """1 si el avatar gasta un tick en girar antes de moverse en otra dirección (aprendido)."""
+        n = sum(self.turns)
+        return int(n >= 20 and self.turns[1] > 0.5 * n)
+
     def to_json(self):
         return {"passed": self.passed, "blocked": self.blocked, "floor": sorted(self.floor),
-                "avatar_types": sorted(self.avatar_types), "eff": self.eff, "term": self.term}
+                "avatar_types": sorted(self.avatar_types), "eff": self.eff, "term": self.term,
+                "by_res": self.by_res, "turns": self.turns, "carry": self.carry}
 
     @classmethod
     def from_json(cls, d):
@@ -225,6 +291,9 @@ class Knowledge:
         k.floor = set(d["floor"]); k.avatar_types = set(d["avatar_types"])
         k.eff = {int(a): list(b) for a, b in d.get("eff", {}).items()}
         k.term = {int(a): {kk: list(vv) for kk, vv in b.items()} for a, b in d.get("term", {}).items()}
+        k.by_res = {int(a): {int(n): list(v) for n, v in b.items()} for a, b in d.get("by_res", {}).items()}
+        k.turns = list(d.get("turns", [0, 0]))
+        k.carry = {int(a): list(b) for a, b in d.get("carry", {}).items()}
         return k
 
     def merge(self, o):
@@ -237,6 +306,12 @@ class Knowledge:
         for t, d in o.term.items():
             for k, v in d.items():
                 m = self.term.setdefault(t, {}).setdefault(k, [0, 0]); m[0] += v[0]; m[1] += v[1]
+        for t, d in o.by_res.items():
+            for n, v in d.items():
+                m = self.by_res.setdefault(t, {}).setdefault(n, [0, 0]); m[0] += v[0]; m[1] += v[1]
+        self.turns = [self.turns[0] + o.turns[0], self.turns[1] + o.turns[1]]
+        for t, v in o.carry.items():
+            m = self.carry.setdefault(t, [0, 0]); m[0] += v[0]; m[1] += v[1]
 
 
 # ------------------------------------------------------------------ predictor de muerte genérico

@@ -72,10 +72,7 @@ class CubeNavigator(Navigator):
         K = self.know
         offs = (-W, 1, W, -1, 0)
         H = len(cube)
-        bm = 0
-        for t in set(K.passed) | set(K.blocked):
-            if K.is_blocking(t):
-                bm |= 1 << t
+        bm = K.blocking_bits(getattr(st, "res", None))
         C = np.array(cube, dtype=np.int64) if H else np.zeros((0, N), np.int64)
         blocked = (C & bm) != 0                              # [H, N]
         R = [self.risk.grid(c) for c in cube]
@@ -83,14 +80,26 @@ class CubeNavigator(Navigator):
         dist = self._dist_to_goal(st, goal, now_blocked)
         if dist[st.pos] is None:
             return None
+        # impaciencia: si el avatar no se acerca al destino, el peso del riesgo baja a la mitad cada
+        # P["patience"] ticks (piso 0,1), para no esperar para siempre un peligro que nunca se va
+        if goal != getattr(self, "_goal", None):
+            self._goal, self._bestd, self._stall = goal, math.inf, 0
+        if dist[st.pos] < self._bestd:
+            self._bestd, self._stall = dist[st.pos], 0
+        else:
+            self._stall += 1
+        pat = self.P.get("patience", 0)
+        wmul = max(0.1, 0.5 ** (self._stall // pat)) if pat else 1.0
+        tc = K.turn_cost if self.P.get("turns", 1) else 0
         ax, ay = st.pos % W, st.pos // W
         inwin = lambda c: abs(c % W - ax) <= Rw and abs(c // W - ay) <= Rw
-        w = self.P["w_risk"]
+        w = self.P["w_risk"] * wmul
         pred = {}
         if self.pred is not None:
             pred = self.pred.probs(st, [j for j in range(N) if not now_blocked[j] and inwin(j)])
         start = (st.pos, 0)
         best = {start: 0.0}; first = {start: -1}
+        facing = {start: self.last_dir}                     # dirección del avatar (si gira antes de moverse)
         pq = [(dist[st.pos], 0.0, st.pos, 0)]
         best_partial = (math.inf, None)
         n_pop = 0
@@ -119,23 +128,37 @@ class CubeNavigator(Navigator):
                     xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
                     if not (0 <= xx < W and 0 <= yy < Hh):
                         continue
-                j = c + offs[d]
+                j = c + offs[d] if d < 4 else self._carried_to(k, c)
+                if j is None:
+                    continue
                 if blocked[k][j] and j != goal:
                     continue
                 if dist[j] is None:
                     continue
-                p = float(R[k][j])
+                # un avatar orientado gasta un tick girando: se queda en c un tick y recién después entra a j
+                turn = tc and d < 4 and facing.get((c, k)) is not None and facing[(c, k)] != d and k + 1 < H
+                kk = k + 1 if turn else k
+                if turn and blocked[kk][j] and j != goal:
+                    continue
+                p = float(R[kk][j])
                 if d < 4 and pred:
                     # alpha: cuánto pesa el predictor ("¿muero si entro y me quedo?") frente al cubo;
                     # alto donde el peligro lo provoca el avatar (Boulder Dash), bajo con peligro que pasa (Frogs)
                     p = max(p, self.P.get("alpha", 1.0) * pred.get((j, d), 0.0))
                 ng = g + 1.0 + w * -math.log(max(1e-4, 1 - p))
-                node = (j, k + 1)
+                if turn:
+                    ng += 1.0 + w * -math.log(max(1e-4, 1 - float(R[k][c])))
+                node = (j, kk + 1)
                 if ng < best.get(node, math.inf):
                     best[node] = ng
                     first[node] = d if k == 0 else first[(c, k)]
-                    heapq.heappush(pq, (ng + dist[j], ng, j, k + 1))
+                    facing[node] = d if d < 4 else facing.get((c, k))
+                    heapq.heappush(pq, (ng + dist[j], ng, j, kk + 1))
         return None
+
+    def _carried_to(self, k, c):
+        """Dónde queda el avatar si espera en c durante el tick k (lo mueve un objeto que arrastra)."""
+        return c
 
     def _dist_to_goal(self, st, goal, blocked):
         """BFS desde el destino sobre lo transitable ahora: distancia (sin peligro) de cada casilla."""

@@ -68,8 +68,25 @@ class ObjectCubeNavigator(CubeNavigator):
         self._st = st
         return super().step(st, goal, None)      # sin puente: nada de consultar el modelo del juego
 
+    def _carried_to(self, k, c):
+        return self._carry[k].get(c, c) if k < len(self._carry) else c
+
     def _cube(self, st):
         W, H, N = st.W, st.H, len(st.masks)
+        # arrastre: casilla de un objeto que arrastra en el tick k → su casilla en k+1 (None si sale del mapa)
+        carriers = self.know.carriers()
+        self._carry = [dict() for _ in range(self.Hz + 1)]
+        for oid, (t, x, y) in st.objects.items():
+            if t not in carriers:
+                continue
+            vx, vy = self.track.velocity(oid)
+            for k in range(self.Hz + 1):
+                a = (x + vx * k, y + vy * k); b = (x + vx * (k + 1), y + vy * (k + 1))
+                ca = int(round(a[1])) * W + int(round(a[0]))
+                if not (0 <= round(a[0]) < W and 0 <= round(a[1]) < H):
+                    break
+                inb = 0 <= round(b[0]) < W and 0 <= round(b[1]) < H
+                self._carry[k][ca] = int(round(b[1])) * W + int(round(b[0])) if inb else None
         obj_types = {t for t, _, _ in st.objects.values()}
         clear = ~sum(1 << t for t in obj_types) if obj_types else ~0
         static = [m & clear for m in st.masks]
