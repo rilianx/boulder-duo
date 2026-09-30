@@ -641,3 +641,35 @@ Los tres juegos originales se evalúan en sus 5 niveles con 15 semillas (75 part
   - **Chase.** Perseguir algo que huye requiere anticipar su fuga.
   - **Survivezombies.** Nadie gana.
 - **Costo de entrenamiento, para ser justos:** usamos horas por juego (etiquetas del simulador para el riesgo, más la práctica). La pista de aprendizaje de GVGAI da 5 minutos.
+
+### Variante con 5 minutos de entrenamiento (rama `presupuesto-5min`, `budget.py`)
+
+Todo lo que el agente sabe de cada juego se aprende en **300 s de reloj, en un solo proceso, sin simulador y sin traer nada del framework principal**: ni conocimiento, ni riesgo, ni pesos ajustados (se usan los valores por defecto). Las fases son:
+1. explorar con el agente genérico (30 % del tiempo);
+2. riesgo con etiquetas de lo vivido (murió en el tick siguiente o no);
+3. práctica con el agente completo;
+4. reajuste final.
+
+La evaluación es igual que la de la tabla anterior.
+
+| Juego | 5 min | Framework principal (horas + simulador para etiquetas) | YOLOBOT | OLETS |
+|---|---|---|---|---|
+| Boulder Dash | 53 % | 55 % | 63 % | 30 % |
+| Zelda | **87 %** | 84 % | 80 % | 83 % |
+| Frogs | 19 % | 87 % | 83 % | 80 % |
+| Butterflies | 97 % | 100 % | 100 % | 97 % |
+| Chase | 3 % | 0 % | 3 % | 10 % |
+| Missilecommand | 50 % | 60 % | 67 % | 57 % |
+| Aliens | 83 % | 93 % | 60 % | 93 % |
+| Portals | 30 % | 23 % | 20 % | 67 % |
+| Sokoban | **100 %** | 100 % | 97 % | 47 % |
+| Survivezombies | 0 % | 0 % | 0 % | 0 % |
+| **Promedio** | **52 %** | 60 % | 57 % | 56 % |
+
+**Lo que muestran:**
+- **Con 5 minutos se conserva casi todo, salvo en Frogs.** En Zelda, Sokoban, Butterflies y Boulder Dash la diferencia está dentro del margen.
+- **Frogs cae de 87 % a 19 %**, y es el costo que ya se veía en la ablación "solo experiencia". El explorador al azar muere enseguida en la carretera (696 partidas, solo 3.531 pasos, un tercio con muerte). El riesgo aprendido queda pesimista y el río casi no se ve.
+- **Portals mejora un poco** (30 % contra 23 %), dentro del ruido.
+- **YOLOBOT y OLETS consultan el simulador en cada tick.** Nosotros no lo consultamos nunca, ni al entrenar ni al jugar, y quedamos 4–5 puntos por debajo de ellos en promedio.
+
+**Advertencia:** estos 10 juegos son el conjunto de entrenamiento público de CIG 2014. Los conocían los autores de YOLOBOT y OLETS, y también nosotros: usar, empujar y portales se diseñaron mirando estos fallos. La prueba limpia es congelar el código y evaluar en juegos de GVGAI que nadie de este trabajo haya mirado.
