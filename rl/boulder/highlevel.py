@@ -123,7 +123,12 @@ class Commander:
         targets, avatars, _ = value_params(st.types, K)
         # no perseguir lo que se mueve (categorías VGDL NPC = 3 y móvil = 6): la meta se escapa, y tocar un
         # enemigo suele matar; las metas son cosas quietas (recursos, puertas, salidas...)
-        targets = [t for t in targets if st.types.get(t, ("", -1))[1] not in (3, 6)]
+        # excepción (P["chase_movers"]): perseguir un tipo que se mueve si tocarlo dio puntos o recursos y casi
+        # nunca mató (p. ej. las cabras de Chase), según lo aprendido
+        def safe_mover(t):
+            ds, dr, da, pd, n = K.effect(t)
+            return self.P.get("chase_movers", False) and n >= 3 and (ds > 0 or dr > 0) and pd < 0.1
+        targets = [t for t in targets if st.types.get(t, ("", -1))[1] not in (3, 6) or safe_mover(t)]
         vals = {t: self.va._value(t, st, avatars) for t in targets}
         best, choice = self.P["min_score"], None
         self._scores = {}

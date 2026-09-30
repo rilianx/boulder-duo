@@ -601,3 +601,32 @@ Las partidas de las referencias se corrieron **de a una**. Con 3 en paralelo, la
 | Frogs | **93 %** | 83 % | 80 % |
 
 En estos tres juegos estamos **a la par del estado del arte de la competencia**, sin consultar el simulador al jugar. Faltan los otros 7 juegos del conjunto CIG 2014.
+
+### Los 10 juegos del conjunto de entrenamiento de CIG 2014
+
+En los 7 juegos nuevos no hay generador de niveles: se practica en los niveles 0–2 y se evalúa en los 3–4, que el agente nunca vio (15 semillas × 2 niveles = 30 partidas). Los pesos de valor son los de por defecto, sin CEM, y no se ajusta el navegador. YOLOBOT y OLETS corren de a una partida, en los mismos niveles. En los 3 juegos originales se evalúa en los 5 niveles oficiales, como antes.
+
+| Juego | Qué exige | **Nosotros** | YOLOBOT | OLETS |
+|---|---|---|---|---|
+| Boulder Dash | navegar, recoger, evitar rocas | 60 % (70 % reevaluando) | 63 % | 30 % |
+| Zelda | llave → puerta, evitar monstruos | 83 % | 80 % | 83 % |
+| Frogs | cruzar carretera y río | **93 %** | 83 % | 80 % |
+| Butterflies | atrapar mariposas | **100 %** | 100 % | 97 % |
+| Chase | atrapar cabras que huyen | 3 % (`chase_movers`) | 3 % | 10 % |
+| Missilecommand | **disparar** a misiles | 50 % | 67 % | 57 % |
+| Aliens | **disparar** a aliens | 0 % | 60 % | 93 % |
+| Portals | usar **teletransportes** | 13 % | 20 % | 67 % |
+| Sokoban | **empujar** cajas a agujeros | 0 % | 97 % | 47 % |
+| Survivezombies | sobrevivir | 0 % | 0 % | 0 % |
+| **Promedio** | | **40 %** | **57 %** | **56 %** |
+
+**Lo que muestran:**
+- **Donde el juego es navegar, recoger y evitar peligros** (Boulder Dash, Zelda, Frogs, Butterflies), igualamos o superamos a YOLOBOT, sin simulador al jugar.
+- **Perdemos donde falta una capacidad del alto nivel, no del navegador:**
+  - disparar: Aliens, y en parte Missilecommand;
+  - empujar objetos a propósito: Sokoban;
+  - entender que un portal lleva a otro lado: Portals.
+
+  El navegador solo se mueve y el alto nivel solo elige casillas para tocar.
+- **En promedio quedamos 17 puntos por debajo** de YOLOBOT y OLETS.
+- **Siguiente paso claro:** un vocabulario de acciones más amplio en el alto nivel. Serían "usar" (disparar), "empujar X hacia Y" y "atravesar el portal", aprendiendo sus efectos igual que se aprenden los de tocar.
