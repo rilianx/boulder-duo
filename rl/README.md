@@ -606,27 +606,38 @@ En estos tres juegos estamos **a la par del estado del arte de la competencia**,
 
 En los 7 juegos nuevos no hay generador de niveles: se practica en los niveles 0–2 y se evalúa en los 3–4, que el agente nunca vio (15 semillas × 2 niveles = 30 partidas). Los pesos de valor son los de por defecto, sin CEM, y no se ajusta el navegador. YOLOBOT y OLETS corren de a una partida, en los mismos niveles. En los 3 juegos originales se evalúa en los 5 niveles oficiales, como antes.
 
-| Juego | Qué exige | **Nosotros** | YOLOBOT | OLETS |
-|---|---|---|---|---|
-| Boulder Dash | navegar, recoger, evitar rocas | 60 % (70 % reevaluando) | 63 % | 30 % |
-| Zelda | llave → puerta, evitar monstruos | 83 % | 80 % | 83 % |
-| Frogs | cruzar carretera y río | **93 %** | 83 % | 80 % |
-| Butterflies | atrapar mariposas | **100 %** | 100 % | 97 % |
-| Chase | atrapar cabras que huyen | 3 % (`chase_movers`) | 3 % | 10 % |
-| Missilecommand | **disparar** a misiles | 50 % | 67 % | 57 % |
-| Aliens | **disparar** a aliens | 0 % | 60 % | 93 % |
-| Portals | usar **teletransportes** | 13 % | 20 % | 67 % |
-| Sokoban | **empujar** cajas a agujeros | 0 % | 97 % | 47 % |
-| Survivezombies | sobrevivir | 0 % | 0 % | 0 % |
-| **Promedio** | | **40 %** | **57 %** | **56 %** |
+| Juego | Qué exige | Nosotros, solo tocar | **Nosotros, con usar / empujar / portales** | YOLOBOT | OLETS |
+|---|---|---|---|---|---|
+| Boulder Dash | navegar, recoger, evitar rocas | 60 % | 55 % (150 partidas; 57 % sin usar) | 63 % | 30 % |
+| Zelda | llave → puerta, evitar monstruos | 83 % | 84 % | 80 % | 83 % |
+| Frogs | cruzar carretera y río | 93 % | 87 % | 83 % | 80 % |
+| Butterflies | atrapar mariposas | 100 % | **100 %** | 100 % | 97 % |
+| Chase | atrapar cabras que huyen | 3 % | 0 % | 3 % | 10 % |
+| Missilecommand | **disparar** a misiles | 50 % | 60 % | 67 % | 57 % |
+| Aliens | **disparar** a aliens | 0 % | **93 %** | 60 % | 93 % |
+| Portals | usar **teletransportes** | 13 % | 23 % | 20 % | 67 % |
+| Sokoban | **empujar** cajas a agujeros | 0 % | **100 %** | 97 % | 47 % |
+| Survivezombies | sobrevivir | 0 % | 0 % | 0 % | 0 % |
+| **Promedio** | | 40 % | **60 %** | 57 % | 56 % |
+
+Los tres juegos originales se evalúan en sus 5 niveles con 15 semillas (75 partidas; Boulder Dash 150). Los otros 7, en los niveles 3–4 con 15 semillas (30 partidas). La práctica sigue siendo en los niveles 0–2 (o generados) y nada consulta el simulador al jugar.
+
+**El vocabulario ampliado del alto nivel.** Además de "ir a tocar una casilla", el alto nivel ahora tiene tres acciones. Sus efectos se aprenden igual que los de tocar, sin nombres de juego ni reglas escritas a mano:
+
+- **Usar** (disparar, espada). Se compara qué desaparece cerca del avatar al usar y al no usar, según la posición relativa y hacia dónde mira. También se aprende cuánto puntaje da cada tipo eliminado. Hay dos formas de usarlo:
+  - reflejo: usar si el valor esperado supera un umbral;
+  - apuntar: cuando no hay nada que tocar, ir adonde usar rinde más, calculado con los objetos extrapolados a donde estarán.
+
+  La exploración al azar de usar baja a un décimo cuando ya se probó bastante y usar no hace nada (en Boulder Dash solo gasta ticks).
+- **Portales.** Si el avatar aparece a más de 2 casillas de donde estaba, lo que había en la casilla de entrada es un teletransporte. Se registra qué tipo aparece en la casilla de llegada. Antes, el recolector contaba esto como un choque y el portal quedaba como muro (`generic_train.py <juego> moves` rehace la transitabilidad sin etiquetas del simulador). Al caminar, los portales se evitan: pisar uno sin querer lleva lejos. Solo se entra a uno cuando es la meta: si lo valioso no se alcanza caminando pero sí desde la salida de un portal aprendido, la orden es entrar a ese portal.
+- **Empujar.** Se aprende qué tipo se corre cuando el avatar entra en su casilla. También qué pasa al empujarlo hacia cada contenido: avanza, se traba, o desaparece y da puntaje (la caja en el hoyo). Un planificador en anchura sobre (casilla del objeto, zona alcanzable del avatar) busca la secuencia de empujes hasta donde empujarlo rinde. La curiosidad prueba a empujar objetos quietos que todavía se probaron poco. Al caminar, lo empujable se evita para no correrlo sin querer.
 
 **Lo que muestran:**
-- **Donde el juego es navegar, recoger y evitar peligros** (Boulder Dash, Zelda, Frogs, Butterflies), igualamos o superamos a YOLOBOT, sin simulador al jugar.
-- **Perdemos donde falta una capacidad del alto nivel, no del navegador:**
-  - disparar: Aliens, y en parte Missilecommand;
-  - empujar objetos a propósito: Sokoban;
-  - entender que un portal lleva a otro lado: Portals.
-
-  El navegador solo se mueve y el alto nivel solo elige casillas para tocar.
-- **En promedio quedamos 17 puntos por debajo** de YOLOBOT y OLETS.
-- **Siguiente paso claro:** un vocabulario de acciones más amplio en el alto nivel. Serían "usar" (disparar), "empujar X hacia Y" y "atravesar el portal", aprendiendo sus efectos igual que se aprenden los de tocar.
+- **El promedio sube de 40 % a 60 %** y queda por encima de YOLOBOT (57 %) y OLETS (56 %), sin simulador al jugar.
+- Sokoban pasa de 0 a 100 % y Aliens de 0 a 93 %.
+- En Boulder Dash, Zelda y Frogs las diferencias con la versión anterior están dentro del margen: ±11 puntos con 75 partidas y ±8 con 150.
+- **Donde seguimos perdiendo:**
+  - **Portals** (23 % contra 67 % de OLETS). El nivel 4 exige cruzar un pasillo con balas que rebotan después de salir del portal, y ahí muere (0/15).
+  - **Chase.** Perseguir algo que huye requiere anticipar su fuga.
+  - **Survivezombies.** Nadie gana.
+- **Costo de entrenamiento, para ser justos:** usamos horas por juego (etiquetas del simulador para el riesgo, más la práctica). La pista de aprendizaje de GVGAI da 5 minutos.

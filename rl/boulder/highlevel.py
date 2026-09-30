@@ -530,6 +530,16 @@ class Commander:
                     v = K.use_score.setdefault(t, [0.0, 0]); v[0] += ds; v[1] += 1
         self._probes = keep
 
+    def _use_eps(self):
+        """Probabilidad de usar al azar para aprender: baja a un décimo cuando ya se probó bastante y usar no
+        hizo desaparecer nada más que sin usar (en Boulder Dash, por ejemplo, solo gasta ticks)."""
+        if getattr(self, "_eps_cache", None) is None:
+            K = self.know
+            n = sum(v[1] for d in K.use_kill.values() for v in d.values())
+            lift = max((K.use_lift(t, k) for t, d in K.use_kill.items() for k in d), default=0.0)
+            self._eps_cache = self.P["use_eps"] * (0.1 if n >= 300 and lift < 0.05 else 1.0)
+        return self._eps_cache
+
     def _use_ev(self, st, ax, ay, facing, dt=0):
         """Valor esperado de usar desde (ax, ay) mirando hacia `facing`, dentro de dt ticks (los objetos se
         extrapolan con la velocidad que estima el rastreador: se apunta adonde estarán, no adonde están)."""
@@ -552,10 +562,11 @@ class Commander:
             self._learn_push(st)
         if self.P["use"]:
             self._resolve_probes(st)
-            if self.learn and self.rng.random() < self.P["use_eps"]:       # explorar: usar al azar...
+            eps = self._use_eps()
+            if self.learn and self.rng.random() < eps:                     # explorar: usar al azar...
                 self._probe(st, True)
                 return "use"
-            if self.learn and self.rng.random() < self.P["use_eps"]:       # ...y la comparación sin usar
+            if self.learn and self.rng.random() < eps:                     # ...y la comparación sin usar
                 self._probe(st, False)
             if self._use_ev(st, st.fx, st.fy, self.nav.last_dir) > self.P["use_thr"]:
                 self.stats["use"] = self.stats.get("use", 0) + 1
@@ -648,4 +659,5 @@ class Commander:
         self.touch = None
         self.goal = None
         self.plan, self._mv, self._pos_last = None, None, None
+        self._eps_cache = None
         self.nav.last = None
