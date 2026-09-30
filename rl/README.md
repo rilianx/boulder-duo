@@ -466,3 +466,25 @@ El predictor y el riesgo por casilla se aprenden **solo de lo vivido**. Cada pas
 - **En Boulder Dash queda parecido.** Con una sola corrida por punto, el ruido es grande (el 87,8 / 3,6 con simulador en w = 20 es un valor alto aislado).
 - **En Frogs se pierde mucho,** pero no en muertes, sino en prudencia: agota el tiempo el doble de veces. La etiqueta "muero en los 3 ticks siguientes" culpa a pasos seguros de muertes que vinieron después (un camión que llega, un tronco que se acaba), así que el riesgo aprendido queda pesimista.
 - **Respuesta a "usan información privilegiada":** las consultas al simulador solo hacen falta donde la muerte llega con retraso respecto del paso que la causa (Frogs). Pendiente: atribuir la muerte al paso correcto, por ejemplo con diferencias temporales o solo el último paso.
+
+### ¿Somos competitivos navegando? MCTS con el simulador en cada tick
+
+`MCTSNavigator` mejorado:
+- **Valor:** avance relativo a la distancia inicial (antes era casi plano).
+- **Simulaciones guiadas:** con probabilidad 0,7, la acción que más acerca a la meta.
+- **Presupuesto:** 30 ms por decisión.
+
+En 30 ms, GVGAI alcanza unas **40 iteraciones**, porque copiar y avanzar el estado es caro. Por eso la profundidad corta es la mejor.
+
+Niveles oficiales, *T* = 3·d + 20, una corrida por fila (80–220 órdenes):
+
+| Juego | MCTS (mejor profundidad) llega / muere / tiempo | Nuestro navegador (sin simulador) llega / muere / tiempo |
+|---|---|---|
+| Boulder Dash | d = 4: 42,6 / 6,9 / 40,6 | w = 50: 70,9 / 7,0 / 8,7 |
+| Frogs | d = 2: 39,7 / 6,4 / 53,8 | w = 20: 47,9 / 5,7 / 46,4 |
+| Zelda | d = 4: **89,9 / 5,5 / 4,6** | w = 6: 72,1 / 5,6 / 22,3 (solo experiencia) |
+
+**Lo que muestran:**
+- **Boulder Dash y Frogs:** a igual tasa de muerte, llegamos más que el MCTS, sin consultar el simulador. En Boulder Dash las metas están lejos y hay que planear rutas largas, donde el A\* es fuerte y un árbol de 4 pasos se queda corto.
+- **Zelda:** el MCTS nos gana claramente. El mapa es chico y el peligro, inmediato y aleatorio: simular el futuro real vale más que nuestro modelo aprendido de los monstruos.
+- **Pendiente:** confirmar con semillas, y entender la brecha en Zelda (rutas 2 veces más largas que la más corta y 20–30 % de tiempos agotados).

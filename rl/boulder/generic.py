@@ -81,7 +81,9 @@ class GenericBridge:
         cp = f"{ROOT / 'vendor' / 'classes'}{os.pathsep}{ROOT / 'vendor' / 'GVGAI' / 'gson-2.6.2.jar'}"
         self.game = game
         self.p = subprocess.Popen(["java", "-cp", cp, "boulderduo.Bridge", str(game_file(game)), "generic"],
-                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=open(os.environ["BRIDGE_ERR"], "a") if os.environ.get("BRIDGE_ERR") else subprocess.DEVNULL,
+                                  text=True,
                                   bufsize=1, cwd=str(ROOT / "vendor" / "GVGAI"))
         self.types = {}
 

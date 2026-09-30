@@ -231,15 +231,37 @@ public class Bridge {
         double v = 0;
     }
 
-    static double navValue(StateObservation s, int[] dist, int goal, int dmax) {
-        if (s.isGameOver() && s.getGameWinner() == Types.WINNER.PLAYER_LOSES) return 0;
+    /** celda del avatar en el estado s */
+    static int avatarCell(StateObservation s) {
         int bs = s.getBlockSize(), W = s.getObservationGrid().length;
         int ax = (int) Math.round(s.getAvatarPosition().x / bs), ay = (int) Math.round(s.getAvatarPosition().y / bs);
-        int c = ay * W + ax;
+        return ay * W + ax;
+    }
+
+    /** valor: 1 en la meta, 0 si pierde; si no, 0,1 + 0,8·(avance relativo a la distancia inicial d0), en [0,1] */
+    static double navValue(StateObservation s, int[] dist, int goal, int dmax) {
+        if (s.isGameOver() && s.getGameWinner() == Types.WINNER.PLAYER_LOSES) return 0;
+        int c = avatarCell(s);
         if (c == goal) return 1;
         if (s.isGameOver()) return 0.5;                     // ganó la partida sin llegar: neutro
         int d = (c >= 0 && c < dist.length && dist[c] >= 0) ? dist[c] : dmax;
-        return 0.5 * (1 - Math.min(d, dmax) / (double) dmax);
+        double prog = (navD0 - d) / (double) Math.max(navD0, 1);   // 1 = llegó, 0 = igual que al inicio
+        return Math.max(0.02, Math.min(0.98, 0.5 + 0.45 * prog));
+    }
+
+    static int navD0 = 1;
+    static final int[][] NAV_DXY = {{0, 0}, {0, -1}, {0, 1}, {-1, 0}, {1, 0}};   // NIL ↑ ↓ ← →
+
+    /** simulación guiada: con prob. 0,7 la acción que más baja la distancia (sin mirar peligro), si no al azar */
+    static int rolloutAction(StateObservation s, int[] dist, int W) {
+        if (mctsRng.nextDouble() < 0.3) return mctsRng.nextInt(NAV_ACTS.length);
+        int c = avatarCell(s), best = mctsRng.nextInt(NAV_ACTS.length), bd = Integer.MAX_VALUE;
+        for (int k = 1; k < NAV_ACTS.length; k++) {
+            int x = c % W + NAV_DXY[k][0], y = c / W + NAV_DXY[k][1], j = y * W + x;
+            if (x < 0 || x >= W || j < 0 || j >= dist.length || dist[j] < 0) continue;
+            if (dist[j] < bd) { bd = dist[j]; best = k; }
+        }
+        return best;
     }
 
     /** Devuelve el índice en ACTS (0 NIL, 1 ↑, 2 ↓, 3 ←, 4 →) de la acción más visitada. */
@@ -248,6 +270,8 @@ public class Bridge {
         int dmax = 1;
         for (int d : dist) dmax = Math.max(dmax, d);
         dmax += depth;
+        int c0 = avatarCell(so), W = so.getObservationGrid().length;
+        navD0 = (c0 >= 0 && c0 < dist.length && dist[c0] >= 0) ? dist[c0] : dmax;
         Node root = new Node();
         double C = Math.sqrt(2);
         while (System.nanoTime() < end) {
@@ -282,7 +306,7 @@ public class Bridge {
             // simulación al azar
             if (val < 0) {
                 while (t < depth && !s.isGameOver()) {
-                    s.advance(NAV_ACTS[mctsRng.nextInt(NAV_ACTS.length)]);
+                    s.advance(NAV_ACTS[rolloutAction(s, dist, W)]);
                     t++;
                     double v = navValue(s, dist, goal, dmax);
                     if (v == 1 || v == 0) { val = v; break; }
@@ -291,6 +315,9 @@ public class Bridge {
             }
             for (Node p : path) { p.n++; p.v += val; }
         }
+        if (System.getenv("MCTS_LOG") != null)
+            System.err.println("MCTS iter " + root.n + " visitas " + java.util.Arrays.toString(
+                    java.util.Arrays.stream(root.ch).mapToInt(c -> c == null ? 0 : c.n).toArray()) + " d0 " + navD0);
         int best = 0, bn = -1;
         for (int k = 0; k < NAV_ACTS.length; k++)
             if (root.ch[k] != null && root.ch[k].n > bn) { bn = root.ch[k].n; best = k; }
