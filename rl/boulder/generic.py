@@ -176,6 +176,10 @@ class Knowledge:
         self.turns = [0, 0]                 # cambios de dirección: [se movió, solo giró]
         self.carry = {}                     # tipo de objeto bajo el avatar quieto → [lo movió, no lo movió]
         self.move_dirs = {}                 # tipo de objeto → {(dx, dy): veces que se movió así}
+        # cuándo se mueve: tipo → {máscara de la casilla de adelante: [se movió, no]} (una roca cae si abajo
+        # queda vacío); y qué desaparece al pisarlo: tipo → [desapareció, quedó] (la tierra, los diamantes)
+        self.fall = {}
+        self.consumed = {}
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -280,6 +284,16 @@ class Knowledge:
             c = self.carry.setdefault(t, [0, 0])
             c[0 if moved else 1] += 1
 
+    def p_move_into(self, t, mask):
+        """P(un objeto de tipo t avanza hacia una casilla con esta máscara), aprendido; sin datos: 0."""
+        r = self.fall.get(t, {}).get(mask)
+        return r[0] / (r[0] + r[1]) if r and r[0] + r[1] >= 3 else 0.0
+
+    def is_consumed(self, t):
+        """¿El tipo desaparece cuando el avatar lo pisa? (tierra, diamantes...)"""
+        c = self.consumed.get(t)
+        return bool(c) and c[0] + c[1] >= 3 and c[0] > 0.5 * (c[0] + c[1])
+
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
         return {t for t, (a, b) in self.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
@@ -294,7 +308,9 @@ class Knowledge:
         return {"passed": self.passed, "blocked": self.blocked, "floor": sorted(self.floor),
                 "avatar_types": sorted(self.avatar_types), "eff": self.eff, "term": self.term,
                 "by_res": self.by_res, "turns": self.turns, "carry": self.carry,
-                "move_dirs": {t: {f"{d[0]},{d[1]}": n for d, n in dd.items()} for t, dd in self.move_dirs.items()}}
+                "move_dirs": {t: {f"{d[0]},{d[1]}": n for d, n in dd.items()} for t, dd in self.move_dirs.items()},
+                "fall": {t: {str(m): v for m, v in dd.items()} for t, dd in self.fall.items()},
+                "consumed": self.consumed}
 
     @classmethod
     def from_json(cls, d):
@@ -309,6 +325,8 @@ class Knowledge:
         k.carry = {int(a): list(b) for a, b in d.get("carry", {}).items()}
         k.move_dirs = {int(a): {tuple(int(v) for v in key.split(",")): n for key, n in b.items()}
                        for a, b in d.get("move_dirs", {}).items()}
+        k.fall = {int(a): {int(m): list(v) for m, v in b.items()} for a, b in d.get("fall", {}).items()}
+        k.consumed = {int(a): list(b) for a, b in d.get("consumed", {}).items()}
         return k
 
     def merge(self, o):

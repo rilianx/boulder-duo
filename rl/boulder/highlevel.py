@@ -46,6 +46,7 @@ class Commander:
         offs = (-W, 1, W, -1)
         best = {st.pos: 0.0}
         info = {st.pos: (0, 0.0)}
+        self._prev = prev = {st.pos: None}
         pq = [(0.0, st.pos)]
         while pq:
             c, i = heapq.heappop(pq)
@@ -64,13 +65,56 @@ class Commander:
                 nt, nH = t + 1, H + h
                 if blocked[j]:                     # se puede terminar en una casilla bloqueada (tocarla)
                     if j not in best and (j not in info or nt < info[j][0]):
-                        info[j] = (nt, nH)
+                        info[j] = (nt, nH); prev[j] = i
                     continue
                 nc = nt + w * nH
                 if nc < best.get(j, math.inf):
-                    best[j] = nc; info[j] = (nt, nH)
+                    best[j] = nc; info[j] = (nt, nH); prev[j] = i
                     heapq.heappush(pq, (nc, j))
         return info
+
+    # ------------------------------------------------------------------ imaginación: ¿la meta es una trampa?
+    def imagine(self, st, j, want):
+        """Con lo aprendido (no con el simulador): el avatar cava el camino hasta j (lo que se consume al
+        pisarlo desaparece), los objetos que avanzan solos lo hacen en cascada mientras la regla aprendida
+        diga que se mueven hacia lo que tienen adelante, y se cuenta qué de `want` queda alcanzable desde j."""
+        K, W, N = self.know, st.W, len(st.masks)
+        M = list(st.masks)
+        c = j
+        while c is not None and c != st.pos:              # cavar el camino
+            for t in range(63):
+                if M[c] >> t & 1 and K.is_consumed(t):
+                    M[c] &= ~(1 << t)
+            c = self._prev.get(c)
+        movers = {t: d for t in K.fall for d in [self.nav.track.main_dir(t)] if d is not None}
+        for _ in range(W + st.H):                        # caídas en cascada hasta que nada se mueva
+            moved = False
+            for t, d in movers.items():
+                bit = 1 << t
+                cells = [i for i in range(N) if M[i] & bit]
+                cells.sort(key=lambda i: -((i % W) * d[0] + (i // W) * d[1]))   # los de adelante primero
+                for i in cells:
+                    x, y = i % W + d[0], i // W + d[1]
+                    if not (0 <= x < W and 0 <= y < st.H):
+                        continue
+                    a = y * W + x
+                    if a != j and K.p_move_into(t, M[a]) > 0.5:
+                        M[i] &= ~bit; M[a] |= bit; moved = True
+            if not moved:
+                break
+        bm = K.blocking_bits(st.res)
+        seen, fr, n = {j}, [j], 0
+        while fr:
+            i = fr.pop()
+            if i in want:
+                n += 1
+            x, y = i % W, i // W
+            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                xx, yy = x + dx, y + dy
+                k = yy * W + xx
+                if 0 <= xx < W and 0 <= yy < st.H and k not in seen and not (M[k] & bm and k not in want):
+                    seen.add(k); fr.append(k)
+        return n
 
     # ------------------------------------------------------------------ elegir destino
     def choose(self, st):
@@ -94,6 +138,23 @@ class Commander:
             self._scores[j] = s
             if s > best:
                 best, choice = s, (j, t)
+        if choice is not None and self.P.get("foresight", True):
+            # previsión: de las mejores metas, la primera que no deja al agente sin nada valioso alcanzable
+            want = {j for j, sc in self._scores.items() if sc > self.P["min_score"]}
+            ranked = sorted(((sc, j) for j, sc in self._scores.items() if sc > self.P["min_score"]), reverse=True)
+            choice = None
+            for sc, j in ranked[: self.P.get("foresight_k", 6)]:
+                # trampa = tras imaginar las caídas, se pierde acceso a trap_loss o más cosas valiosas que hoy sí
+                # se alcanzan (no basta con que quede alguna: el bolsillo se vuelve fatal más tarde)
+                rest = want - {j}
+                if not self.P.get("foresight_check", 1) or len(rest) == 0 or \
+                        self.imagine(st, j, rest) > len(rest) - self.P.get("trap_loss", 2):
+                    best, choice = sc, (j, info[j][0])
+                    break
+                self.stats["trap"] = self.stats.get("trap", 0) + 1
+            if choice is None and ranked:              # todas parecen trampa: la mejor igual
+                best, (j) = ranked[0][0], ranked[0][1]
+                choice = (j, info[j][0])
         self._best_score = best if choice is not None else None
         if choice is None and self.P.get("unlock", True):
             choice = self.unlock(st, info, vals, targets)
@@ -167,12 +228,16 @@ class Commander:
         tocarlo no terminó la partida (así la curiosidad por lo que bloquea se agota)."""
         if self.touch is None or not self.learn:
             return
-        types, sc0, res0, at0, cell = self.touch
+        types, sc0, res0, at0, cell, alltypes = self.touch
         K = self.know
         if st.pos == cell:
-            K.record_touch(types, st.score - sc0, st.total_res() - res0, st.atype != at0)
-            K.record_nonterminal(types, at0, res0)
-        else:
+            if types:
+                K.record_touch(types, st.score - sc0, st.total_res() - res0, st.atype != at0)
+                K.record_nonterminal(types, at0, res0)
+            for t in alltypes:                               # ¿desapareció al pisarlo? (también el fondo)
+                c = K.consumed.setdefault(t, [0, 0])
+                c[0 if not st.masks[cell] >> t & 1 else 1] += 1
+        elif types:
             K.record_nonterminal(types, at0, res0)          # chocó: tocarlo tampoco terminó nada
         self.touch = None
 
@@ -219,8 +284,9 @@ class Commander:
             if 0 <= j < len(st.masks):
                 m = st.masks[j]
                 touched = [t for t in range(63) if m >> t & 1 and t not in K.avatar_types and t not in K.floor]
-                if touched:
-                    self.touch = (touched, st.score, st.total_res(), st.atype, j)
+                alltypes = [t for t in range(63) if m >> t & 1 and t not in K.avatar_types]
+                if alltypes:
+                    self.touch = (touched, st.score, st.total_res(), st.atype, j, alltypes)
         return act
 
     def _set_goal(self, st, c):
@@ -240,8 +306,9 @@ class Commander:
 
     def end(self, won):
         if self.touch is not None and self.learn and won is not None:
-            types, _, res, atype, _ = self.touch
-            self.know.record_terminal_touch(types, atype, res, won == 1)   # ganó o perdió al tocarlo
+            types, _, res, atype, _, _ = self.touch
+            if types:
+                self.know.record_terminal_touch(types, atype, res, won == 1)   # ganó o perdió al tocarlo
         self.touch = None
         self.goal = None
         self.nav.last = None

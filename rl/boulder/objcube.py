@@ -27,6 +27,7 @@ class ObjectTracker:
         self.wraps = set()       # itypes que reaparecen por el borde
         self.lastdir = {}
         self.dirs = {}           # itype → {(dx, dy): veces}: hacia dónde se mueve cada tipo
+        self.fall = None         # itype → {máscara adelante: [avanzó, no]} (lo comparte el conocimiento)
         # modelo de movimiento por tipo (objetos al azar): [movimientos de casilla, oportunidades]; cada tick
         # observado suma como oportunidad la fracción de vecinas libres (si hay muro, el intento no se ve)
         self.moverate = {}
@@ -49,6 +50,17 @@ class ObjectTracker:
                     self.lastdir[oid] = d
                     dd = self.dirs.setdefault(t, {})
                     dd[d] = dd.get(d, 0) + 1
+            # cuándo avanza en su dirección: según qué había adelante en el tick anterior
+            if h and self.fall is not None and getattr(st, "prev", None) is not None and st.tick - h[-1][0] == 1:
+                d = self.main_dir(t)
+                if d is not None:
+                    cx, cy = int(round(h[-1][1])), int(round(h[-1][2]))
+                    ax_, ay_ = cx + d[0], cy + d[1]
+                    if 0 <= ax_ < st.W and 0 <= ay_ < st.H:
+                        key = st.prev[ay_ * st.W + ax_]
+                        moved = abs(x - h[-1][1]) + abs(y - h[-1][2]) > 0.01
+                        r = self.fall.setdefault(t, {}).setdefault(key, [0, 0])
+                        r[0 if moved else 1] += 1
             if h and free is not None and st.tick - h[-1][0] == 1:
                 cx, cy = int(round(h[-1][1])), int(round(h[-1][2]))
                 nfree = sum(1 for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
@@ -92,6 +104,7 @@ class ObjectCubeNavigator(CubeNavigator):
         super().__init__(know, risk, P, horizon=horizon, reps=1, danger=danger, **kw)
         self.track = ObjectTracker()
         self.track.dirs = know.move_dirs            # hacia dónde se mueve cada tipo: persiste entre partidas
+        self.track.fall = know.fall
 
     def step(self, st, goal, br=None):
         self._t0 = time.perf_counter()               # el presupuesto por decisión cuenta desde aquí

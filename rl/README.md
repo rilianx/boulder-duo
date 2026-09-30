@@ -561,3 +561,21 @@ wwwwwwwwwwwwwwwwwwwwwwwwww
 ```
 
 Las rocas de los lados se apoyan en muro o en otras rocas: ninguna puede caer, y en este Boulder Dash no se empujan. El agente se encerró solo, al cavar antes bajo rocas que después cayeron. **Lo que falta es previsión, no rescate:** antes de elegir una meta, estimar si llegar a ella (y cavar el camino) deja al agente sin salida.
+
+### Previsión con el modelo aprendido (no con el simulador)
+
+Dos reglas nuevas, aprendidas de la observación y guardadas en `knowledge.json`:
+- **`fall`: cuándo avanza un tipo en su dirección**, según qué hay adelante. En Boulder Dash la roca avanza hacia vacío el 95 % de las veces, y hacia tierra, diamante o muro nunca. Hacia el avatar, el 100 %: así es como mata.
+- **`consumed`: qué desaparece al pisarlo.** La tierra, 705 de 705 veces; los diamantes, 137 de 138; la salida no.
+
+**Imaginación** (`Commander.imagine`). Antes de elegir una meta, el agente cava con lo aprendido el camino hasta ella, deja caer en cascada lo que la regla dice que cae, y cuenta qué de lo valioso sigue alcanzable. Si pierde acceso a 2 o más cosas valiosas, la meta se considera una trampa y se prueba la siguiente (hasta 6).
+
+**Hallazgo honesto:** la mejora grande de Boulder Dash (40 → 60 %) **no vino de la imaginación**, sino de un efecto lateral. Entre metas con igual puntaje, la previsión elige la de más abajo y a la derecha: junta primero lo de abajo y las rocas caen en huecos inofensivos. Con el mismo orden y sin consultar la imaginación (`foresight_check: 0`), el resultado también es 60 %. La imaginación detecta 36 metas trampa en 30 partidas, pero sin mejorar las victorias. Las derrotas que quedan son muertes en rutas largas, por ejemplo 22 pasos hasta la salida con mariposas cerca.
+
+**Victorias en los niveles oficiales**, 30 partidas por juego (IC 95 % ≈ ±15 puntos), sin simulador al jugar:
+
+| Juego | Agente genérico | Alto nivel + navegador | OLETS (con simulador) |
+|---|---|---|---|
+| Boulder Dash | 68 % | **60 %** | 48 % |
+| Zelda | 49 % | **83 %** | 88 % |
+| Frogs | 0 % | **93 %** | 96 % |
