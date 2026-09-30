@@ -64,7 +64,8 @@ class CubeNavigator(Navigator):
         Heurística y cola del camino: distancia al destino por BFS inverso (sin peligro). Fuera de la ventana
         o del horizonte se completa con esa distancia. Si se acaba el tiempo (P["budget_ms"]), devuelve la
         primera acción del mejor nodo encontrado hasta ahí."""
-        t_start = time.perf_counter()
+        # el presupuesto incluye seguimiento y cubo; el replanteo sin plazo (_dl_off) tiene su propio tiempo
+        t_start = time.perf_counter() if getattr(self, "_dl_off", False) else (getattr(self, "_t0", None) or time.perf_counter())
         budget = self.P.get("budget_ms", 25.0) / 1000
         Rw = int(self.P.get("win", 8))
         cube = self._cube(st)                                # cube[k] = máscaras dentro de k+1 ticks
@@ -116,7 +117,9 @@ class CubeNavigator(Navigator):
         if dl and H:
             cells = [j for j in range(N) if inwin(j) and not now_blocked[j]]
             if cells:
-                hz_tail = float(np.mean(-np.log(np.clip(1 - R[H - 1][cells], 1e-4, 1))))
+                # percentil 25: el riesgo de ir por lo razonablemente seguro, no el promedio (en Frogs la mitad
+                # de la ventana es agua mortal y el promedio haría "carísimo" todo camino que pase el horizonte)
+                hz_tail = float(np.percentile(-np.log(np.clip(1 - R[H - 1][cells], 1e-4, 1)), 25))
         pred = {}
         if self.pred is not None:
             pred = self.pred.probs(st, [j for j in range(N) if not now_blocked[j] and inwin(j)])
@@ -171,6 +174,10 @@ class CubeNavigator(Navigator):
                     # alto donde el peligro lo provoca el avatar (Boulder Dash), bajo con peligro que pasa (Frogs)
                     p = max(p, self.P.get("alpha", 1.0) * pred.get((j, d), 0.0))
                 if kk + 1 + dist[j] > rem:                   # ya no llega a tiempo por aquí
+                    continue
+                # restricción de riesgo: con plazo, un paso con p > eps no se toma (mejor agotar el tiempo que
+                # tirarse al agua para "cumplir"); si así no hay ruta, se planifica sin plazo
+                if dl and p > self.P.get("eps", 0.25):
                     continue
                 ng = g + tw + w * -math.log(max(1e-4, 1 - p))
                 if turn:

@@ -11,6 +11,7 @@ espacio-tiempo. El primer paso lo cubre el predictor (aprendido antes, sin consu
 from __future__ import annotations
 
 import math
+import time
 
 from .cube import CubeNavigator
 
@@ -64,6 +65,7 @@ class ObjectCubeNavigator(CubeNavigator):
         self.track = ObjectTracker()
 
     def step(self, st, goal, br=None):
+        self._t0 = time.perf_counter()               # el presupuesto por decisión cuenta desde aquí
         self.track.update(st)
         self._st = st
         return super().step(st, goal, None)      # sin puente: nada de consultar el modelo del juego

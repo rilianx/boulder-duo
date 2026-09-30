@@ -405,3 +405,23 @@ Zelda en los niveles oficiales, 3 semillas:
 | ahora (w = 12, paciencia 10) | **75,6 ± 5,3 %** | 15,9 ± 5,8 % | **8,6 ± 5,9 %** | 0,40 |
 
 Con el criterio nuevo, las dos configuraciones de Zelda quedan casi empatadas: la nueva cambia tiempos agotados por muertes. En Boulder Dash, la configuración elegida tiene 9,7 % de tiempos agotados en los niveles generados, pero 29,6 % en los oficiales. El problema ahí no es el criterio: los niveles generados de Boulder Dash no se parecen lo suficiente a los oficiales.
+
+### Curvas llegar vs. morir y navegador con plazo (`nav_bench.py <juego> --curve`, `plot_curves.py`)
+
+![curvas](docs/curvas.png)
+
+En vez de elegir un solo punto con un criterio arbitrario, se barre `w_risk` (0 a 50) con el plazo de siempre, *T* = 3·d + 20 ticks. Así cada navegador es una curva: mejor es arriba a la izquierda, es decir, llega más y muere menos. Todo es en los niveles oficiales, con unas 150 órdenes por punto.
+
+**Navegador con plazo** (`deadline`). Conoce el tick límite de la orden y minimiza el riesgo sujeto a llegar antes de *T*; el tiempo solo desempata. Hicieron falta dos correcciones:
+- **Efecto horizonte.** Sin corrección, dejaba lo peligroso para después de los 20 ticks simulados, donde "no costaba". El tramo final ahora paga el riesgo típico por paso (percentil 25 de la ventana).
+- **Restricción de riesgo.** Sin ella, cerca del plazo tomaba cualquier ruta que llegara a tiempo, aunque fuera mortal: en Frogs, 46–64 % de muertes. Ahora un paso con p > ε = 0,25 no se toma, y si no queda ruta así, se planifica sin plazo.
+
+**Lo que muestran:**
+- **Zelda:** el navegador con plazo queda **por encima de la curva**. Con *T* largo llega 69 % y muere 6 %, frente a 67 % y 12,5 % del normal con w = 20 y el mismo *T*.
+- **Boulder Dash:** con *T* corto muere 4 % (el normal, 11–13 %). Con *T* medio o largo queda sobre la curva.
+- **Frogs:** no mejora. Queda sobre la curva o apenas debajo.
+- **La idea funciona donde el peligro se puede esquivar esperando** (enemigos que se mueven), y no aporta cuando esperar no ayuda, o cuando el riesgo del río está mal estimado.
+
+**Otros cambios:**
+- Si un avatar queda encerrado y 10 órdenes seguidas son inalcanzables, la partida se marca como *atrapado* y no se le dan más órdenes. Antes una sola partida así inflaba el conteo.
+- El presupuesto por decisión ahora cuenta desde que llega el estado (incluye seguimiento y cubo), y durante la partida no corre la recolección de basura de Python.

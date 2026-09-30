@@ -22,7 +22,7 @@ from boulder.generic import GDanger, GenericBridge, Knowledge
 from boulder.gvgai_levels import write_levels
 from boulder.cube import CellRisk, CubeNavigator
 from boulder.objcube import ObjectCubeNavigator
-from boulder.nav import NAV_DEFAULT, NAV_PARAMS, MCTSNavigator, Navigator, shortest
+from boulder.nav import NAV_DEFAULT, NAV_PARAMS, MCTSNavigator, Navigator, SurpriseLog, shortest
 
 RUNS = Path(__file__).parent / "runs" / "generic"
 
@@ -58,6 +58,7 @@ class OrderGiver:
         self.goal = None
 
     def _finish(self, how, st=None):
+        self.n_unreach = 0
         self.stats[how] = self.stats.get(how, 0) + 1
         self.stats.setdefault("by_row", {}).setdefault(f"{self.goal // self.W}:{how}", 0)
         self.stats["by_row"][f"{self.goal // self.W}:{how}"] += 1
@@ -78,6 +79,11 @@ class OrderGiver:
             elif st.tick - self.t0 > getattr(self, "limit", 3 * self.dist + 20):
                 self._finish("timeout")
         if self.goal is None:
+            if getattr(self, "n_unreach", 0) >= 10:      # avatar atrapado: no seguir dando órdenes en esta partida
+                if not getattr(self, "trapped", False):
+                    self.trapped = True
+                    self.stats["trapped"] = self.stats.get("trapped", 0) + 1
+                return 4
             self._new_order(st)
             if self.goal is None:
                 return 4
@@ -86,10 +92,17 @@ class OrderGiver:
         self.stats.setdefault("ms", []).append(1000 * (time.perf_counter() - t0))
         if not ok:
             self.stats["unreachable"] += 1
+            self.n_unreach = getattr(self, "n_unreach", 0) + 1
             self.goal = None
         return act
 
     def end(self, won):
+        log = getattr(self.nav, "surprise", None)
+        if log is not None and won != 1 and getattr(self.nav, "_entered", None) is not None and hasattr(self.nav, "risk"):
+            m = self.nav._entered                       # murió: ¿la última casilla a la que entró parecía segura?
+            p = float(self.nav.risk.grid([m])[0])
+            types = [t for t in range(63) if m >> t & 1 and t not in self.nav.know.avatar_types]
+            log.add("death", types, p < 0.2)
         if self.goal is not None and hasattr(self, "W"):
             self._finish("died" if won != 1 else "reached_win")
         self.nav.last = None
@@ -103,12 +116,16 @@ def run(job):
     T = job[6] if len(job) > 6 else None
     cube = use_danger in ("cube", "hybrid", "objects", "objects+pred")
     torch.set_num_threads(1)
-    d = RUNS / game
-    if use_danger and use_danger not in ("cube", "objects") and game not in _D:
-        _D[game] = GDanger(d / "danger.pt")
+    mdir = P.get("model_dir", game)          # modelos aprendidos (p. ej. "frogs_exp": solo de experiencia)
+    d = RUNS / mdir
+    if use_danger and use_danger not in ("cube", "objects") and mdir not in _D:
+        _D[mdir] = GDanger(d / "danger.pt")
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
     stats = {"orders": 0, "reached": 0, "died": 0, "timeout": 0, "unreachable": 0, "reached_win": 0, "invalid": 0,
              "stretch": []}
+    log = SurpriseLog()
+    if P.get("know_file"):                       # conocimiento alternativo (p. ej. uno viejo, para la demostración)
+        K = Knowledge.from_json(json.loads(Path(P["know_file"]).read_text()))
     b = GenericBridge(game)
     rng = np.random.default_rng(seeds[0])
     try:
@@ -118,12 +135,15 @@ def run(job):
                 nav = MCTSNavigator(K, P)
             elif use_danger in ("objects", "objects+pred"):
                 nav = ObjectCubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
-                                          danger=_D.get(game) if use_danger == "objects+pred" else None)
+                                          danger=_D.get(mdir) if use_danger == "objects+pred" else None)
             elif cube:
                 nav = CubeNavigator(K, CellRisk(d / "cell_risk.pt"), P,
-                                    danger=_D.get(game) if use_danger == "hybrid" else None)
+                                    danger=_D.get(mdir) if use_danger == "hybrid" else None)
             else:
-                nav = Navigator(K, _D.get(game) if use_danger else None, P)
+                nav = Navigator(K, _D.get(mdir) if use_danger else None, P)
+            if P.get("surprises"):
+                nav.surprise = log
+                nav.learn = not P.get("frozen", False)
             b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats, T))
             jt = stats.setdefault("java_t", [0, 0, 0.0, 0.0])   # decisiones, >40 ms, máx, suma (ms), desde Java
             n, over, mx, tot = getattr(b, "timing", (0, 0, 0.0, 0.0))
@@ -131,7 +151,8 @@ def run(job):
             k += 1
     finally:
         b.close()
-    stats["know"] = K.to_json()                  # lo aprendido al vuelo (transitabilidad, giros)
+    stats["know"] = K.to_json()
+    stats["surprises"] = {k: {",".join(map(str, t)): v for t, v in dd.items()} for k, dd in log.d.items()}                  # lo aprendido al vuelo (transitabilidad, giros)
     return stats
 
 
@@ -207,13 +228,14 @@ def seeds_report(game, variants, orders, procs, lv, n):
     (RUNS / game / "nav_seeds.json").write_text(json.dumps(out, indent=1))
 
 
-def curve(game, procs, orders=150):
+def curve(game, procs, orders=150, model_dir=None):
     """Curva llegar vs. morir en los niveles oficiales: el navegador de siempre barriendo w_risk, y el navegador
     con plazo (minimiza el riesgo sujeto a llegar antes de T), para plazos T = m·d + a distintos."""
     f = RUNS / game / "nav_objects.json"
     alpha = json.loads(f.read_text()).get("alpha", 1.0) if f.exists() else 1.0
     lv = test_levels(game)
-    out = RUNS / game / "nav_curve.json"
+    mdir = model_dir or game
+    out = RUNS / mdir / "nav_curve.json"
     res = json.loads(out.read_text()) if out.exists() else []
     done = {(r["kind"], r["w"], tuple(r["T"])) for r in res}
     jobs = [("w", w, (3, 20)) for w in (0, 3, 6, 12, 20, 30, 50)]
@@ -222,7 +244,8 @@ def curve(game, procs, orders=150):
     for kind, w, T in jobs:
         if (kind, w, tuple(T)) in done:
             continue
-        P = {**NAV_DEFAULT, "w_risk": float(w), "alpha": alpha, "patience": 0, "deadline": kind == "plazo"}
+        P = {**NAV_DEFAULT, "w_risk": float(w), "alpha": alpha, "patience": 0, "deadline": kind == "plazo",
+             "model_dir": mdir}
         s = bench(game, P, orders, procs, "objects+pred", lv, T=T)
         m = max(s["orders"], 1)
         r = {"kind": kind, "w": w, "T": list(T), "orders": s["orders"],
@@ -233,6 +256,31 @@ def curve(game, procs, orders=150):
         out.write_text(json.dumps(res, indent=1))
         print(f"{game} {kind:5} w={w:>2} T={T[0]}·d+{T[1]}: llega {r['reached']:5.1f} | muere {r['died']:5.1f} | "
               f"tiempo {r['timeout']:5.1f} | invalidada {r['invalid']:4.1f} | inalcanzable {r['unreachable']:4.1f}", flush=True)
+
+
+def surprises(game, procs, know_file=None, orders=150):
+    """Registro de sorpresas con el conocimiento congelado: qué contradice lo que el agente cree saber."""
+    f = RUNS / game / "nav_objects.json"
+    P = {**json.loads(f.read_text()), "surprises": True, "frozen": True, "patience": 0}
+    if know_file:
+        P["know_file"] = know_file
+    per = max(orders // procs, 1)
+    with ProcessPoolExecutor(procs) as ex:
+        parts = list(ex.map(run, [(game, P, test_levels(game)[k::procs] or test_levels(game), [500 + k], "objects+pred", per)
+                                  for k in range(procs)]))
+    log = SurpriseLog()
+    for p in parts:
+        log.merge({k: {tuple(int(x) for x in t.split(",") if x): v for t, v in dd.items()} for k, dd in p["surprises"].items()})
+    b = GenericBridge(game)
+    b.play(0, 1, lambda st, br: 4 if st.tick < 2 else 0)        # solo para leer los nombres de los tipos
+    b.close()
+    name = lambda ts: "+".join(b.types.get(t, (str(t),))[0] for t in ts) or "(nada)"
+    frac, n = log.explained()
+    print(f"{game}: el conocimiento explica {100 * frac:.2f}% de {n:,} transiciones"
+          f"{' (conocimiento: ' + know_file + ')' if know_file else ''}", flush=True)
+    for kind, dd in log.d.items():
+        top = sorted(dd.items(), key=lambda kv: -kv[1][1])[:5]
+        print(f"   {kind:5}: " + " | ".join(f"{name(t)} {s}/{nn}" for t, (nn, s) in top if s), flush=True)
 
 
 def report(label, s):
@@ -323,12 +371,17 @@ def main():
     p.add_argument("--no-model", action="store_true", help="escenario B: sin modelo del juego en ejecución")
     p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk y alpha para objetos + predictor")
     p.add_argument("--only-tuned", action="store_true", help="con --no-model: solo la variante ajustada")
+    p.add_argument("--model-dir", default=None, help="carpeta de modelos en runs/generic (p. ej. frogs_exp)")
+    p.add_argument("--surprises", action="store_true", help="registro de sorpresas con el conocimiento congelado")
+    p.add_argument("--know-file", default=None, help="con --surprises: usar este knowledge.json")
     p.add_argument("--curve", action="store_true", help="curva llegar vs. morir (w_risk y navegador con plazo)")
     p.add_argument("--learn-know", action="store_true", help="actualizar knowledge.json (recursos, giros)")
     p.add_argument("--seeds", type=int, default=0, help="con --no-model --only-tuned: repetir con N semillas y dar IC 95 %")
     a = p.parse_args()
+    if a.surprises:
+        return surprises(a.game, a.procs, a.know_file)
     if a.curve:
-        return curve(a.game, a.procs)
+        return curve(a.game, a.procs, model_dir=a.model_dir)
     if a.learn_know:
         return learn_knowledge(a.game, a.procs)
     if a.tune_objects:

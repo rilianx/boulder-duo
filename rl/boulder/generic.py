@@ -13,6 +13,7 @@ nada que valga la pena, explora hacia casillas poco visitadas.
 """
 from __future__ import annotations
 
+import gc
 import heapq
 import json
 import math
@@ -116,6 +117,14 @@ class GenericBridge:
         path = level_file(self.game, level) if isinstance(level, int) else Path(level).resolve()
         self.p.stdin.write(f"G {path} {seed}\n"); self.p.stdin.flush()
         prev = None
+        gc.disable()                         # sin pausas de recolección de basura en medio de una decisión
+        try:
+            return self._loop(policy, prev)
+        finally:
+            gc.enable()
+            gc.collect()
+
+    def _loop(self, policy, prev):
         while True:
             line = self._read()
             if line.startswith("@M"):

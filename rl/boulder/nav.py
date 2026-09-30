@@ -20,6 +20,32 @@ NAV_PARAMS = {"w_risk": (0.0, 60.0, 20.0), "p_max": (0.3, 1.0, 1.0), "shield": (
 NAV_DEFAULT = {k: v[2] for k, v in NAV_PARAMS.items()}
 
 
+class SurpriseLog:
+    """Contradicciones entre lo que el conocimiento esperaba y lo que pasó, agrupadas por tipos de objeto.
+
+    move:  intentó entrar a una casilla; ¿esperaba moverse (pisable y sin giro pendiente) y se movió?
+    drift: estaba quieto; ¿esperaba que lo arrastraran (objeto que arrastra debajo) y se desplazó?
+    death: murió; ¿la casilla a la que había entrado tenía riesgo aprendido bajo (< 0,2)?
+    """
+
+    def __init__(self):
+        self.d = {}                 # tipo de evento → (tipos...) → [n, sorpresas]
+
+    def add(self, kind, types, surprise):
+        c = self.d.setdefault(kind, {}).setdefault(tuple(sorted(types)), [0, 0])
+        c[0] += 1; c[1] += int(surprise)
+
+    def merge(self, o):
+        for k, dd in o.items():
+            for t, (n, s) in dd.items():
+                c = self.d.setdefault(k, {}).setdefault(tuple(t), [0, 0]); c[0] += n; c[1] += s
+
+    def explained(self):
+        n = sum(v[0] for dd in self.d.values() for v in dd.values())
+        s = sum(v[1] for dd in self.d.values() for v in dd.values())
+        return 1 - s / max(n, 1), n
+
+
 class Navigator:
     def __init__(self, know, danger=None, P=NAV_DEFAULT, learn=True):
         self.know, self.danger, self.P, self.learn = know, danger, P, learn
@@ -70,18 +96,26 @@ class Navigator:
         """Acción para acercarse a goal (4 = quieto si no hay ruta). Aprende transitabilidad al vuelo."""
         W = st.W
         offs = (-W, 1, W, -1)
-        if self.last is not None and self.learn:
+        log = getattr(self, "surprise", None)
+        if self.last is not None and (self.learn or log is not None):
             pos0, d, mask, same, res, free = self.last
             moved = st.pos == pos0 + offs[d]
-            if moved or same:
-                self.know.record_move(mask, moved, res)
-            if not same and free:
-                self.know.record_turn(moved)
-        if getattr(self, "_waited", None) is not None and self.learn:
+            if log is not None:
+                expect = free and (same or not self.know.turn_cost)
+                types = [t for t in range(63) if mask >> t & 1 and t not in self.know.avatar_types]
+                log.add("move", types, expect != moved)
+            if self.learn:
+                if moved or same:
+                    self.know.record_move(mask, moved, res)
+                if not same and free:
+                    self.know.record_turn(moved)
+        if getattr(self, "_waited", None) is not None and (self.learn or log is not None):
             p0, otypes = self._waited
-            if otypes:
-                moved = abs(st.fx - p0[0]) + abs(st.fy - p0[1]) > 0.01
+            moved = abs(st.fx - p0[0]) + abs(st.fy - p0[1]) > 0.01
+            if otypes and self.learn:
                 self.know.record_carry(otypes, moved)
+            if log is not None:
+                log.add("drift", otypes, bool(otypes & self.know.carriers()) != moved)
         r = self.plan(st, goal)
         act = r[1] if r is not None and r[1] >= 0 else 4
         thr = self.P.get("shield", 0.0)
@@ -98,6 +132,7 @@ class Navigator:
             j = st.pos + offs[act]
             free = not self.know.blocked_cells(st)[j]
             self.last = (st.pos, act, st.masks[j], self.last_dir == act, dict(st.res), free)
+            self._entered = st.masks[j]
             self.last_dir = act
         else:
             self.last = None
