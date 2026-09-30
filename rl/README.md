@@ -348,3 +348,46 @@ Sin peligro, las muertes eran 36 % (Boulder Dash), 38 % (Zelda) y 95 % (Frogs).
 - **El predictor pesa donde el peligro lo provoca el avatar** (Boulder Dash: α = 1). En Frogs pesa poco (α = 0,3), porque su pregunta, "¿muero si entro y me quedo 3 ticks?", castiga cruzar un carril en el momento justo.
 - **En Frogs la grilla eligió α = 0,3**, pero en los niveles oficiales α = 0 anduvo mejor. Con solo 3 niveles de entrenamiento, el ajuste es ruidoso.
 - **Todo cabe en el presupuesto de 40 ms** de GVGAI.
+
+### Menos prudencia, río de Frogs y ajuste en niveles generados
+
+**Por qué se agotaba el tiempo en Boulder Dash.** Mirando órdenes una por una, el avatar casi nunca esperaba: intentaba moverse y no avanzaba. Había tres causas, y las tres se resolvieron aprendiéndolas, sin escribir nada del juego a mano:
+
+- **Giro.** El avatar gasta un tick en girar antes de moverse en otra dirección (aprendido: en 1268 de 1275 cambios de dirección solo giró; en Zelda pasa lo mismo). El A\* espacio-tiempo ahora cobra ese tick y mira el riesgo de quedarse girando.
+- **Órdenes invalidadas.** A veces una roca cae sobre la casilla destino después de dar la orden, y el navegador empujaba contra ella hasta agotar el tiempo. Ahora esas órdenes se cuentan aparte, como *invalidadas* (6–10 % en Boulder Dash).
+- **Espera sin fin.** A veces el riesgo nunca bajaba y el avatar esperaba para siempre. La **paciencia** (`patience`) responde a eso: si el avatar no se acerca en `patience` ticks, el peso del riesgo baja a la mitad (con piso de 0,1).
+
+Además, la transitabilidad ahora depende de cuántos recursos de ese mismo tipo lleva el avatar, y el A\* espacio-tiempo ya no declara inalcanzable un destino que solo está tapado por un rato.
+
+**Río de Frogs.**
+- **Datos.** `collect_nav.py` ahora manda órdenes también a la *orilla*: casillas pisables junto a tipos poco vistos. Al llegar, el agente se queda 10 ticks. Los ejemplos de agua pasaron de 23 a 4833. El riesgo por casilla aprendió solo que el agua sin tronco mata (97 %) y con tronco no (3 %).
+- **Arrastre.** Si el avatar espera y su posición exacta cambia, se aprende que el tipo de objeto que tiene debajo lo arrastra: el tronco, 68 de 68 veces. El estado genérico ahora incluye la posición exacta del avatar. En el A\*, esperar sobre un objeto que arrastra lleva a la casilla donde ese objeto estará en el tick siguiente.
+
+**Niveles generados** para Zelda y Frogs (`gvgai_levels.py`, 200 de cada juego), con la estructura de los oficiales. Todos los ajustes usan ahora niveles generados, y los oficiales quedan solo para evaluar. Antes, Zelda y Frogs se ajustaban en los niveles oficiales 0–2, que también estaban entre los de prueba: los números anteriores de esos juegos eran optimistas.
+
+**Ajuste** en niveles generados (`--tune-objects`): grilla de `w_risk` ∈ {12, 20, 30} × `alpha` ∈ {0, 1} × paciencia ∈ {0, 10}. El criterio es llegar − 3·morir.
+
+| Juego | Elegido |
+|---|---|
+| Boulder Dash | `w_risk` = 20, `alpha` = 1, paciencia 0 |
+| Zelda | `w_risk` = 30, `alpha` = 1, paciencia 0 |
+| Frogs | `w_risk` = 12, `alpha` = 1, paciencia 0 |
+
+**Evaluación en los niveles oficiales**, 3 semillas × unas 240 órdenes, media ± IC 95 % (`--no-model --only-tuned --seeds 3`):
+
+| Juego | Llega | Muere | Tiempo agotado | Invalidada |
+|---|---|---|---|---|
+| Boulder Dash | 52,6 ± 6,7 % | **6,5 ± 1,0 %** | 29,6 ± 5,9 % | 7,1 ± 2,2 % |
+| Zelda | 64,3 ± 3,4 % | **5,9 ± 2,7 %** | 29,8 ± 6,0 % | 0 % |
+| Frogs | 57,4 ± 4,4 % | **11,2 ± 5,6 %** | 31,4 ± 3,6 % | 0 % |
+
+**Lo que muestran**
+- **Las muertes son bajas en los tres juegos,** y ahora sin sobreajuste: Zelda pasó de 38 % sin peligro a 6 %, y Frogs de 96 % a 11 %.
+- **Los tiempos agotados no bajaron con la configuración elegida.** El criterio (llegar − 3·morir) cobra 4 por una muerte y 1 por un tiempo agotado, así que prefiere esperar. En los niveles generados, la paciencia subía las muertes, y el ajuste la dejó en 0.
+- **La paciencia sí ayuda en Boulder Dash en los oficiales.** Con paciencia 10 (w_risk = 12, α = 1, una semilla, 344 órdenes), el resultado fue 80 % llega / 5,8 % muere / 5,8 % tiempo agotado. No lo usamos como resultado porque se miró en los niveles de prueba. Indica que los niveles generados de Boulder Dash no representan bien a los oficiales en este aspecto, o que el criterio pesa demasiado la muerte.
+- **En Frogs la paciencia es mala** (muertes de 12,6 % a 30,8 %): el peligro pasa solo, y esperar es lo correcto.
+- **Pendiente:** decidir cuánto vale una muerte frente a un tiempo agotado. Es una decisión del problema, no del algoritmo.
+
+**Referencia con el mismo presupuesto (`MCTSNavigator`).** Es un UCT en Java con el modelo del juego y 35 ms por decisión. Recibe el mismo campo de distancias y va a la misma casilla. En Boulder Dash, con 129 órdenes: llega 7 %, muere 10 %, tiempo agotado 83 %. Además, el 18,5 % de sus decisiones pasa de 40 ms. Falta darle una versión más fuerte (macroacciones, valor mejor formado) antes de usarlo como comparación en un paper.
+
+**Tiempo medido desde Java** (`@M`, incluye el puente y Python). Con el navegador ajustado, entre 2 y 6 % de las decisiones pasan de 40 ms, con picos de 170–370 ms. Para cumplir el reglamento hace falta un tope duro por decisión del lado de Python, y probablemente evitar pausas de recolección de basura.

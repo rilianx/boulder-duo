@@ -113,7 +113,7 @@ class CubeNavigator(Navigator):
             if dist[c] is not None and dist[c] < best_partial[0] and first[(c, k)] != -1:
                 best_partial = (dist[c], first[(c, k)])
             if n_pop % 64 == 0 and time.perf_counter() - t_start > budget:
-                return (best_partial[0], best_partial[1]) if best_partial[1] is not None else None
+                return (best_partial[0], best_partial[1]) if best_partial[1] is not None else (math.inf, -1)
             if k == H or not inwin(c):                       # fuera del horizonte o de la ventana: completar
                 if dist[c] is not None:
                     node = (goal, -1)
@@ -141,7 +141,9 @@ class CubeNavigator(Navigator):
                 if turn and blocked[kk][j] and j != goal:
                     continue
                 p = float(R[kk][j])
-                if d < 4 and pred:
+                if d < 4 and pred and k < self.P.get("pred_k", 99):
+                    # pred_k: hasta qué tick se usa el predictor; mira la grilla de ahora, así que para
+                    # peligros que se mueven solo vale cerca del presente (el resto lo cubre el cubo)
                     # alpha: cuánto pesa el predictor ("¿muero si entro y me quedo?") frente al cubo;
                     # alto donde el peligro lo provoca el avatar (Boulder Dash), bajo con peligro que pasa (Frogs)
                     p = max(p, self.P.get("alpha", 1.0) * pred.get((j, d), 0.0))
@@ -154,7 +156,9 @@ class CubeNavigator(Navigator):
                     first[node] = d if k == 0 else first[(c, k)]
                     facing[node] = d if d < 4 else facing.get((c, k))
                     heapq.heappush(pq, (ng + dist[j], ng, j, kk + 1))
-        return None
+        # sin salida dentro del horizonte (p. ej. objetos extrapolados tapan todo): el destino sigue siendo
+        # alcanzable en el mapa actual, así que se acerca lo mejor posible o espera; no es "inalcanzable"
+        return (math.inf, best_partial[1] if best_partial[1] is not None else -1)
 
     def _carried_to(self, k, c):
         """Dónde queda el avatar si espera en c durante el tick k (lo mueve un objeto que arrastra)."""

@@ -181,6 +181,25 @@ def learn_knowledge(game, procs, orders=200):
         print(f"   tipo {t}: " + ", ".join(f"{n}:{v}" for n, v in sorted(d.items())), flush=True)
 
 
+def seeds_report(game, variants, orders, procs, lv, n):
+    """Cada variante con n semillas distintas: media e IC 95 % (t de Student) de llegar / morir / tiempo agotado."""
+    T975 = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 8: 2.365, 10: 2.262}   # t_{0,975} con n − 1 g.l.
+    out = {}
+    for label, P, kind in variants:
+        rows = []
+        for k in range(n):
+            s = bench(game, P, orders, procs, kind, lv, seed0=500 + 100 * k)
+            m = max(s["orders"], 1)
+            rows.append([(s["reached"] + s["reached_win"]) / m, s["died"] / m, s["timeout"] / m, s.get("invalid", 0) / m])
+            report(f"{game} {label} semilla {k}", s)
+        r = np.array(rows) * 100
+        h = T975.get(n, 2.0) * r.std(0, ddof=1) / np.sqrt(n) if n > 1 else np.zeros(4)
+        out[label] = {"media": r.mean(0).round(1).tolist(), "ic95": h.round(1).tolist(), "n": n}
+        print(f"{game} {label}: llega {r[:, 0].mean():.1f} ± {h[0]:.1f} | muere {r[:, 1].mean():.1f} ± {h[1]:.1f} | "
+              f"tiempo {r[:, 2].mean():.1f} ± {h[2]:.1f} | invalidada {r[:, 3].mean():.1f} ± {h[3]:.1f}  (n = {n})", flush=True)
+    (RUNS / game / "nav_seeds.json").write_text(json.dumps(out, indent=1))
+
+
 def report(label, s):
     n = max(s["orders"], 1)
     reached = s["reached"] + s["reached_win"]
@@ -225,13 +244,14 @@ def tune_objects(game, procs, orders=160):
     rng = np.random.default_rng(0)
     levels = [x.item() if hasattr(x, "item") else x for x in rng.choice(lv, min(len(lv), 12), replace=False)]
     best = (-1e9, None)
-    for w in (6.0, 12.0, 20.0):
-        for alpha in (0.0, 0.3, 1.0):
-            P = {**NAV_DEFAULT, "w_risk": w, "alpha": alpha, "patience": 10}
-            s = bench(game, P, orders, procs, "objects+pred", levels, seed0=700)
-            report(f"w_risk={w:g} alpha={alpha:g} (entren.)", s)
-            if nav_score(s) > best[0]:
-                best = (nav_score(s), P)
+    for w in (12.0, 20.0, 30.0):
+        for alpha in (0.0, 1.0):
+            for pat in (0, 10):
+                P = {**NAV_DEFAULT, "w_risk": w, "alpha": alpha, "patience": pat}
+                s = bench(game, P, orders, procs, "objects+pred", levels, seed0=700)
+                report(f"w_risk={w:g} alpha={alpha:g} paciencia={pat} (entren.)", s)
+                if nav_score(s) > best[0]:
+                    best = (nav_score(s), P)
     (RUNS / game / "nav_objects.json").write_text(json.dumps(best[1], indent=1))
     print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 3·morir = {best[0]:.3f})", flush=True)
 
@@ -267,6 +287,7 @@ def main():
     p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk y alpha para objetos + predictor")
     p.add_argument("--only-tuned", action="store_true", help="con --no-model: solo la variante ajustada")
     p.add_argument("--learn-know", action="store_true", help="actualizar knowledge.json (recursos, giros)")
+    p.add_argument("--seeds", type=int, default=0, help="con --no-model --only-tuned: repetir con N semillas y dar IC 95 %")
     a = p.parse_args()
     if a.learn_know:
         return learn_knowledge(a.game, a.procs)
@@ -281,6 +302,8 @@ def main():
             variants.append(("objetos + predictor ajust.", json.loads(f.read_text()), "objects+pred"))
         if a.only_tuned:
             variants = variants[-1:]
+        if a.seeds:
+            return seeds_report(a.game, variants, a.orders, a.procs, lv, a.seeds)
         for label, P, kind in variants:
             s = bench(a.game, P, a.orders, a.procs, kind, lv)
             report(f"{a.game} {label}", s)
