@@ -579,3 +579,13 @@ Dos reglas nuevas, aprendidas de la observación y guardadas en `knowledge.json`
 | Boulder Dash | 68 % | **60 %** | 48 % |
 | Zelda | 49 % | **83 %** | 88 % |
 | Frogs | 0 % | **93 %** | 96 % |
+
+**Reevaluar el destino solo en órdenes largas** (`replan: 5, replan_min_t: 15`): cada 5 ticks, y solo si la orden actual se estimó en 15 pasos o más. Mismas 30 partidas por juego:
+
+| Juego | Sin reevaluar | Reevaluando órdenes largas |
+|---|---|---|
+| Boulder Dash | 60 % | **70 %** |
+| Zelda | 83 % | 83 % |
+| Frogs | 93 % | 83 % |
+
+Ayuda donde las rutas son largas (Boulder Dash) y en Frogs baja 10 puntos, 3 partidas de 30, dentro del margen de ±15. Por defecto sigue apagado. Lo razonable es que **la práctica en niveles generados elija por juego** si se reevalúa, igual que se ajustan `w_risk` y `alpha`.

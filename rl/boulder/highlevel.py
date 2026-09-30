@@ -257,7 +257,8 @@ class Commander:
                 self.stats["timeout"] += 1; self.tabu[j] = st.tick + self.P["tabu"]; self.goal = None
             elif self.P["replan"] and self._goal_valuable and not self._valuable(st, j):
                 self.stats["vanished"] += 1; self.goal = None      # el objeto de la meta ya no está
-            elif self.P["replan"] and (st.tick - t0) % self.P["replan"] == 0 and st.tick > t0:
+            elif self.P["replan"] and (st.tick - t0) % self.P["replan"] == 0 and st.tick > t0 \
+                    and self._goal_t >= self.P.get("replan_min_t", 0):   # solo órdenes largas
                 old = self.goal
                 c = self.choose(st)
                 cur = self._scores.get(j)
@@ -294,6 +295,7 @@ class Commander:
         limit = 3 * t + 20
         self.goal = (j, st.tick, limit)
         self._goal_valuable = self._valuable(st, j)
+        self._goal_t = t
         self._goal_blocked0 = self.know.blocked_cells(st)[j]      # ya bloqueada al elegirla (p. ej. una puerta)
         self.nav.deadline = st.tick + limit
         self.stats["orders"] += 1
