@@ -235,7 +235,8 @@ def bench(game, P, orders, procs, use_danger, levels, seed0=500):
 
 def nav_score(s):
     n = max(s["orders"], 1)
-    return (s["reached"] + s["reached_win"]) / n - 3 * s["died"] / n
+    # una muerte cuesta 2 órdenes cumplidas y un tiempo agotado media
+    return (s["reached"] + s["reached_win"]) / n - 2 * s["died"] / n - 0.5 * s["timeout"] / n
 
 
 def tune_objects(game, procs, orders=160):
@@ -253,7 +254,7 @@ def tune_objects(game, procs, orders=160):
                 if nav_score(s) > best[0]:
                     best = (nav_score(s), P)
     (RUNS / game / "nav_objects.json").write_text(json.dumps(best[1], indent=1))
-    print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 3·morir = {best[0]:.3f})", flush=True)
+    print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 2·morir − 0,5·tiempo = {best[0]:.3f})", flush=True)
 
 
 def tune(game, procs, orders=100):
@@ -271,7 +272,7 @@ def tune(game, procs, orders=100):
             if sc > best[0]:
                 best = (sc, P)
     (RUNS / game / "nav.json").write_text(json.dumps(best[1], indent=1))
-    print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 3·morir = {best[0]:.3f})", flush=True)
+    print(f"{game}: mejor en entrenamiento {best[1]} (llegar − 2·morir − 0,5·tiempo = {best[0]:.3f})", flush=True)
 
 
 def main():

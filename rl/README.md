@@ -391,3 +391,17 @@ Además, la transitabilidad ahora depende de cuántos recursos de ese mismo tipo
 **Referencia con el mismo presupuesto (`MCTSNavigator`).** Es un UCT en Java con el modelo del juego y 35 ms por decisión. Recibe el mismo campo de distancias y va a la misma casilla. En Boulder Dash, con 129 órdenes: llega 7 %, muere 10 %, tiempo agotado 83 %. Además, el 18,5 % de sus decisiones pasa de 40 ms. Falta darle una versión más fuerte (macroacciones, valor mejor formado) antes de usarlo como comparación en un paper.
 
 **Tiempo medido desde Java** (`@M`, incluye el puente y Python). Con el navegador ajustado, entre 2 y 6 % de las decisiones pasan de 40 ms, con picos de 170–370 ms. Para cumplir el reglamento hace falta un tope duro por decisión del lado de Python, y probablemente evitar pausas de recolección de basura.
+
+**Criterio llegar − 2·morir − 0,5·tiempo agotado.** Una muerte ahora vale 2 órdenes cumplidas y un tiempo agotado vale media. Recalculado sobre la misma grilla de entrenamiento:
+
+- Boulder Dash y Frogs eligen lo mismo que antes, así que su tabla no cambia.
+- Zelda cambia a `w_risk` = 12, `alpha` = 1, paciencia 10.
+
+Zelda en los niveles oficiales, 3 semillas:
+
+| Zelda | Llega | Muere | Tiempo agotado | Puntaje (nuevo criterio) |
+|---|---|---|---|---|
+| antes (w = 30, paciencia 0) | 64,3 ± 3,4 % | 5,9 ± 2,7 % | 29,8 ± 6,0 % | 0,38 |
+| ahora (w = 12, paciencia 10) | **75,6 ± 5,3 %** | 15,9 ± 5,8 % | **8,6 ± 5,9 %** | 0,40 |
+
+Con el criterio nuevo, las dos configuraciones de Zelda quedan casi empatadas: la nueva cambia tiempos agotados por muertes. En Boulder Dash, la configuración elegida tiene 9,7 % de tiempos agotados en los niveles generados, pero 29,6 % en los oficiales. El problema ahí no es el criterio: los niveles generados de Boulder Dash no se parecen lo suficiente a los oficiales.
