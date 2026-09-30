@@ -80,6 +80,16 @@ def practice(a):
                     o = K0.fall.get(t, {}).get(mk, [0, 0])
                     m = base.fall.setdefault(t, {}).setdefault(mk, [0, 0])
                     m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
+            for name in ("use_kill", "use_base"):
+                for t, dd in getattr(k, name).items():
+                    for key, v in dd.items():
+                        o = getattr(K0, name).get(t, {}).get(key, [0, 0])
+                        m = getattr(base, name).setdefault(t, {}).setdefault(key, [0, 0])
+                        m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
+            for t, v in k.use_score.items():
+                o = K0.use_score.get(t, [0.0, 0])
+                m = base.use_score.setdefault(t, [0.0, 0])
+                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
             for t, v in k.consumed.items():
                 o = K0.consumed.get(t, [0, 0])
                 m = base.consumed.setdefault(t, [0, 0])

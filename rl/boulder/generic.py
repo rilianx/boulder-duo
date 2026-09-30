@@ -180,6 +180,11 @@ class Knowledge:
         # queda vacío); y qué desaparece al pisarlo: tipo → [desapareció, quedó] (la tierra, los diamantes)
         self.fall = {}
         self.consumed = {}
+        # efecto de USAR: tipo → {"a|dx|dy" (absoluto) o "f|dx|dy" (según hacia dónde mira): [desapareció, visto]}
+        # con y sin usar (use_kill / use_base), y cuánto puntaje sube por cada uno que desaparece al usar
+        self.use_kill = {}
+        self.use_base = {}
+        self.use_score = {}
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -294,6 +299,20 @@ class Knowledge:
         c = self.consumed.get(t)
         return bool(c) and c[0] + c[1] >= 3 and c[0] > 0.5 * (c[0] + c[1])
 
+    def use_lift(self, t, key):
+        """Cuánto más probable es que un objeto de tipo t en esa posición relativa desaparezca si se usa (vs. no)."""
+        u = self.use_kill.get(t, {}).get(key); b = self.use_base.get(t, {}).get(key)
+        if not u or u[1] < 3:
+            return 0.0
+        pu = u[0] / u[1]
+        pb = b[0] / b[1] if b and b[1] >= 3 else 0.0
+        return max(0.0, pu - pb)
+
+    def use_value(self, t):
+        """Puntaje medio que da cada objeto de tipo t eliminado al usar (0,5 de curiosidad si hay pocos datos)."""
+        v = self.use_score.get(t)
+        return v[0] / v[1] if v and v[1] >= 3 else 0.5
+
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
         return {t for t, (a, b) in self.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
@@ -310,7 +329,8 @@ class Knowledge:
                 "by_res": self.by_res, "turns": self.turns, "carry": self.carry,
                 "move_dirs": {t: {f"{d[0]},{d[1]}": n for d, n in dd.items()} for t, dd in self.move_dirs.items()},
                 "fall": {t: {str(m): v for m, v in dd.items()} for t, dd in self.fall.items()},
-                "consumed": self.consumed}
+                "consumed": self.consumed, "use_kill": self.use_kill, "use_base": self.use_base,
+                "use_score": self.use_score}
 
     @classmethod
     def from_json(cls, d):
@@ -327,6 +347,9 @@ class Knowledge:
                        for a, b in d.get("move_dirs", {}).items()}
         k.fall = {int(a): {int(m): list(v) for m, v in b.items()} for a, b in d.get("fall", {}).items()}
         k.consumed = {int(a): list(b) for a, b in d.get("consumed", {}).items()}
+        for name in ("use_kill", "use_base"):
+            setattr(k, name, {int(a): {kk: list(v) for kk, v in b.items()} for a, b in d.get(name, {}).items()})
+        k.use_score = {int(a): list(b) for a, b in d.get("use_score", {}).items()}
         return k
 
     def merge(self, o):

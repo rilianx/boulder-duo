@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import heapq
 import math
+import random
 
 from .generic import GenericAgent, value_params
 
@@ -27,6 +28,10 @@ class Commander:
         self.visits, self.tabu = {}, {}
         self.touch = None            # (tipos, puntaje, recursos, tipo de avatar, casilla) del último intento
         self.learn = self.P.get("learn", True)
+        # usar (disparar, espada...): se aprende qué hace comparando qué desaparece al usar y al no usar
+        self.P = {"use": True, "use_eps": 0.05, "use_R": 6, "use_lag": 10, "use_thr": 0.3, **self.P}
+        self._probes = []
+        self.rng = random.Random(self.P.get("seed", 0))
         self.stats = {"orders": 0, "reached": 0, "timeout": 0, "unreachable": 0, "explore": 0, "switch": 0,
                       "vanished": 0, "invalid": 0}
 
@@ -161,6 +166,20 @@ class Commander:
                 best, (j) = ranked[0][0], ranked[0][1]
                 choice = (j, info[j][0])
         self._best_score = best if choice is not None else None
+        if choice is None and self.P["use"]:
+            # sin nada que tocar: ponerse donde usar rinde más (p. ej. debajo de los aliens)
+            bestu, cu = self.P["use_thr"], None
+            blocked = K.blocked_cells(st)
+            near = sorted((t, j) for j, (t, H) in info.items() if j != st.pos and not blocked[j])[:60]
+            for t, j in near:
+                H = info[j][1]
+                x, y = j % st.W, j // st.W
+                ev = max(self._use_ev(st, x, y, f, dt=t) for f in (None, 0, 1, 2, 3)) * math.exp(-H) - self.P["lam"] * t
+                if ev > bestu:
+                    bestu, cu = ev, (j, t)
+            if cu is not None:
+                self.stats["aim"] = self.stats.get("aim", 0) + 1
+                choice = cu
         if choice is None and self.P.get("unlock", True):
             choice = self.unlock(st, info, vals, targets)
         if choice is None:                         # explorar
@@ -246,9 +265,72 @@ class Commander:
             K.record_nonterminal(types, at0, res0)          # chocó: tocarlo tampoco terminó nada
         self.touch = None
 
+    # ------------------------------------------------------------------ usar
+    FWD = {0: ((0, -1), (1, 0)), 1: ((1, 0), (0, 1)), 2: ((0, 1), (-1, 0)), 3: ((-1, 0), (0, -1))}
+
+    def _keys(self, dx, dy, facing):
+        ks = [f"a|{dx}|{dy}"]
+        if facing is not None:
+            (fx, fy), (rx, ry) = self.FWD[facing]
+            ks.append(f"f|{dx * rx + dy * ry}|{dx * fx + dy * fy}")
+        return ks
+
+    def _probe(self, st, used):
+        snap = {oid: (t, x, y) for oid, (t, x, y) in st.objects.items() if t not in self.know.avatar_types
+                and abs(x - st.fx) <= self.P["use_R"] and abs(y - st.fy) <= self.P["use_R"]}
+        if snap:
+            self._probes.append((st.tick, used, st.fx, st.fy, self.nav.last_dir, snap, st.score))
+
+    def _resolve_probes(self, st):
+        K, keep = self.know, []
+        for pr in self._probes:
+            tick, used, ax, ay, facing, snap, sc0 = pr
+            if st.tick - tick < self.P["use_lag"]:
+                keep.append(pr); continue
+            table = K.use_kill if used else K.use_base
+            killed = []
+            for oid, (t, x, y) in snap.items():
+                gone = oid not in st.objects
+                for key in self._keys(int(round(x - ax)), int(round(y - ay)), facing):
+                    r = table.setdefault(t, {}).setdefault(key, [0, 0])
+                    r[0] += gone; r[1] += 1
+                if gone:
+                    killed.append(t)
+            if used and killed:
+                ds = (st.score - sc0) / len(killed)
+                for t in killed:
+                    v = K.use_score.setdefault(t, [0.0, 0]); v[0] += ds; v[1] += 1
+        self._probes = keep
+
+    def _use_ev(self, st, ax, ay, facing, dt=0):
+        """Valor esperado de usar desde (ax, ay) mirando hacia `facing`, dentro de dt ticks (los objetos se
+        extrapolan con la velocidad que estima el rastreador: se apunta adonde estarán, no adonde están)."""
+        K, ev = self.know, 0.0
+        for oid, (t, x, y) in st.objects.items():
+            if t in K.avatar_types:
+                continue
+            if dt:
+                vx, vy = self.nav.track.velocity(oid)
+                x, y = x + vx * dt, y + vy * dt
+            lift = max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))
+            if lift > 0:
+                ev += lift * K.use_value(t)
+        return ev
+
     def __call__(self, st, br):
         self.know.observe_types(st)
         self._learn_touch(st)
+        if self.P["use"]:
+            self._resolve_probes(st)
+            if self.learn and self.rng.random() < self.P["use_eps"]:       # explorar: usar al azar...
+                self._probe(st, True)
+                return "use"
+            if self.learn and self.rng.random() < self.P["use_eps"]:       # ...y la comparación sin usar
+                self._probe(st, False)
+            if self._use_ev(st, st.fx, st.fy, self.nav.last_dir) > self.P["use_thr"]:
+                self.stats["use"] = self.stats.get("use", 0) + 1
+                self._probe(st, True)
+                return "use"
         self.visits[st.pos] = self.visits.get(st.pos, 0) + 1
         if self.goal is not None:
             j, t0, limit = self.goal
