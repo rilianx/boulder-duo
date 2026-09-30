@@ -425,3 +425,44 @@ En vez de elegir un solo punto con un criterio arbitrario, se barre `w_risk` (0 
 **Otros cambios:**
 - Si un avatar queda encerrado y 10 órdenes seguidas son inalcanzables, la partida se marca como *atrapado* y no se le dan más órdenes. Antes una sola partida así inflaba el conteo.
 - El presupuesto por decisión ahora cuenta desde que llega el estado (incluye seguimiento y cubo), y durante la partida no corre la recolección de basura de Python.
+
+### Registro de sorpresas (`nav_bench.py <juego> --surprises [--know-file ...]`)
+
+Con el conocimiento congelado, se anota cada contradicción entre lo esperado y lo ocurrido, agrupada por tipos de objeto:
+- **mover:** creí que entraba y no pude, o al revés;
+- **deriva:** estaba quieto y me moví, o creí que me arrastraban y no;
+- **muerte:** morí en una casilla con riesgo aprendido bajo.
+
+La métrica es la fracción de transiciones que el conocimiento explica.
+
+| Juego | Conocimiento viejo | Actual |
+|---|---|---|
+| Boulder Dash | 49,7 % (tierra 702, vacío 358, diamante 823 sorpresas) | 77,7 % |
+| Frogs | 97,9 % (tronco: 29 de 29 derivas sin explicar) | 99,3 % |
+| Zelda | — | 99,4 % |
+
+- **Reproduce el diagnóstico hecho a mano.** Con el conocimiento viejo señala el giro (choques contra tierra y vacío) y el arrastre del tronco.
+- **Encontró una regla que se había interpretado mal.** Con el tope de 10 diamantes, el avatar **no puede** entrar a otro diamante: empuja contra él tick tras tick. El conocimiento guardado decía lo contrario por conteos contaminados. Al vuelo se corrige solo, y ahora está en `knowledge.json`: con 10 diamantes, 458 veces no pudo entrar y 99 sí.
+- **Las "muertes sorpresa" de Boulder Dash están sobrestimadas.** Se miden solo con el riesgo por casilla, que no ve rocas que caen; ese peligro lo cubre el predictor.
+
+### Ablación sin simulador (`collect_exp.py`)
+
+El predictor y el riesgo por casilla se aprenden **solo de lo vivido**. Cada paso real se etiqueta 1 si el avatar muere en los 3 ticks siguientes y 0 si no. No se hacen consultas contrafactuales al simulador. Son 3 rondas de 20 000 pasos (jugar, reentrenar, repetir), en niveles generados. La evaluación es en los oficiales, con unas 150 órdenes por punto y *T* = 3·d + 20.
+
+| Juego | w_risk | Con simulador (llega / muere / tiempo) | Solo experiencia (llega / muere / tiempo) |
+|---|---|---|---|
+| Zelda | 6 | 69,0 / 15,8 / 15,2 | **72,1 / 5,6 / 22,3** |
+| Zelda | 20 | 68,6 / 10,3 / 21,1 | 64,4 / 2,5 / 33,1 |
+| Zelda | 50 | 56,0 / 4,1 / 39,9 | 47,8 / 5,1 / 47,1 |
+| Boulder Dash | 6 | 69,0 / 14,6 / 0,0 | 69,4 / 13,9 / 0,0 |
+| Boulder Dash | 20 | 87,8 / 3,6 / 0,3 | 71,1 / 10,4 / 1,7 |
+| Boulder Dash | 50 | 67,1 / 13,9 / 6,3 | 66,9 / 8,9 / 5,7 |
+| Frogs | 6 | 49,7 / 21,8 / 28,5 | 31,6 / 24,5 / 43,9 |
+| Frogs | 20 | 47,9 / 5,7 / 46,4 | 25,6 / 5,5 / 68,8 |
+| Frogs | 50 | 47,8 / 5,6 / 46,6 | 17,7 / 5,1 / 77,2 |
+
+**Lo que muestran:**
+- **En Zelda, la experiencia basta.** Incluso muere menos a igual llegada.
+- **En Boulder Dash queda parecido.** Con una sola corrida por punto, el ruido es grande (el 87,8 / 3,6 con simulador en w = 20 es un valor alto aislado).
+- **En Frogs se pierde mucho,** pero no en muertes, sino en prudencia: agota el tiempo el doble de veces. La etiqueta "muero en los 3 ticks siguientes" culpa a pasos seguros de muertes que vinieron después (un camión que llega, un tronco que se acaba), así que el riesgo aprendido queda pesimista.
+- **Respuesta a "usan información privilegiada":** las consultas al simulador solo hacen falta donde la muerte llega con retraso respecto del paso que la causa (Frogs). Pendiente: atribuir la muerte al paso correcto, por ejemplo con diferencias temporales o solo el último paso.
