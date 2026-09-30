@@ -589,3 +589,15 @@ Dos reglas nuevas, aprendidas de la observación y guardadas en `knowledge.json`
 | Frogs | 93 % | 83 % |
 
 Ayuda donde las rutas son largas (Boulder Dash) y en Frogs baja 10 puntos, 3 partidas de 30, dentro del margen de ±15. Por defecto sigue apagado. Lo razonable es que **la práctica en niveles generados elija por juego** si se reevalúa, igual que se ajustan `w_risk` y `alpha`.
+
+### Comparación con YOLOBOT (ganador de GVGAI 2015–2018) y OLETS
+
+Las partidas de las referencias se corrieron **de a una**. Con 3 en paralelo, la CPU saturada hacía que YOLOBOT quedara descalificado en 16–17 de 30 partidas por pasarse de 50 ms. Son 6 semillas × 5 niveles = 30 partidas por celda (IC 95 % ≈ ±15 puntos):
+
+| Juego | **Nosotros** (sin simulador al jugar) | YOLOBOT (simulador cada tick) | OLETS (simulador cada tick) |
+|---|---|---|---|
+| Boulder Dash | 60 % (70 % reevaluando órdenes largas) | 63 % | 30 % (10 descalificadas) |
+| Zelda | 83 % | 80 % | 83 % |
+| Frogs | **93 %** | 83 % | 80 % |
+
+En estos tres juegos estamos **a la par del estado del arte de la competencia**, sin consultar el simulador al jugar. Faltan los otros 7 juegos del conjunto CIG 2014.
