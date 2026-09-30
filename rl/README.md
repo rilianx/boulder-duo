@@ -517,3 +517,31 @@ Con el mismo w = 20, el modelo llega 17 puntos más y muere menos que la zona. L
 | solo experiencia, k = 3 | 31,6 / 24,5 | 25,6 / 5,5 |
 | **solo experiencia, k = 1** | **49,4 / 13,5** | 29,6 / 4,2 |
 | solo experiencia, k = 2 | 32,0 / 22,0 | 25,4 / 10,5 |
+
+### Juego completo: alto nivel + navegador (`boulder/highlevel.py`, `play_hl.py`)
+
+**Commander** es el agente de alto nivel:
+- **Oráculo:** un solo Dijkstra desde el avatar sobre el riesgo actual (riesgo por casilla y predictor) da, para cada casilla, el tiempo estimado y el riesgo acumulado H.
+- **Elección de destino:** puntaje = valor del tipo · e^(−H) − λ · tiempo. Los valores por tipo salen del agente genérico, que aprende efectos al tocar y tiene pesos de CEM.
+- **Qué no se elige:** tipos que se mueven (NPC y móviles en VGDL). Si nada vale, explora la casilla alcanzable menos visitada.
+- **Órdenes:** el navegador las cumple con plazo 3·t + 20. Una meta que el mundo tapa se cancela, y los destinos fallidos se vetan 60 ticks.
+
+**Error encontrado al hacerlo:** en ningún juego había quedado registrada una victoria. La recolección original no avisaba el fin de la partida, así que "tocar X gana" nunca se aprendió. El agente genérico ganaba por curiosidad. Ahora el alto nivel aprende los efectos al jugar, incluidos la victoria y los choques (la curiosidad por los muros se agota), y **practica 40 partidas en niveles generados** antes de evaluar (`--practice 40` → `knowledge_hl.json`). Aprende solo:
+- Boulder Dash: la salida gana con 9 o 10 diamantes.
+- Zelda: la puerta gana con el avatar "con llave".
+- Frogs: la meta gana siempre.
+
+**Victorias en los niveles oficiales**, 6 semillas × 5 niveles = 30 partidas por celda (IC 95 % ≈ ±15 puntos):
+
+| Juego | Agente genérico (antes) | Alto nivel + navegador | + reevaluar destino cada 5 ticks | OLETS (nuestra calibración) |
+|---|---|---|---|---|
+| Boulder Dash | 68 % | 37 % | 50 % | 48 % |
+| Zelda | 49 % | 80 % | **83 %** | 88 % |
+| Frogs | 0 % | **80 %** | peor (y 1 descalificada) | 96 % |
+
+**Lo que muestran:**
+- **Zelda y Frogs** pasan a estar cerca de OLETS, sin usar el simulador al jugar. Frogs pasa de 0 % a 80 %.
+- **Boulder Dash** queda por debajo del agente genérico. Dos causas vistas partida a partida:
+  - las muertes por orden se componen: con unas 12 órdenes por partida, 0,9¹² ≈ 30 %;
+  - el avatar queda encerrado en bolsillos donde lo que falta está detrás de rocas. Para salir tendría que cavar para hacerlas caer, es decir, cambiar el mapa, algo que el alto nivel no sabe hacer.
+- **Reevaluar el destino** ayuda en Boulder Dash (37 → 50 %) y un poco en Zelda, pero empeora Frogs, donde cambiar de meta a mitad de un cruce es peligroso. Además, el oráculo extra cada 5 ticks causó una descalificación por tiempo en Frogs.
