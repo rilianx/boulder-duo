@@ -133,10 +133,12 @@ def main():
     p.add_argument("--seeds", type=int, default=15)
     p.add_argument("--procs", type=int, default=4, help="procesos para evaluar (entrenar es siempre 1)")
     p.add_argument("--hl", default="{}")
+    p.add_argument("--retrain", action="store_true", help="entrenar de nuevo aunque ya esté hecho")
     a = p.parse_args()
     out = ROOT / "runs" / "presupuesto" / f"b{int(a.budget)}"
     os.environ["GVGAI_RUNS"] = str(out)
-    run(a, out)
+    if a.retrain or not (out / a.game / "budget_log.json").exists():
+        run(a, out)
     if a.eval:
         subprocess.run([sys.executable, str(ROOT / "play_hl.py"), a.game, "--seeds", str(a.seeds),
                         "--procs", str(a.procs), "--hl", a.hl], check=True, env=os.environ.copy())
