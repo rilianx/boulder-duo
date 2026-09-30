@@ -76,7 +76,7 @@ class CubeNavigator(Navigator):
         bm = K.blocking_bits(getattr(st, "res", None))
         C = np.array(cube, dtype=np.int64) if H else np.zeros((0, N), np.int64)
         blocked = (C & bm) != 0                              # [H, N]
-        R = [self.risk.grid(c) for c in cube]
+        R = self._adjust_risk([self.risk.grid(c) for c in cube])
         now_blocked = (np.array(st.masks, dtype=np.int64) & bm) != 0
         dist = self._dist_to_goal(st, goal, now_blocked)
         if goal != getattr(self, "_ugoal", None):
@@ -197,6 +197,10 @@ class CubeNavigator(Navigator):
         # sin salida dentro del horizonte (p. ej. objetos extrapolados tapan todo): el destino sigue siendo
         # alcanzable en el mapa actual, así que se acerca lo mejor posible o espera; no es "inalcanzable"
         return (math.inf, best_partial[1] if best_partial[1] is not None else -1)
+
+    def _adjust_risk(self, R):
+        """Gancho: riesgo por casilla y tick ya calculado; las subclases pueden sumarle otros peligros."""
+        return R
 
     def _carried_to(self, k, c):
         """Dónde queda el avatar si espera en c durante el tick k (lo mueve un objeto que arrastra)."""

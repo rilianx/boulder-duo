@@ -34,7 +34,7 @@ K_DEATH = 3
 
 
 def _collect(job):
-    game, mdir, levels, n_target, seed, eps = job
+    game, mdir, levels, n_target, seed, eps, k_death = job
     torch.set_num_threads(1)
     d = RUNS / mdir
     K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
@@ -55,7 +55,7 @@ def _collect(job):
 
             def pol(st, br):
                 # los pasos con más de K_DEATH ticks sin morir: sobrevivió → 0 (ya está puesto)
-                pending[:] = [(t, i) for t, i in pending if st.tick - t <= K_DEATH]
+                pending[:] = [(t, i) for t, i in pending if st.tick - t <= k_death]
                 a = og(st, br)
                 if rng.random() < eps:
                     a = int(rng.integers(5))              # algo de azar: sin esto casi no se ven muertes
@@ -90,8 +90,10 @@ def main():
     p.add_argument("--rounds", type=int, default=3)
     p.add_argument("--samples", type=int, default=20_000, help="pasos etiquetados por ronda")
     p.add_argument("--procs", type=int, default=4)
+    p.add_argument("--k", type=int, default=K_DEATH,
+                   help="a cuántos pasos previos a la muerte se culpa (3 = todos los de los 3 ticks anteriores)")
     a = p.parse_args()
-    src, mdir = RUNS / a.game, f"{a.game}_exp"
+    src, mdir = RUNS / a.game, f"{a.game}_exp" + ("" if a.k == K_DEATH else f"_k{a.k}")
     d = RUNS / mdir
     d.mkdir(parents=True, exist_ok=True)
     shutil.copy(src / "knowledge.json", d / "knowledge.json")
@@ -105,7 +107,7 @@ def main():
     for r in range(a.rounds):
         eps = 0.15
         with ProcessPoolExecutor(a.procs) as ex:
-            parts = list(ex.map(_collect, [(a.game, mdir, lv[k::a.procs], a.samples // a.procs, 91 + 10 * r + k, eps)
+            parts = list(ex.map(_collect, [(a.game, mdir, lv[k::a.procs], a.samples // a.procs, 91 + 10 * r + k, eps, a.k)
                                            for k in range(a.procs)]))
         Xs += [q[0] for q in parts]; Ys += [q[1] for q in parts]
         X, Y = np.concatenate(Xs), np.concatenate(Ys)

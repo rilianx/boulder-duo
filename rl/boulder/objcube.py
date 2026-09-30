@@ -13,6 +13,8 @@ from __future__ import annotations
 import math
 import time
 
+import numpy as np
+
 from .cube import CubeNavigator
 
 HIST = 8
@@ -24,8 +26,11 @@ class ObjectTracker:
         self.moves = {}          # itype → [movimientos, cambios de dirección]
         self.wraps = set()       # itypes que reaparecen por el borde
         self.lastdir = {}
+        # modelo de movimiento por tipo (objetos al azar): [movimientos de casilla, oportunidades]; cada tick
+        # observado suma como oportunidad la fracción de vecinas libres (si hay muro, el intento no se ve)
+        self.moverate = {}
 
-    def update(self, st):
+    def update(self, st, free=None):
         for oid, (t, x, y) in st.objects.items():
             h = self.hist.setdefault(oid, [])
             if h:
@@ -41,6 +46,13 @@ class ObjectTracker:
                     if oid in self.lastdir and self.lastdir[oid] != d:
                         m[1] += 1
                     self.lastdir[oid] = d
+            if h and free is not None and st.tick - h[-1][0] == 1:
+                cx, cy = int(round(h[-1][1])), int(round(h[-1][2]))
+                nfree = sum(1 for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
+                            if 0 <= cx + dx < st.W and 0 <= cy + dy < st.H and free[(cy + dy) * st.W + cx + dx])
+                mv = int(round(x)) != cx or int(round(y)) != cy
+                m = self.moverate.setdefault(t, [0, 0.0])
+                m[0] += mv; m[1] += nfree / 4
             h.append((st.tick, x, y))
             del h[:-HIST]
         for oid in list(self.hist):
@@ -50,6 +62,11 @@ class ObjectTracker:
     def random_type(self, t):
         m = self.moves.get(t)
         return bool(m) and m[0] >= 5 and m[1] / m[0] > 0.25
+
+    def p_attempt(self, t):
+        """Probabilidad por tick de que un objeto de tipo t intente moverse (dirección al azar)."""
+        m = self.moverate.get(t)
+        return min(1.0, m[0] / m[1]) if m and m[1] >= 20 else 0.5
 
     def velocity(self, oid):
         h = self.hist.get(oid, [])
@@ -66,12 +83,59 @@ class ObjectCubeNavigator(CubeNavigator):
 
     def step(self, st, goal, br=None):
         self._t0 = time.perf_counter()               # el presupuesto por decisión cuenta desde aquí
-        self.track.update(st)
+        self.track.update(st, [not b for b in self.know.blocked_cells(st)])
         self._st = st
         return super().step(st, goal, None)      # sin puente: nada de consultar el modelo del juego
 
     def _carried_to(self, k, c):
         return self._carry[k].get(c, c) if k < len(self._carry) else c
+
+    def _adjust_risk(self, R):
+        """Modelo de objetos (P["objmodel"]): cada objeto que se mueve al azar es una distribución sobre
+        casillas que se propaga tick a tick (intenta moverse con p_attempt a una de 4 direcciones al azar; si
+        hay muro se queda). Riesgo = 1 − (1 − estático)·Π(1 − P_obj(c, k)·letalidad del tipo)."""
+        if not self.P.get("objmodel"):
+            return R
+        st = self._st
+        W, H, N = st.W, st.H, len(st.masks)
+        free = np.array([not b for b in self.know.blocked_cells(st)], dtype=bool).reshape(H, W)
+        floor = 0
+        for t in self.know.floor:
+            floor |= 1 << t
+        lethal = {}
+        surv = [np.ones((H, W)) for _ in R]
+        for oid, (t, x, y) in st.objects.items():
+            if not self.track.random_type(t):
+                continue
+            if t not in lethal:
+                base = float(self.risk.grid([floor])[0])
+                lethal[t] = max(float(self.P.get("obj_lethal", 0.0)), float(self.risk.grid([floor | 1 << t])[0]) - base)
+            p = self.track.p_attempt(t)
+            P = np.zeros((H, W))
+            cx, cy = int(round(x)), int(round(y))
+            if not (0 <= cx < W and 0 <= cy < H):
+                continue
+            P[cy, cx] = 1.0
+            for k in range(len(R)):
+                nxt = P * (1 - p)
+                for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    moved = np.zeros((H, W))
+                    ys, yd = (slice(1, H), slice(0, H - 1)) if dy == -1 else (slice(0, H - 1), slice(1, H)) if dy == 1 else (slice(0, H), slice(0, H))
+                    xs, xd = (slice(1, W), slice(0, W - 1)) if dx == -1 else (slice(0, W - 1), slice(1, W)) if dx == 1 else (slice(0, W), slice(0, W))
+                    moved[yd, xd] = P[ys, xs] * (p / 4)
+                    ok = moved * free                      # entra si la casilla destino está libre
+                    nxt += ok
+                    # lo que choca con muro o borde se queda donde estaba
+                    back = np.zeros((H, W)); back[ys, xs] = (moved - ok)[yd, xd]
+                    nxt += back
+                    edge = P * (p / 4)                     # intentos hacia fuera del mapa
+                    if dy == -1: nxt[0, :] += edge[0, :]
+                    if dy == 1: nxt[H - 1, :] += edge[H - 1, :]
+                    if dx == -1: nxt[:, 0] += edge[:, 0]
+                    if dx == 1: nxt[:, W - 1] += edge[:, W - 1]
+                P = nxt
+                surv[k] *= 1 - P * lethal[t]
+        return [1 - (1 - np.asarray(r)) * s.reshape(N) for r, s in zip(R, surv)]
 
     def _cube(self, st):
         W, H, N = st.W, st.H, len(st.masks)
@@ -97,6 +161,8 @@ class ObjectCubeNavigator(CubeNavigator):
             masks = list(static)
             for oid, (t, x, y) in st.objects.items():
                 bit = 1 << t
+                if self.track.random_type(t) and self.P.get("objmodel"):
+                    continue                              # va como distribución de probabilidad (_adjust_risk)
                 if self.track.random_type(t):
                     r = min(2, int(math.ceil(k * 0.5)))   # zona que crece con el tiempo
                     cx, cy = int(round(x)), int(round(y))

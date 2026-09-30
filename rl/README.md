@@ -488,3 +488,32 @@ Niveles oficiales, *T* = 3·d + 20, una corrida por fila (80–220 órdenes):
 - **Boulder Dash y Frogs:** a igual tasa de muerte, llegamos más que el MCTS, sin consultar el simulador. En Boulder Dash las metas están lejos y hay que planear rutas largas, donde el A\* es fuerte y un árbol de 4 pasos se queda corto.
 - **Zelda:** el MCTS nos gana claramente. El mapa es chico y el peligro, inmediato y aleatorio: simular el futuro real vale más que nuestro modelo aprendido de los monstruos.
 - **Pendiente:** confirmar con semillas, y entender la brecha en Zelda (rutas 2 veces más largas que la más corta y 20–30 % de tiempos agotados).
+
+### Objetos al azar como distribución (`objmodel`) y Frogs solo con experiencia
+
+**Modelo de objetos.** Antes, un monstruo aleatorio era una *zona* que crecía con certeza (radio ≤ 2) y se marcaba entera como peligrosa. Ahora:
+- Se aprende, por tipo, la probabilidad por tick de intentar moverse, corregida por los muros que tenía alrededor.
+- Cada objeto es una **distribución sobre casillas** que se propaga tick a tick: intenta moverse a una de 4 direcciones al azar, y si hay muro se queda.
+- Riesgo = 1 − (1 − estático) · Π(1 − P_obj(c, k) · letalidad del tipo).
+
+Zelda, niveles oficiales, *T* = 3·d + 20, una corrida por fila:
+
+| Zelda | Llega | Muere | Tiempo agotado | Ruta / más corta |
+|---|---|---|---|---|
+| zona, w = 6 | 70,6 | 12,7 | 16,7 | 1,60 |
+| modelo, w = 6 | 72,0 | 22,4 | 5,6 | 1,48 |
+| zona, w = 20 | 62,6 | 10,5 | 26,8 | 1,86 |
+| **modelo, w = 20** | **79,9** | **7,9** | 12,2 | 1,67 |
+| modelo, w = 50 | 67,7 | **4,2** | 28,0 | 2,07 |
+| MCTS con simulador (d = 4) | 89,9 | 5,5 | 4,6 | 1,60 |
+
+Con el mismo w = 20, el modelo llega 17 puntos más y muere menos que la zona. La brecha con el MCTS baja de ~18 a ~10 puntos de llegada a igual tasa de muerte, y el tiempo por decisión sigue en 16 ms de media.
+
+**Frogs solo con experiencia: a quién se culpa de la muerte.** Culpar solo al último paso (k = 1), en vez de a los de los 3 ticks previos, deja al riesgo aprendido mucho menos pesimista:
+
+| Frogs | w = 6 (llega / muere) | w = 20 (llega / muere) |
+|---|---|---|
+| con simulador | 49,7 / 21,8 | 47,9 / 5,7 |
+| solo experiencia, k = 3 | 31,6 / 24,5 | 25,6 / 5,5 |
+| **solo experiencia, k = 1** | **49,4 / 13,5** | 29,6 / 4,2 |
+| solo experiencia, k = 2 | 32,0 / 22,0 | 25,4 / 10,5 |
