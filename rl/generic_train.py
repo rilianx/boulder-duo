@@ -96,6 +96,37 @@ def collect(game, samples, procs):
     describe(game, K)
 
 
+def _moves(job):
+    game, levels, games, seed = job
+    rng = np.random.default_rng(seed)
+    b = GenericBridge(game)
+    K = Knowledge()
+    try:
+        for g in range(games):
+            b.play(levels[g % len(levels)], seed * 1000 + g, GenericAgent(random_weights(rng), know=K, rng=rng, eps=0.3))
+    finally:
+        b.close()
+    return K.to_json()
+
+
+def relearn_moves(game, games, procs):
+    """Rehace solo la transitabilidad (y los teletransportes) de knowledge.json jugando con el agente genérico,
+    sin etiquetas del simulador: para cuando cambia cómo se interpreta un movimiento (p. ej. saltos)."""
+    lv = train_levels(game)
+    with ProcessPoolExecutor(procs) as ex:
+        parts = list(ex.map(_moves, [(game, lv[k::procs] if len(lv) > procs else lv, games // procs, 11 + k)
+                                     for k in range(procs)]))
+    N = Knowledge()
+    for p in parts:
+        N.merge(Knowledge.from_json(p))
+    d = paths(game)
+    K = Knowledge.from_json(json.loads((d / "knowledge.json").read_text()))
+    K.passed, K.blocked, K.by_res, K.teleport = N.passed, N.blocked, N.by_res, N.teleport
+    (d / "knowledge.json").write_text(json.dumps(K.to_json()))
+    print(f"{game}: bloquean {sorted(t for t in set(K.passed) | set(K.blocked) if K.is_blocking(t))} | "
+          f"teletransportes {K.teleport}")
+
+
 def describe(game, K):
     b = GenericBridge(game); b.play(train_levels(game)[0], 0, lambda st, br: 4); types = b.types; b.close()
     for t in sorted(K.eff):
@@ -201,7 +232,8 @@ def evaluate(game, procs, n_seeds=20):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("game")
-    p.add_argument("cmd", choices=["collect", "train", "tune", "eval", "all"])
+    p.add_argument("cmd", choices=["collect", "train", "tune", "eval", "all", "moves"])
+    p.add_argument("--games", type=int, default=200)
     p.add_argument("--samples", type=int, default=60_000)
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--seeds", type=int, default=20)
@@ -215,7 +247,8 @@ def main():
             steps.remove("train")
     for s in steps:
         {"collect": lambda: collect(a.game, a.samples, a.procs), "train": lambda: train(a.game),
-         "tune": lambda: tune(a.game, a.procs), "eval": lambda: evaluate(a.game, a.procs, a.seeds)}[s]()
+         "tune": lambda: tune(a.game, a.procs), "eval": lambda: evaluate(a.game, a.procs, a.seeds),
+         "moves": lambda: relearn_moves(a.game, a.games, a.procs)}[s]()
 
 
 if __name__ == "__main__":

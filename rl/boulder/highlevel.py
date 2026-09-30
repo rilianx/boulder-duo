@@ -31,6 +31,10 @@ class Commander:
         # usar (disparar, espada...): se aprende qué hace comparando qué desaparece al usar y al no usar
         self.P = {"use": True, "use_eps": 0.05, "use_R": 6, "use_lag": 10, "use_thr": 0.3, **self.P}
         self._probes = []
+        # empujar (cajas de Sokoban): se aprende qué se corre al entrar y qué pasa al empujarlo contra cada cosa
+        self.P = {"push": True, "push_new": 0.5, "push_states": 4000, "push_lam": 0.01, **self.P}
+        know.avoid_push = self.P["push"]
+        self.plan, self._plan_expect, self._mv = None, None, None
         self.rng = random.Random(self.P.get("seed", 0))
         self.stats = {"orders": 0, "reached": 0, "timeout": 0, "unreachable": 0, "explore": 0, "switch": 0,
                       "vanished": 0, "invalid": 0}
@@ -180,6 +184,8 @@ class Commander:
             if cu is not None:
                 self.stats["aim"] = self.stats.get("aim", 0) + 1
                 choice = cu
+        if choice is None:
+            choice = self.portal_hop(st, info, vals, targets)
         if choice is None and self.P.get("unlock", True):
             choice = self.unlock(st, info, vals, targets)
         if choice is None:                         # explorar
@@ -190,6 +196,47 @@ class Commander:
                 _, j, t = min(cand)
                 choice = (j, t)
                 self.stats["explore"] += 1
+        return choice
+
+    # ------------------------------------------------------------------ teletransportes
+    def portal_hop(self, st, info, vals, targets):
+        """Lo valioso no se alcanza caminando, pero sí desde la salida de un teletransporte aprendido: la orden
+        es entrar al teletransporte (al aparecer del otro lado viene la orden siguiente)."""
+        K, W, N = self.know, st.W, len(st.masks)
+        blocked = K.blocked_cells(st)
+        want = {j for j in range(N) if j not in info and not blocked[j]
+                and any(st.masks[j] >> t & 1 and vals.get(t, 0) >= 1.0 for t in targets)}
+        if not want:
+            return None
+        best, choice = math.inf, None
+        for p, (t_p, H) in info.items():
+            for t in range(63):
+                if not st.masks[p] >> t & 1:
+                    continue
+                e = K.teleport_exit(t)
+                if e is None:
+                    continue
+                for q in range(N):                         # salidas de ese tipo: ¿desde ahí se llega a lo valioso?
+                    if not st.masks[q] >> e & 1:
+                        continue
+                    seen, fr, dq = {q}, [q], None
+                    steps = 0
+                    while fr and dq is None and steps < N:
+                        nx = []
+                        for i in fr:
+                            if i in want:
+                                dq = steps; break
+                            x, y = i % W, i // W
+                            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                                xx, yy = x + dx, y + dy
+                                k = yy * W + xx
+                                if 0 <= xx < W and 0 <= yy < st.H and k not in seen and (not blocked[k] or k in want):
+                                    seen.add(k); nx.append(k)
+                        fr = nx; steps += 1
+                    if dq is not None and t_p + dq < best and self.tabu.get(p, -1) <= st.tick:
+                        best, choice = t_p + dq, (p, t_p)
+        if choice is not None:
+            self.stats["portal"] = self.stats.get("portal", 0) + 1
         return choice
 
     # ------------------------------------------------------------------ abrir camino
@@ -245,6 +292,187 @@ class Commander:
         if choice is not None:
             self.stats["unlock"] = self.stats.get("unlock", 0) + 1
         return choice
+
+    # ------------------------------------------------------------------ empujar
+    def _learn_push(self, st):
+        """Tras un paso: ¿el objeto que había en la casilla a la que entró el avatar se corrió en esa dirección,
+        desapareció (p. ej. cayó en un hoyo) o se trabó? Se anota según qué había adelante."""
+        if self._mv is None or not self.learn:
+            return
+        pos0, act, objs, masks0, sc0, turned = self._mv
+        self._mv = None
+        W = st.W
+        off = (-W, 1, W, -1)[act]
+        c, dest = pos0 + off, pos0 + 2 * off
+        dx, dy = (0, 1, 0, -1)[act], (-1, 0, 1, 0)[act]
+        x2, y2 = pos0 % W + 2 * dx, pos0 // W + 2 * dy
+        if not (0 <= x2 < W and 0 <= y2 < st.H):
+            return
+        K = self.know
+        for oid, (t, cell) in objs.items():
+            if cell != c:
+                continue
+            p = K.push.setdefault(t, [0, 0])
+            r = K.push_into.setdefault(t, {}).setdefault(masks0[dest] & ~self._abits(), [0, 0, 0, 0.0])
+            if st.pos == c:
+                o = st.objects.get(oid)
+                if o is None:                                     # se corrió y desapareció
+                    p[0] += 1; r[0] += 1; r[2] += 1; r[3] += st.score - sc0
+                elif int(round(o[2])) * W + int(round(o[1])) == dest:
+                    p[0] += 1; r[0] += 1; r[3] += st.score - sc0
+                else:
+                    p[1] += 1
+            elif not turned:
+                if K.pushable(t):
+                    r[1] += 1                                     # empujable, pero ahí se traba
+                else:
+                    p[1] += 1
+
+    def _plan_step(self, st):
+        if st.pos != self._plan_expect:
+            self.stats["push_fail"] = self.stats.get("push_fail", 0) + 1; self.plan = None
+            return None
+        if not self.plan:
+            self.stats["push_done"] = self.stats.get("push_done", 0) + 1; self.plan = None
+            return None
+        act, exp = self.plan.pop(0)
+        if self.know.turn_cost and self.nav.last_dir != act:
+            self.plan.insert(0, (act, exp)); exp = st.pos       # primero gira sin moverse
+        self._plan_expect = exp
+        self._note_move(st, act)
+        self.nav.last_dir = act
+        return act
+
+    def _abits(self):
+        return sum(1 << t for t in self.know.avatar_types)
+
+    def _note_move(self, st, act):
+        W = st.W
+        objs = {oid: (t, int(round(y)) * W + int(round(x))) for oid, (t, x, y) in st.objects.items()
+                if abs(x - st.fx) + abs(y - st.fy) <= 1.5}
+        turned = self.know.turn_cost and self.nav.last_dir is not None and self.nav.last_dir != act
+        self._mv = (st.pos, act, objs, st.masks, st.score, turned)
+
+    def push_plan(self, st):
+        """Planificador de empujes con lo aprendido: para cada objeto empujable cercano, búsqueda en anchura
+        sobre (casilla del objeto, zona del avatar) hasta empujarlo a una casilla donde empujarlo rinde (o que
+        aún no se probó: curiosidad). Devuelve (valor, [(acción, casilla esperada del avatar)]) o None."""
+        K, W, H, N = self.know, st.W, st.H, len(st.masks)
+        p = self.nav.risk.grid(st.masks)
+        boxes = {}
+        for oid, (t, x, y) in st.objects.items():
+            # solo objetos quietos (lo que se mueve solo no es una caja) y en casillas sin riesgo
+            if st.types.get(t, ("", -1))[1] != 6 or not K.push_candidate(t) or self.nav.track.random_type(t):
+                continue
+            vx, vy = self.nav.track.velocity(oid)
+            b = int(round(y)) * W + int(round(x))
+            if len(self.nav.track.hist.get(oid, [])) >= 3 and abs(vx) + abs(vy) < 0.01 and abs(x - round(x)) < 0.05 and abs(y - round(y)) < 0.05 and float(p[b]) < 0.2:
+                boxes[b] = t
+        if not boxes:
+            return None
+        blocked = K.blocked_cells(st)
+        wall = [blocked[j] or float(p[j]) > 0.3 for j in range(N)]
+        for b in boxes:
+            wall[b] = True
+
+        def nbrs(i):
+            x, y = i % W, i // W
+            for d, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+                if 0 <= x + dx < W and 0 <= y + dy < H:
+                    yield d, i + dy * W + dx
+
+        def flood(walls, s):
+            lab, k = {}, 0
+            for s0 in ([s] if s is not None else range(N)):
+                if walls[s0] or s0 in lab:
+                    continue
+                lab[s0] = k; fr = [s0]
+                while fr:
+                    i = fr.pop()
+                    for _, j in nbrs(i):
+                        if not walls[j] and j not in lab:
+                            lab[j] = k; fr.append(j)
+                k += 1
+            return lab
+
+        def path(walls, a, g):
+            prev, fr = {a: None}, [a]
+            while fr and g not in prev:
+                nx = []
+                for i in fr:
+                    for d, j in nbrs(i):
+                        if not walls[j] and j not in prev:
+                            prev[j] = (i, d); nx.append(j)
+                fr = nx
+            if g not in prev:
+                return None
+            acts = []
+            while prev[g] is not None:
+                i, d = prev[g]; acts.append((d, g)); g = i
+            return acts[::-1]
+
+        reach = flood(wall, st.pos)
+        ab = ~self._abits()
+        lam, best = self.P["lam"], None
+        for b0, t in boxes.items():
+            if not any(j in reach for _, j in nbrs(b0)):
+                continue
+            walls2 = list(wall); walls2[b0] = False
+            comps = {}
+
+            def comp(b):
+                if b not in comps:
+                    w = list(walls2); w[b] = True
+                    comps[b] = flood(w, None)
+                return comps[b]
+            s0 = (b0, comp(b0).get(st.pos))
+            par, fr, n = {s0: None}, [s0], 0
+            while fr and n < self.P["push_states"]:
+                nx = []
+                for (b, lab) in fr:
+                    n += 1
+                    cb = comp(b)
+                    for d, dest in nbrs(b):
+                        bx, by = b % W - (d == 1) + (d == 3), b // W - (d == 2) + (d == 0)
+                        if not (0 <= bx < W and 0 <= by < H):
+                            continue
+                        behind = by * W + bx
+                        m = st.masks[dest] & ab
+                        if walls2[behind] or cb.get(behind) != lab or not K.push_ok(t, m):
+                            continue
+                        v, tries = K.push_value(t, m)
+                        cur = self.P["push_new"] / (1 + tries) if v <= 0 and tries < 2 else 0.0
+                        steps = 0
+                        s, chain = (b, lab), [(behind, d)]
+                        while par[s] is not None:
+                            s, bh, dd = par[s]; chain.append((bh, dd)); steps += 1
+                        # se elige por valor con un costo leve por empuje (un plan largo al hoyo sirve); el
+                        # valor devuelto usa el costo de siempre (lam por paso) para compararlo con otras metas
+                        key = max(v, cur) - self.P["push_lam"] * (steps + 1)
+                        if (v > 0 or cur > 0) and (best is None or key > best[3]):
+                            best = (max(v, cur) - lam * 3 * (steps + 1), b0, chain[::-1], key)
+                        if v > 0:                           # desaparece ahí: no se sigue empujando
+                            continue
+                        if walls2[dest]:
+                            continue
+                        ns = (dest, comp(dest).get(b))
+                        if ns not in par:
+                            par[ns] = ((b, lab), behind, d); nx.append(ns)
+                fr = nx
+        if best is None or best[3] <= 0:
+            return None
+        val, b0, chain, _ = best
+        walls2 = list(wall); walls2[b0] = False
+        a, b, acts = st.pos, b0, []
+        for behind, d in chain:
+            w = list(walls2); w[b] = True
+            seg = path(w, a, behind) if a != behind else []
+            if seg is None:
+                return None
+            acts += seg
+            off = (-W, 1, W, -1)[d]
+            acts.append((d, b)); a, b = b, b + off
+        return val, acts
 
     # ------------------------------------------------------------------ política del puente
     def _learn_touch(self, st):
@@ -320,6 +548,8 @@ class Commander:
     def __call__(self, st, br):
         self.know.observe_types(st)
         self._learn_touch(st)
+        if self.P["push"]:
+            self._learn_push(st)
         if self.P["use"]:
             self._resolve_probes(st)
             if self.learn and self.rng.random() < self.P["use_eps"]:       # explorar: usar al azar...
@@ -332,9 +562,16 @@ class Commander:
                 self._probe(st, True)
                 return "use"
         self.visits[st.pos] = self.visits.get(st.pos, 0) + 1
+        self._pos0, self._pos_last = getattr(self, "_pos_last", None), st.pos
+        if self.plan is not None:                          # siguiendo un plan de empujes
+            act = self._plan_step(st)
+            if act is not None:
+                return act
         if self.goal is not None:
             j, t0, limit = self.goal
-            if st.pos == j:
+            jumped = self._pos0 is not None and abs(st.pos % st.W - self._pos0 % st.W) + \
+                abs(st.pos // st.W - self._pos0 // st.W) > 2
+            if st.pos == j or jumped:                      # llegó (o entró al teletransporte de la meta)
                 self.stats["reached"] += 1; self.goal = None
             elif self._goal_valuable and not self._goal_blocked0 and self.know.blocked_cells(st)[j]:
                 # el mundo tapó la meta (p. ej. un diamante que cayó y quedó una roca): cancelar y vetar
@@ -357,6 +594,14 @@ class Commander:
                     self.goal = old
         if self.goal is None:
             c = self.choose(st)
+            if self.P["push"]:
+                pp = self.push_plan(st)
+                if pp is not None and (c is None or self._best_score is None or pp[0] > self._best_score):
+                    self.stats["push"] = self.stats.get("push", 0) + 1
+                    self.plan, self._plan_expect = pp[1], st.pos
+                    act = self._plan_step(st)
+                    if act is not None:
+                        return act
             if c is None:
                 return 4
             self._set_goal(st, c)
@@ -366,6 +611,8 @@ class Commander:
             self.tabu[self.goal[0]] = st.tick + self.P["tabu"]
             self.goal = None
             return 4
+        if act < 4 and self.P["push"]:
+            self._note_move(st, act)
         if act < 4:
             K, W = self.know, st.W
             j = st.pos + (-W, 1, W, -1)[act]
@@ -400,4 +647,5 @@ class Commander:
                 self.know.record_terminal_touch(types, atype, res, won == 1)   # ganó o perdió al tocarlo
         self.touch = None
         self.goal = None
+        self.plan, self._mv, self._pos_last = None, None, None
         self.nav.last = None

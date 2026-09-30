@@ -90,6 +90,21 @@ def practice(a):
                 o = K0.use_score.get(t, [0.0, 0])
                 m = base.use_score.setdefault(t, [0.0, 0])
                 m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
+            for t, dd in k.teleport.items():
+                for e, cnt in dd.items():
+                    o = K0.teleport.get(t, {}).get(e, 0)
+                    m = base.teleport.setdefault(t, {})
+                    m[e] = m.get(e, 0) + cnt - o
+            for t, v in k.push.items():
+                o = K0.push.get(t, [0, 0])
+                m = base.push.setdefault(t, [0, 0])
+                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
+            for t, dd in k.push_into.items():
+                for mk, v in dd.items():
+                    o = K0.push_into.get(t, {}).get(mk, [0, 0, 0, 0.0])
+                    m = base.push_into.setdefault(t, {}).setdefault(mk, [0, 0, 0, 0.0])
+                    for i in range(4):
+                        m[i] += v[i] - o[i]
             for t, v in k.consumed.items():
                 o = K0.consumed.get(t, [0, 0])
                 m = base.consumed.setdefault(t, [0, 0])

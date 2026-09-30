@@ -100,6 +100,12 @@ class Navigator:
         if self.last is not None and (self.learn or log is not None):
             pos0, d, mask, same, res, free = self.last
             moved = st.pos == pos0 + offs[d]
+            W_ = st.W
+            jump = abs(st.pos % W_ - pos0 % W_) + abs(st.pos // W_ - pos0 // W_) > 2
+            if jump:                                     # teletransporte: lo que había en la casilla lleva lejos
+                if self.learn:
+                    self.know.record_jump(mask, st.masks[st.pos])
+                moved = True
             if log is not None:
                 expect = free and (same or not self.know.turn_cost)
                 types = [t for t in range(63) if mask >> t & 1 and t not in self.know.avatar_types]

@@ -185,6 +185,12 @@ class Knowledge:
         self.use_kill = {}
         self.use_base = {}
         self.use_score = {}
+        self.teleport = {}                  # tipo de entrada → {tipo en la casilla de llegada: veces}
+        # empujar: tipo → [se corrió al entrar el avatar, no]; y qué pasa al empujarlo hacia una casilla con cierta
+        # máscara: tipo → {máscara: [avanzó, se trabó, desapareció, suma de Δpuntaje]}
+        self.push = {}
+        self.push_into = {}
+        self.avoid_push = False
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -245,7 +251,13 @@ class Knowledge:
 
     def is_blocking(self, t, res=None):
         """¿Bloquea el tipo t? Si el avatar lleva recursos de ese mismo tipo, se mira lo aprendido con esa
-        cantidad exacta (p. ej. un recurso que no se puede recoger más allá de su tope deja de ser pisable)."""
+        cantidad exacta (p. ej. un recurso que no se puede recoger más allá de su tope deja de ser pisable).
+        Lo que teletransporta se trata como bloqueo al caminar (pisarlo sin querer lleva lejos): solo se entra
+        cuando es la meta de la orden."""
+        if sum(self.teleport.get(t, {}).values()) >= 2:
+            return True
+        if self.avoid_push and self.pushable(t):        # al caminar no se empuja nada sin querer
+            return True
         if res is not None:
             n = res.get(t)
             if n is not None:
@@ -280,6 +292,15 @@ class Knowledge:
             for t in suspects:
                 self.blocked[t] = self.blocked.get(t, 0) + 1
 
+    def record_jump(self, entry_mask, landed_mask):
+        """El avatar entró a una casilla y apareció lejos: lo que había ahí es un teletransporte."""
+        entry = [t for t in range(63) if entry_mask >> t & 1 and t not in self.avatar_types and t not in self.floor]
+        landed = [t for t in range(63) if landed_mask >> t & 1 and t not in self.avatar_types and t not in self.floor]
+        for t in entry:
+            dd = self.teleport.setdefault(t, {})
+            for e in landed:
+                dd[e] = dd.get(e, 0) + 1
+
     def record_turn(self, moved):
         """Intento de moverse cambiando de dirección hacia una casilla pisable: ¿se movió o solo giró?"""
         self.turns[0 if moved else 1] += 1
@@ -313,6 +334,39 @@ class Knowledge:
         v = self.use_score.get(t)
         return v[0] / v[1] if v and v[1] >= 3 else 0.5
 
+    def teleport_exit(self, t):
+        """Tipo que marca adónde lleva un teletransporte de tipo t (el más visto al llegar), o None."""
+        d = self.teleport.get(t)
+        if not d or sum(d.values()) < 2:
+            return None
+        return max(d.items(), key=lambda kv: kv[1])[0]
+
+    def pushable(self, t):
+        """¿El avatar corre al tipo t al entrar en su casilla? (una caja de Sokoban)"""
+        c = self.push.get(t)
+        return bool(c) and c[0] >= 2 and c[0] > 0.5 * (c[0] + c[1])
+
+    def push_candidate(self, t):
+        """¿Vale la pena planear empujes con t? Si ya se sabe empujable, o si alguna vez se pudo pisar su casilla
+        y todavía se probó poco empujarlo (curiosidad)."""
+        c = self.push.get(t, [0, 0])
+        return self.pushable(t) or (c[0] + c[1] < 4 and self.passed.get(t, 0) > 0)
+
+    def push_ok(self, t, mask):
+        """¿Se puede empujar un t hacia una casilla con esta máscara? Sin datos: si no hay nada que bloquee ni
+        otro empujable ahí."""
+        r = self.push_into.get(t, {}).get(mask)
+        if r and r[0] + r[1] >= 1:
+            return r[0] > r[1]
+        return not any(mask >> u & 1 and (self.is_blocking(u) or self.pushable(u)) for u in range(63))
+
+    def push_value(self, t, mask):
+        """(valor, veces probado) de empujar un t hacia esa máscara: el puntaje medio si ahí desaparece."""
+        r = self.push_into.get(t, {}).get(mask)
+        if not r or r[0] == 0:
+            return 0.0, 0
+        return (r[3] / r[0] if r[2] > 0.5 * r[0] else 0.0), r[0]
+
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
         return {t for t, (a, b) in self.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
@@ -330,7 +384,8 @@ class Knowledge:
                 "move_dirs": {t: {f"{d[0]},{d[1]}": n for d, n in dd.items()} for t, dd in self.move_dirs.items()},
                 "fall": {t: {str(m): v for m, v in dd.items()} for t, dd in self.fall.items()},
                 "consumed": self.consumed, "use_kill": self.use_kill, "use_base": self.use_base,
-                "use_score": self.use_score}
+                "use_score": self.use_score, "teleport": self.teleport, "push": self.push,
+                "push_into": {t: {str(m): v for m, v in dd.items()} for t, dd in self.push_into.items()}}
 
     @classmethod
     def from_json(cls, d):
@@ -350,6 +405,9 @@ class Knowledge:
         for name in ("use_kill", "use_base"):
             setattr(k, name, {int(a): {kk: list(v) for kk, v in b.items()} for a, b in d.get(name, {}).items()})
         k.use_score = {int(a): list(b) for a, b in d.get("use_score", {}).items()}
+        k.teleport = {int(a): {int(e): n for e, n in b.items()} for a, b in d.get("teleport", {}).items()}
+        k.push = {int(a): list(b) for a, b in d.get("push", {}).items()}
+        k.push_into = {int(a): {int(m): list(v) for m, v in b.items()} for a, b in d.get("push_into", {}).items()}
         return k
 
     def merge(self, o):
@@ -368,6 +426,9 @@ class Knowledge:
         self.turns = [self.turns[0] + o.turns[0], self.turns[1] + o.turns[1]]
         for t, v in o.carry.items():
             m = self.carry.setdefault(t, [0, 0]); m[0] += v[0]; m[1] += v[1]
+        for t, d in o.teleport.items():
+            for e, n in d.items():
+                self.teleport.setdefault(t, {})[e] = self.teleport.get(t, {}).get(e, 0) + n
 
 
 # ------------------------------------------------------------------ predictor de muerte genérico
@@ -477,6 +538,9 @@ class GenericAgent:
         if self.last is not None and self.learn:
             pos0, d, mask, same_dir = self.last
             moved = st.pos == pos0 + offs[d]
+            if abs(st.pos % W - pos0 % W) + abs(st.pos // W - pos0 // W) > 2:
+                K.record_jump(mask, st.masks[st.pos])      # teletransporte: se movió, y lejos
+                moved = True
             # los avatares orientados giran sin moverse al cambiar de dirección: eso no es un bloqueo
             if moved or same_dir:
                 K.record_move(mask, moved)
