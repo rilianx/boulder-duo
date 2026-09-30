@@ -78,8 +78,13 @@ class CubeNavigator(Navigator):
         R = [self.risk.grid(c) for c in cube]
         now_blocked = (np.array(st.masks, dtype=np.int64) & bm) != 0
         dist = self._dist_to_goal(st, goal, now_blocked)
+        if goal != getattr(self, "_ugoal", None):
+            self._ugoal, self._unreach = goal, 0
         if dist[st.pos] is None:
-            return None
+            # el camino se puede cerrar por un rato (una roca que cae o rebota): esperar; "inalcanzable"
+            # solo tras 10 ticks sin camino (en total, en esta orden)
+            self._unreach += 1
+            return None if self._unreach >= 10 else (math.inf, -1)
         # impaciencia: si el avatar no se acerca al destino, el peso del riesgo baja a la mitad cada
         # P["patience"] ticks (piso 0,1), para no esperar para siempre un peligro que nunca se va
         if goal != getattr(self, "_goal", None):
@@ -93,14 +98,32 @@ class CubeNavigator(Navigator):
         tc = K.turn_cost if self.P.get("turns", 1) else 0
         ax, ay = st.pos % W, st.pos // W
         inwin = lambda c: abs(c % W - ax) <= Rw and abs(c // W - ay) <= Rw
+        # plazo: con P["deadline"] el navegador conoce el tick límite de la orden (self.deadline) y minimiza
+        # el riesgo sujeto a llegar antes; el tiempo solo desempata (time_w). Si ninguna ruta llega a
+        # tiempo, planifica como siempre (la más barata en tiempo + riesgo).
+        dl = bool(self.P.get("deadline")) and getattr(self, "deadline", None) is not None \
+            and not getattr(self, "_dl_off", False)
+        rem = self.deadline - st.tick if dl else math.inf
+        tw = self.P.get("time_w", 0.3) if dl else 1.0
+        if dl:
+            wmul = 1.0
+            if dist[st.pos] > rem:
+                dl, rem, tw = False, math.inf, 1.0
         w = self.P["w_risk"] * wmul
+        # riesgo medio por paso más allá del horizonte (en la ventana, en el último tick simulado): sin esto,
+        # con plazo, al A* le conviene dejar lo peligroso para después del horizonte, donde "no cuesta"
+        hz_tail = 0.0
+        if dl and H:
+            cells = [j for j in range(N) if inwin(j) and not now_blocked[j]]
+            if cells:
+                hz_tail = float(np.mean(-np.log(np.clip(1 - R[H - 1][cells], 1e-4, 1))))
         pred = {}
         if self.pred is not None:
             pred = self.pred.probs(st, [j for j in range(N) if not now_blocked[j] and inwin(j)])
         start = (st.pos, 0)
         best = {start: 0.0}; first = {start: -1}
         facing = {start: self.last_dir}                     # dirección del avatar (si gira antes de moverse)
-        pq = [(dist[st.pos], 0.0, st.pos, 0)]
+        pq = [(tw * dist[st.pos], 0.0, st.pos, 0)]
         best_partial = (math.inf, None)
         n_pop = 0
         while pq:
@@ -115,9 +138,9 @@ class CubeNavigator(Navigator):
             if n_pop % 64 == 0 and time.perf_counter() - t_start > budget:
                 return (best_partial[0], best_partial[1]) if best_partial[1] is not None else (math.inf, -1)
             if k == H or not inwin(c):                       # fuera del horizonte o de la ventana: completar
-                if dist[c] is not None:
+                if dist[c] is not None and k + dist[c] <= rem:
                     node = (goal, -1)
-                    ng = g + dist[c]
+                    ng = g + (tw + w * hz_tail) * dist[c]
                     if ng < best.get(node, math.inf):
                         best[node] = ng; first[node] = first[(c, k)]
                         heapq.heappush(pq, (ng, ng, goal, -1))
@@ -147,15 +170,23 @@ class CubeNavigator(Navigator):
                     # alpha: cuánto pesa el predictor ("¿muero si entro y me quedo?") frente al cubo;
                     # alto donde el peligro lo provoca el avatar (Boulder Dash), bajo con peligro que pasa (Frogs)
                     p = max(p, self.P.get("alpha", 1.0) * pred.get((j, d), 0.0))
-                ng = g + 1.0 + w * -math.log(max(1e-4, 1 - p))
+                if kk + 1 + dist[j] > rem:                   # ya no llega a tiempo por aquí
+                    continue
+                ng = g + tw + w * -math.log(max(1e-4, 1 - p))
                 if turn:
-                    ng += 1.0 + w * -math.log(max(1e-4, 1 - float(R[k][c])))
+                    ng += tw + w * -math.log(max(1e-4, 1 - float(R[k][c])))
                 node = (j, kk + 1)
                 if ng < best.get(node, math.inf):
                     best[node] = ng
                     first[node] = d if k == 0 else first[(c, k)]
                     facing[node] = d if d < 4 else facing.get((c, k))
-                    heapq.heappush(pq, (ng + dist[j], ng, j, kk + 1))
+                    heapq.heappush(pq, (ng + tw * dist[j], ng, j, kk + 1))
+        if dl:                                               # nada llega a tiempo: planificar sin plazo
+            self._dl_off = True
+            try:
+                return self.plan(st, goal, strict)
+            finally:
+                self._dl_off = False
         # sin salida dentro del horizonte (p. ej. objetos extrapolados tapan todo): el destino sigue siendo
         # alcanzable en el mapa actual, así que se acerca lo mejor posible o espera; no es "inalcanzable"
         return (math.inf, best_partial[1] if best_partial[1] is not None else -1)

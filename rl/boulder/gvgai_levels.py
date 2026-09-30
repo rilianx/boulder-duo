@@ -70,6 +70,79 @@ def generate(seed: int) -> str:
     return "\n".join("".join(r) for r in g)
 
 
+def generate_v2(seed: int) -> str:
+    """Versión 2, más cerca de los oficiales: 21–28 diamantes, ≈11 % de rocas en filas horizontales que a
+    menudo descansan justo sobre diamantes o tierra (el patrón peligroso: sacar lo de abajo suelta la roca),
+    muros en segmentos y en "L" (≈6 %), y exactamente 2 cangrejos y 2 mariposas en bolsones de vacío."""
+    R = random.Random(seed)
+    g = [["w" if x in (0, W - 1) or y in (0, H - 1) else "." for x in range(W)] for y in range(H)]
+    inner = lambda x, y: 0 < x < W - 1 and 0 < y < H - 1
+    free = lambda x, y: inner(x, y) and g[y][x] == "."
+    n_in = (W - 2) * (H - 2)
+
+    def count(sym):
+        return sum(r.count(sym) for r in g)
+
+    # muros: segmentos rectos y algunas "L", hasta ≈ 3–9 % del interior
+    target_w = R.uniform(0.03, 0.09) * n_in
+    while count("w") - (2 * W + 2 * H - 4) < target_w:
+        x, y = R.randint(1, W - 2), R.randint(1, H - 2)
+        L1 = R.randint(2, 7)
+        horiz = R.random() < 0.5
+        cells = [(x + k, y) if horiz else (x, y + k) for k in range(L1)]
+        if R.random() < 0.35:                               # "L"
+            ex, ey = cells[-1]
+            cells += [(ex, ey + k) if horiz else (ex + k, ey) for k in range(1, R.randint(2, 5))]
+        for xx, yy in cells:
+            if inner(xx, yy):
+                g[yy][xx] = "w"
+    # rocas en filas; la mitad de las veces con diamantes justo debajo
+    target_o = R.uniform(0.08, 0.13) * n_in
+    while count("o") < target_o:
+        x, y = R.randint(1, W - 2), R.randint(1, H - 3)
+        L = R.randint(1, 6)
+        under_gems = R.random() < 0.5
+        for k in range(L):
+            xx = x + k
+            if free(xx, y):
+                g[y][xx] = "o"
+                if under_gems and free(xx, y + 1):
+                    g[y + 1][xx] = "x"
+    # diamantes sueltos y en grupos hasta 21–28
+    target_x = R.randint(21, 28)
+    while count("x") < target_x:
+        x, y = R.randint(1, W - 2), R.randint(1, H - 2)
+        horiz = R.random() < 0.6
+        for k in range(R.randint(1, 3)):
+            xx, yy = (x + k, y) if horiz else (x, y + k)
+            if free(xx, yy) and count("x") < target_x:
+                g[yy][xx] = "x"
+    # 2 cangrejos y 2 mariposas en bolsones de vacío
+    for sym in "ccbb":
+        for _ in range(200):
+            x, y = R.randint(2, W - 3), R.randint(1, H - 2)
+            if g[y][x] == ".":
+                for dx in range(-R.randint(1, 3), R.randint(1, 3) + 1):
+                    if inner(x + dx, y) and g[y][x + dx] == ".":
+                        g[y][x + dx] = "-"
+                for dy in (-1, 1):
+                    if R.random() < 0.4 and inner(x, y + dy) and g[y + dy][x] == ".":
+                        g[y + dy][x] = "-"
+                g[y][x] = sym
+                break
+    for _ in range(R.randint(2, 8)):
+        x, y = R.randint(1, W - 2), R.randint(1, H - 2)
+        if free(x, y):
+            g[y][x] = "-"
+    for sym in "eA":
+        while True:
+            x, y = R.randint(1, W - 2), R.randint(1, H - 2)
+            if free(x, y) and (sym != "A" or g[y - 1][x] != "o"):
+                g[y][x] = sym
+                break
+    return "\n".join("".join(r) for r in g)
+
+
 def _reachable(g, start):
     Hh, Ww = len(g), len(g[0])
     seen = {start}; fr = [start]
@@ -164,7 +237,7 @@ def generate_frogs(seed: int) -> str:
     return "\n".join(rows)
 
 
-GENERATORS = {"boulderdash": generate, "zelda": generate_zelda, "frogs": generate_frogs}
+GENERATORS = {"boulderdash": generate, "boulderdash_v2": generate_v2, "zelda": generate_zelda, "frogs": generate_frogs}
 
 
 def write_levels(n: int, out: Path, first_seed: int = 0, game: str = "boulderdash"):

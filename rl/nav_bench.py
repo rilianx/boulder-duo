@@ -30,9 +30,13 @@ RUNS = Path(__file__).parent / "runs" / "generic"
 class OrderGiver:
     """Hace de agente de alto nivel: da órdenes al azar y lleva la cuenta de cómo terminan."""
 
-    def __init__(self, nav, rng, stats):
+    T_mult, T_add = 3, 20            # plazo de cada orden: T_mult · distancia + T_add ticks
+
+    def __init__(self, nav, rng, stats, T=None):
         self.nav, self.rng, self.stats = nav, rng, stats
         self.goal = None
+        if T is not None:
+            self.T_mult, self.T_add = T
 
     def _new_order(self, st):
         K = self.nav.know
@@ -47,6 +51,8 @@ class OrderGiver:
             d = shortest(st, K, j)
             if d is not None and 5 <= d <= 25:
                 self.goal, self.dist, self.t0 = j, d, st.tick
+                self.limit = self.T_mult * d + self.T_add
+                self.nav.deadline = st.tick + self.limit      # el navegador puede usar el plazo (P["deadline"])
                 self.stats["orders"] += 1
                 return
         self.goal = None
@@ -69,7 +75,7 @@ class OrderGiver:
                 self._finish("reached", st)
             elif self.nav.know.blocked_cells(st)[self.goal]:
                 self._finish("invalid")                  # el mundo tapó el destino (p. ej. cayó una roca)
-            elif st.tick - self.t0 > 3 * self.dist + 20:
+            elif st.tick - self.t0 > getattr(self, "limit", 3 * self.dist + 20):
                 self._finish("timeout")
         if self.goal is None:
             self._new_order(st)
@@ -93,7 +99,8 @@ _D = {}
 
 
 def run(job):
-    game, P, levels, seeds, use_danger, n_orders = job
+    game, P, levels, seeds, use_danger, n_orders = job[:6]
+    T = job[6] if len(job) > 6 else None
     cube = use_danger in ("cube", "hybrid", "objects", "objects+pred")
     torch.set_num_threads(1)
     d = RUNS / game
@@ -117,7 +124,7 @@ def run(job):
                                     danger=_D.get(game) if use_danger == "hybrid" else None)
             else:
                 nav = Navigator(K, _D.get(game) if use_danger else None, P)
-            b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats))
+            b.play(levels[k % len(levels)], seeds[k % len(seeds)] + 1000 * k, OrderGiver(nav, rng, stats, T))
             jt = stats.setdefault("java_t", [0, 0, 0.0, 0.0])   # decisiones, >40 ms, máx, suma (ms), desde Java
             n, over, mx, tot = getattr(b, "timing", (0, 0, 0.0, 0.0))
             jt[0] += n; jt[1] += over; jt[2] = max(jt[2], mx); jt[3] += tot
@@ -200,6 +207,34 @@ def seeds_report(game, variants, orders, procs, lv, n):
     (RUNS / game / "nav_seeds.json").write_text(json.dumps(out, indent=1))
 
 
+def curve(game, procs, orders=150):
+    """Curva llegar vs. morir en los niveles oficiales: el navegador de siempre barriendo w_risk, y el navegador
+    con plazo (minimiza el riesgo sujeto a llegar antes de T), para plazos T = m·d + a distintos."""
+    f = RUNS / game / "nav_objects.json"
+    alpha = json.loads(f.read_text()).get("alpha", 1.0) if f.exists() else 1.0
+    lv = test_levels(game)
+    out = RUNS / game / "nav_curve.json"
+    res = json.loads(out.read_text()) if out.exists() else []
+    done = {(r["kind"], r["w"], tuple(r["T"])) for r in res}
+    jobs = [("w", w, (3, 20)) for w in (0, 3, 6, 12, 20, 30, 50)]
+    jobs += [("w", w, T) for T in ((1.5, 10), (5, 30)) for w in (6, 20)]
+    jobs += [("plazo", 50, T) for T in ((1.5, 10), (3, 20), (5, 30))]
+    for kind, w, T in jobs:
+        if (kind, w, tuple(T)) in done:
+            continue
+        P = {**NAV_DEFAULT, "w_risk": float(w), "alpha": alpha, "patience": 0, "deadline": kind == "plazo"}
+        s = bench(game, P, orders, procs, "objects+pred", lv, T=T)
+        m = max(s["orders"], 1)
+        r = {"kind": kind, "w": w, "T": list(T), "orders": s["orders"],
+             "reached": 100 * (s["reached"] + s["reached_win"]) / m, "died": 100 * s["died"] / m,
+             "timeout": 100 * s["timeout"] / m, "invalid": 100 * s.get("invalid", 0) / m,
+             "unreachable": 100 * s["unreachable"] / m}
+        res.append(r)
+        out.write_text(json.dumps(res, indent=1))
+        print(f"{game} {kind:5} w={w:>2} T={T[0]}·d+{T[1]}: llega {r['reached']:5.1f} | muere {r['died']:5.1f} | "
+              f"tiempo {r['timeout']:5.1f} | invalidada {r['invalid']:4.1f} | inalcanzable {r['unreachable']:4.1f}", flush=True)
+
+
 def report(label, s):
     n = max(s["orders"], 1)
     reached = s["reached"] + s["reached_win"]
@@ -220,15 +255,16 @@ def test_levels(game):
 
 def train_levels(game):
     if game == "boulderdash":
-        return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels", 0)]
+        # versión 2 del generador: más cerca de los oficiales (rocas sobre diamantes, 24 diamantes, 2+2 enemigos)
+        return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels_v2", 0, "boulderdash_v2")]
     # Zelda y Frogs: niveles generados (antes solo los oficiales 0–2, y el ajuste sobreajustaba)
     return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
 
 
-def bench(game, P, orders, procs, use_danger, levels, seed0=500):
+def bench(game, P, orders, procs, use_danger, levels, seed0=500, T=None):
     per = max(orders // procs, 1)
     with ProcessPoolExecutor(procs) as ex:
-        parts = list(ex.map(run, [(game, P, levels[k::procs] or levels, [seed0 + k], use_danger, per)
+        parts = list(ex.map(run, [(game, P, levels[k::procs] or levels, [seed0 + k], use_danger, per, T)
                                   for k in range(procs)]))
     return merge(parts)
 
@@ -287,9 +323,12 @@ def main():
     p.add_argument("--no-model", action="store_true", help="escenario B: sin modelo del juego en ejecución")
     p.add_argument("--tune-objects", action="store_true", help="grilla de w_risk y alpha para objetos + predictor")
     p.add_argument("--only-tuned", action="store_true", help="con --no-model: solo la variante ajustada")
+    p.add_argument("--curve", action="store_true", help="curva llegar vs. morir (w_risk y navegador con plazo)")
     p.add_argument("--learn-know", action="store_true", help="actualizar knowledge.json (recursos, giros)")
     p.add_argument("--seeds", type=int, default=0, help="con --no-model --only-tuned: repetir con N semillas y dar IC 95 %")
     a = p.parse_args()
+    if a.curve:
+        return curve(a.game, a.procs)
     if a.learn_know:
         return learn_knowledge(a.game, a.procs)
     if a.tune_objects:
