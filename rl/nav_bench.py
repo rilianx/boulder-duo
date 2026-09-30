@@ -19,7 +19,7 @@ import numpy as np
 import torch
 
 from boulder.generic import GDanger, GenericBridge, Knowledge
-from boulder.gvgai_levels import write_levels
+from boulder.gvgai_levels import GENERATORS, write_levels
 from boulder.cube import CellRisk, CubeNavigator
 from boulder.objcube import ObjectCubeNavigator
 from boulder.nav import NAV_DEFAULT, NAV_PARAMS, MCTSNavigator, Navigator, SurpriseLog, shortest
@@ -298,7 +298,8 @@ def report(label, s):
 
 
 def test_levels(game):
-    return list(range(5))                    # los niveles oficiales
+    """Niveles de prueba: los 5 oficiales si hay generador de niveles; si no, solo 3–4 (0–2 se usan para entrenar)."""
+    return list(range(5)) if game in GENERATORS or game == "boulderdash" else [3, 4]
 
 
 def train_levels(game):
@@ -306,7 +307,9 @@ def train_levels(game):
         # versión 2 del generador: más cerca de los oficiales (rocas sobre diamantes, 24 diamantes, 2+2 enemigos)
         return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels_v2", 0, "boulderdash_v2")]
     # Zelda y Frogs: niveles generados (antes solo los oficiales 0–2, y el ajuste sobreajustaba)
-    return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
+    if game in GENERATORS:
+        return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
+    return [0, 1, 2]                         # juegos sin generador: se entrena en 0–2 y se prueba en 3–4
 
 
 def bench(game, P, orders, procs, use_danger, levels, seed0=500, T=None):

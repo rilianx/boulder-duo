@@ -17,7 +17,8 @@ from boulder.generic import game_file, level_file
 AGENTS = {"olets": "tracks.singlePlayer.advanced.olets.Agent",
           "sampleMCTS": "tracks.singlePlayer.advanced.sampleMCTS.Agent",
           "sampleRHEA": "tracks.singlePlayer.advanced.sampleRHEA.Agent",
-          "random": "tracks.singlePlayer.simple.sampleRandom.Agent"}
+          "random": "tracks.singlePlayer.simple.sampleRandom.Agent",
+          "yolobot": "YOLOBOT.Agent"}      # ganador de GVGAI 2015–2018 (rl/gvgai/vendor/competitors)
 
 
 def run(agent, level, seeds, game="boulderdash"):
@@ -33,10 +34,12 @@ def main():
     p.add_argument("--seeds", type=int, default=5)
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--game", default="boulderdash")
+    p.add_argument("--levels", default="0,1,2,3,4")
     a = p.parse_args()
+    lvs = [int(v) for v in a.levels.split(",")]
     for ag in a.agents.split(","):
         with ThreadPoolExecutor(a.procs) as ex:
-            res = list(ex.map(lambda lv: (lv, run(ag, lv, range(1, a.seeds + 1), a.game)), range(5)))
+            res = list(ex.map(lambda lv: (lv, run(ag, lv, range(1, a.seeds + 1), a.game)), lvs))
         allr = [r for _, rs in res for r in rs]
         # GVGAI: 1 gana, 0 pierde, -100 descalificado (se pasó del tiempo por acción)
         per = " ".join(f"n{lv}:{sum(r[0] == 1 for r in rs)}/{len(rs)}" for lv, rs in res)

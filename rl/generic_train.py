@@ -17,7 +17,7 @@ import torch
 
 from boulder.generic import (DEFAULT_W, WEIGHTS, GDanger, GDangerNet, GenericAgent, GenericBridge, Knowledge,
                              gfeatures, gplanes)
-from boulder.gvgai_levels import write_levels
+from boulder.gvgai_levels import GENERATORS, write_levels
 
 RUNS = Path(__file__).parent / "runs" / "generic"
 
@@ -32,7 +32,9 @@ def train_levels(game):
     if game == "boulderdash":
         return [str(p) for p in write_levels(300, Path(__file__).parent / "runs" / "gvgai_levels", 0)]
     # Zelda y Frogs: niveles generados (antes solo los oficiales 0–2, y el ajuste sobreajustaba)
-    return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
+    if game in GENERATORS:
+        return [str(p) for p in write_levels(200, Path(__file__).parent / "runs" / f"gvgai_levels_{game}", 0, game)]
+    return [0, 1, 2]                         # juegos sin generador: se entrena en 0–2 y se prueba en 3–4
 
 
 def random_weights(rng):

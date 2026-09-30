@@ -26,7 +26,9 @@ def _play(job):
     d = RUNS / NP.get("model_dir", game)
     kf = RUNS / game / "knowledge_hl.json"            # conocimiento tras la práctica del alto nivel, si existe
     K = Knowledge.from_json(json.loads((kf if kf.exists() and not HP.get("practice") else d / "knowledge.json").read_text()))
-    V = json.loads((RUNS / game / "values.json").read_text())
+    vf = RUNS / game / "values.json"
+    from boulder.generic import DEFAULT_W
+    V = json.loads(vf.read_text()) if vf.exists() else dict(DEFAULT_W)   # sin CEM: pesos por defecto
     D = GDanger(d / "danger.pt")
     b = GenericBridge(game)
     out = []
@@ -47,10 +49,14 @@ def _play(job):
 def practice(a):
     """Práctica en niveles generados: el alto nivel aprende los efectos de tocar cada tipo (incluido ganar)."""
     from nav_bench import train_levels
-    NP = {**json.loads((RUNS / a.game / "nav_objects.json").read_text()), "patience": 0, **json.loads(a.nav)}
+    f = RUNS / a.game / "nav_objects.json"
+    NP = {**({"w_risk": 20.0, "alpha": 1.0} if not f.exists() else json.loads(f.read_text())), "patience": 0,
+          **json.loads(a.nav)}
     HP = {**json.loads(a.hl), "practice": True}
     lv = train_levels(a.game)
     per = max(a.practice // a.procs, 1)
+    if len(lv) < a.practice:                          # pocos niveles de entrenamiento: se repiten con otras semillas
+        lv = [lv[i % len(lv)] for i in range(a.practice)]
     jobs = [(a.game, lv[k * per:(k + 1) * per], list(range(900 + 50 * k, 900 + 50 * k + per)), NP, HP)
             for k in range(a.procs)]
     base = Knowledge.from_json(json.loads((RUNS / a.game / "knowledge.json").read_text()))
@@ -101,11 +107,14 @@ def main():
     a = p.parse_args()
     if a.practice:
         return practice(a)
-    NP = {**json.loads((RUNS / a.game / "nav_objects.json").read_text()), "patience": 0, **json.loads(a.nav)}
+    f = RUNS / a.game / "nav_objects.json"
+    NP = {**({"w_risk": 20.0, "alpha": 1.0} if not f.exists() else json.loads(f.read_text())), "patience": 0,
+          **json.loads(a.nav)}
     HP = json.loads(a.hl)
     seeds = list(range(100, 100 + a.seeds))
     with ProcessPoolExecutor(a.procs) as ex:
-        res = dict(ex.map(_play, [(a.game, lv, seeds, NP, HP) for lv in range(5)]))
+        from nav_bench import test_levels
+        res = dict(ex.map(_play, [(a.game, lv, seeds, NP, HP) for lv in test_levels(a.game)]))
     allr = [r for rs in res.values() for r in rs]
     per = " ".join(f"n{lv}:{sum(r[0] == 1 for r in rs)}/{len(rs)}" for lv, rs in sorted(res.items()))
     dq = sum(r[0] not in (0, 1) for r in allr)       # descalificadas por tiempo (GVGAI devuelve −100)
