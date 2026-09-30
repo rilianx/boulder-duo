@@ -1,0 +1,182 @@
+[
+ {
+  "game": "zelda",
+  "mdir": "zelda",
+  "w": 6,
+  "orders": 184,
+  "reached": 69.02173913043478,
+  "died": 15.76086956521739,
+  "timeout": 15.217391304347826,
+  "invalid": 0.0
+ },
+ {
+  "game": "zelda",
+  "mdir": "zelda",
+  "w": 20,
+  "orders": 194,
+  "reached": 68.55670103092784,
+  "died": 10.309278350515465,
+  "timeout": 21.1340206185567,
+  "invalid": 0.0
+ },
+ {
+  "game": "zelda",
+  "mdir": "zelda",
+  "w": 50,
+  "orders": 291,
+  "reached": 56.013745704467354,
+  "died": 4.123711340206185,
+  "timeout": 39.86254295532646,
+  "invalid": 0.0
+ },
+ {
+  "game": "zelda",
+  "mdir": "zelda_exp",
+  "w": 6,
+  "orders": 269,
+  "reached": 72.11895910780669,
+  "died": 5.5762081784386615,
+  "timeout": 22.304832713754646,
+  "invalid": 0.0
+ },
+ {
+  "game": "zelda",
+  "mdir": "zelda_exp",
+  "w": 20,
+  "orders": 239,
+  "reached": 64.43514644351464,
+  "died": 2.510460251046025,
+  "timeout": 33.05439330543933,
+  "invalid": 0.0
+ },
+ {
+  "game": "zelda",
+  "mdir": "zelda_exp",
+  "w": 50,
+  "orders": 272,
+  "reached": 47.794117647058826,
+  "died": 5.147058823529412,
+  "timeout": 47.05882352941177,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs",
+  "w": 6,
+  "orders": 165,
+  "reached": 49.696969696969695,
+  "died": 21.818181818181817,
+  "timeout": 28.484848484848484,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs",
+  "w": 20,
+  "orders": 192,
+  "reached": 47.916666666666664,
+  "died": 5.729166666666667,
+  "timeout": 46.354166666666664,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs",
+  "w": 50,
+  "orders": 178,
+  "reached": 47.752808988764045,
+  "died": 5.617977528089888,
+  "timeout": 46.62921348314607,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs_exp",
+  "w": 6,
+  "orders": 196,
+  "reached": 31.632653061224488,
+  "died": 24.489795918367346,
+  "timeout": 43.87755102040816,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs_exp",
+  "w": 20,
+  "orders": 199,
+  "reached": 25.628140703517587,
+  "died": 5.527638190954774,
+  "timeout": 68.84422110552764,
+  "invalid": 0.0
+ },
+ {
+  "game": "frogs",
+  "mdir": "frogs_exp",
+  "w": 50,
+  "orders": 215,
+  "reached": 17.674418604651162,
+  "died": 5.116279069767442,
+  "timeout": 77.20930232558139,
+  "invalid": 0.0
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash",
+  "w": 6,
+  "orders": 171,
+  "reached": 69.00584795321637,
+  "died": 14.619883040935672,
+  "timeout": 0.0,
+  "invalid": 13.450292397660819
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash",
+  "w": 20,
+  "orders": 329,
+  "reached": 87.8419452887538,
+  "died": 3.6474164133738602,
+  "timeout": 0.303951367781155,
+  "invalid": 6.990881458966565
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash",
+  "w": 50,
+  "orders": 158,
+  "reached": 67.0886075949367,
+  "died": 13.924050632911392,
+  "timeout": 6.329113924050633,
+  "invalid": 9.49367088607595
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash_exp",
+  "w": 6,
+  "orders": 180,
+  "reached": 69.44444444444444,
+  "died": 13.88888888888889,
+  "timeout": 0.0,
+  "invalid": 13.333333333333334
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash_exp",
+  "w": 20,
+  "orders": 173,
+  "reached": 71.09826589595376,
+  "died": 10.404624277456648,
+  "timeout": 1.7341040462427746,
+  "invalid": 13.872832369942197
+ },
+ {
+  "game": "boulderdash",
+  "mdir": "boulderdash_exp",
+  "w": 50,
+  "orders": 157,
+  "reached": 66.87898089171975,
+  "died": 8.9171974522293,
+  "timeout": 5.732484076433121,
+  "invalid": 15.92356687898089
+ }
+]
