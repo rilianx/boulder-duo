@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor
@@ -17,7 +18,8 @@ from boulder.generic import GDanger, GenericBridge, Knowledge
 from boulder.highlevel import Commander
 from boulder.objcube import ObjectCubeNavigator
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 
 
 def _play(job):

@@ -12,6 +12,7 @@ jugando) se copia tal cual.
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import shutil
@@ -29,7 +30,8 @@ from collect_nav import NoveltyOrderGiver
 from generic_train import train
 from nav_bench import train_levels
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 K_DEATH = 3
 
 

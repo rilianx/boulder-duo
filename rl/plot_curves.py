@@ -1,4 +1,5 @@
 """Gráfico de las curvas llegar vs. morir (runs/generic/<juego>/nav_curve.json) → docs/curvas.png"""
+import os
 import json
 from pathlib import Path
 
@@ -6,7 +7,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 BLUE, ORANGE, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1a1a19", "#6b6a63", "#e6e5df"
 TNAME = {(1.5, 10): "T corto", (3, 20): "T medio", (5, 30): "T largo"}
 

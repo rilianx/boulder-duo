@@ -9,6 +9,7 @@ ganar o 2000 ticks. Usa lo aprendido por generic_train.py (transitabilidad y pre
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import time
@@ -24,7 +25,8 @@ from boulder.cube import CellRisk, CubeNavigator
 from boulder.objcube import ObjectCubeNavigator
 from boulder.nav import NAV_DEFAULT, NAV_PARAMS, MCTSNavigator, Navigator, SurpriseLog, shortest
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 
 
 class OrderGiver:

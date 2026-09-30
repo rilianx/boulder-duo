@@ -9,6 +9,7 @@ entrenar). Después se reentrenan el predictor y el riesgo por casilla con los d
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor
@@ -24,7 +25,8 @@ from boulder.objcube import ObjectCubeNavigator
 from generic_train import train, train_levels
 from nav_bench import OrderGiver
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 
 
 class NoveltyOrderGiver(OrderGiver):

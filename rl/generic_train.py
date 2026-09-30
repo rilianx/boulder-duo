@@ -7,6 +7,7 @@ los demás juegos solo tienen 5 niveles: se aprende y ajusta en 0–2 y se repor
 """
 from __future__ import annotations
 
+import os
 import argparse
 import json
 from concurrent.futures import ProcessPoolExecutor
@@ -19,7 +20,8 @@ from boulder.generic import (DEFAULT_W, WEIGHTS, GDanger, GDangerNet, GenericAge
                              gfeatures, gplanes)
 from boulder.gvgai_levels import GENERATORS, write_levels
 
-RUNS = Path(__file__).parent / "runs" / "generic"
+# carpeta de modelos: GVGAI_RUNS la cambia (p. ej. para la variante con presupuesto, sin tocar la principal)
+RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "generic"))
 
 
 def paths(game):
