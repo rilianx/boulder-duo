@@ -175,6 +175,7 @@ class Knowledge:
         self.by_res = {}
         self.turns = [0, 0]                 # cambios de dirección: [se movió, solo giró]
         self.carry = {}                     # tipo de objeto bajo el avatar quieto → [lo movió, no lo movió]
+        self.move_dirs = {}                 # tipo de objeto → {(dx, dy): veces que se movió así}
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -292,7 +293,8 @@ class Knowledge:
     def to_json(self):
         return {"passed": self.passed, "blocked": self.blocked, "floor": sorted(self.floor),
                 "avatar_types": sorted(self.avatar_types), "eff": self.eff, "term": self.term,
-                "by_res": self.by_res, "turns": self.turns, "carry": self.carry}
+                "by_res": self.by_res, "turns": self.turns, "carry": self.carry,
+                "move_dirs": {t: {f"{d[0]},{d[1]}": n for d, n in dd.items()} for t, dd in self.move_dirs.items()}}
 
     @classmethod
     def from_json(cls, d):
@@ -305,6 +307,8 @@ class Knowledge:
         k.by_res = {int(a): {int(n): list(v) for n, v in b.items()} for a, b in d.get("by_res", {}).items()}
         k.turns = list(d.get("turns", [0, 0]))
         k.carry = {int(a): list(b) for a, b in d.get("carry", {}).items()}
+        k.move_dirs = {int(a): {tuple(int(v) for v in key.split(",")): n for key, n in b.items()}
+                       for a, b in d.get("move_dirs", {}).items()}
         return k
 
     def merge(self, o):

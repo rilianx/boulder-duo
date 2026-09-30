@@ -64,6 +64,11 @@ def practice(a):
                 o = K0.eff.get(t, [0, 0.0, 0.0, 0, 0]); m = base._e(t)
                 for i in range(5):
                     m[i] += e[i] - o[i]
+            for t, dd in k.move_dirs.items():
+                for dd_k, n in dd.items():
+                    o = K0.move_dirs.get(t, {}).get(dd_k, 0)
+                    m = base.move_dirs.setdefault(t, {})
+                    m[dd_k] = m.get(dd_k, 0) + n - o
             for t, dd in k.term.items():
                 for key, v in dd.items():
                     o = K0.term.get(t, {}).get(key, [0, 0])
@@ -95,7 +100,8 @@ def main():
     allr = [r for rs in res.values() for r in rs]
     per = " ".join(f"n{lv}:{sum(r[0] == 1 for r in rs)}/{len(rs)}" for lv, rs in sorted(res.items()))
     dq = sum(r[0] not in (0, 1) for r in allr)       # descalificadas por tiempo (GVGAI devuelve −100)
-    st = {k: sum(r[3][k] for r in allr) for k in allr[0][3]}
+    keys = {k for r in allr for k in r[3]}
+    st = {k: sum(r[3].get(k, 0) for r in allr) for k in sorted(keys)}
     print(f"{a.game} alto nivel + navegador {a.nav} {a.hl}: victorias {100 * np.mean([r[0] == 1 for r in allr]):5.1f}% ({per}) | descalificadas {dq} | "
           f"puntaje {np.mean([r[1] for r in allr]):5.1f} | ticks {np.mean([r[2] for r in allr]):6.0f} | órdenes {st}", flush=True)
 

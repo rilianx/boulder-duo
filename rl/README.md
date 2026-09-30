@@ -545,3 +545,19 @@ Con el mismo w = 20, el modelo llega 17 puntos más y muere menos que la zona. L
   - las muertes por orden se componen: con unas 12 órdenes por partida, 0,9¹² ≈ 30 %;
   - el avatar queda encerrado en bolsillos donde lo que falta está detrás de rocas. Para salir tendría que cavar para hacerlas caer, es decir, cambiar el mapa, algo que el alto nivel no sabe hacer.
 - **Reevaluar el destino** ayuda en Boulder Dash (37 → 50 %) y un poco en Zelda, pero empeora Frogs, donde cambiar de meta a mitad de un cruce es peligroso. Además, el oráculo extra cada 5 ticks causó una descalificación por tiempo en Frogs.
+
+**Encierros en Boulder Dash.** Probé `unlock`:
+- Cuando hay destinos con valor fuera de alcance, busca un objeto móvil (categoría VGDL) que los tape.
+- De la experiencia aprende hacia dónde se mueve cada tipo; la roca, 2245 de 2245 veces hacia abajo. Esa dirección ahora se guarda en `knowledge.json`, en `move_dirs`.
+- La orden es ir a cavar la casilla adonde caería el obstáculo.
+
+En 30 partidas **no se activó nunca**: todos los encierros observados son irreversibles. Por ejemplo, el nivel 3 en el tick 300:
+
+```
+w......-----wwwwxox.oow..w
+w...o.-----o_A__o..xoxx..w      A = avatar, _ = alcanzable, o = roca, w = muro
+w---..---o..oo__o-....w..w
+wwwwwwwwwwwwwwwwwwwwwwwwww
+```
+
+Las rocas de los lados se apoyan en muro o en otras rocas: ninguna puede caer, y en este Boulder Dash no se empujan. El agente se encerró solo, al cavar antes bajo rocas que después cayeron. **Lo que falta es previsión, no rescate:** antes de elegir una meta, estimar si llegar a ella (y cavar el camino) deja al agente sin salida.
