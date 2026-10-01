@@ -1309,6 +1309,10 @@ Line=12 8 12 10 STEELWALL
 (() => {
 'use strict';
 const W = 40, H = 22, T = 16, TICK = 120;
+/* Length of a tick in the original caves, by difficulty level: level 1 is the slowest. The random levels of the
+   training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
+const CAVE_TICK = [170, 145, 120, 105, 92];
+let tickMs = TICK;
 const VW = 17, VH = 12;                 // tiles visible per player camera
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
@@ -1751,7 +1755,7 @@ function newPlayer(id){
 }
 
 function genLevel(n){
-  TL = DEFAULT_TILES; resetCaveRules(n);
+  TL = DEFAULT_TILES; resetCaveRules(n); tickMs = TICK;
   const R = rng(n * 7919 + 13);
   grid = new Uint8Array(W*H); fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H);
@@ -1896,7 +1900,8 @@ function genCave(n){
   const dv = (P.DiamondValue || '10').split(/\s+/).map(Number); gemVal = dv[0]; gemExtra = dv[1] || dv[0];
   need = num('DiamondsRequired', 10); needEach = Math.max(1, Math.ceil(need * .6));
   timeLeft = num('CaveTime', 150);
-  magicTime = num('MagicWallTime', 0); amoebaSlow = Math.round(num('AmoebaTime', 0) * 1000 / TICK); slimePerm = num('SlimePermeability', 0);
+  tickMs = CAVE_TICK[lvl];
+  magicTime = num('MagicWallTime', 0); amoebaSlow = Math.round(num('AmoebaTime', 0) * 1000 / tickMs); slimePerm = num('SlimePermeability', 0);
   return [inbox, second];
 }
 
@@ -2048,7 +2053,7 @@ function tick(){
     const to = !amoebaCan ? GEM : amoebaN >= 200 ? ROCK : -1;
     if (to >= 0) { for (let i=0; i<W*H; i++) if (grid[i] === AMOEBA) { grid[i] = to; fall[i] = 0; aux[i] = 0; } sfx.open(); }
   }
-  if (magicState === 1 && (magicLeft -= TICK) <= 0) magicState = 2;
+  if (magicState === 1 && (magicLeft -= tickMs) <= 0) magicState = 2;
   if (landThisTick) sfx.land();
 
   players.forEach(p => {
@@ -2062,7 +2067,7 @@ function tick(){
 
   if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; sfx.open(); }
 
-  timeAcc += TICK;
+  timeAcc += tickMs;
   if (timeAcc >= 1000) { timeAcc -= 1000; timeLeft--; if (timeLeft <= 10 && timeLeft > 0) beep(880,.05,'square',.03); }
 
   checkEnd();
@@ -2657,7 +2662,7 @@ function updateHud(){
 /* ---------- cameras ---------- */
 const cams = [{x:0, y:0}, {x:0, y:0}];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const idleSecs = p => p.alive && !p.ai && state === 'play' ? p.idle * TICK / 1000 : 0;
+const idleSecs = p => p.alive && !p.ai && state === 'play' ? p.idle * tickMs / 1000 : 0;
 /* What a kid does while nobody plays it: a new random plan each time it stops (drawing only, not the game).
    It waits a moment, then does a few things in random order and for random lengths, and may end up asleep. */
 function idleAct(p){
@@ -2873,11 +2878,11 @@ function loop(now){
     acc += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
     let n = 0;
-    while (acc >= TICK && state === 'play' && n < cap) { acc -= TICK; tick(); n++; }
+    while (acc >= tickMs && state === 'play' && n < cap) { acc -= tickMs; tick(); n++; }
     if (n >= cap) acc = 0;
   } else acc = 0;
   // drawing glides each moved thing from its old cell to its new one over the tick (only at normal speed)
-  lerpT = state === 'play' && speed === 1 ? Math.min(1, acc / TICK) : 1;
+  lerpT = state === 'play' && speed === 1 ? Math.min(1, acc / tickMs) : 1;
   frame++;
   render();
   drawAiPanel();
