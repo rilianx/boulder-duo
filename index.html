@@ -1786,7 +1786,8 @@ const sfx = {
   boom(){ noise(.45,.16); beep(80,.35,'sawtooth',.05,-40); },
   open(){ [523,659,784,1046].forEach((f,i)=>beep(f,.12,'square',.04,0,i*.08)); },
   exit(){ [784,988,1175,1568].forEach((f,i)=>beep(f,.1,'triangle',.07,0,i*.06)); },
-  step(){ beep(220,.02,'square',.012); }
+  step(){ beep(220,.02,'square',.012); },
+  crash(){ noise(.3,.12); beep(70,.25,'triangle',.08,-30); }
 };
 
 /* ---------- state ---------- */
@@ -1827,7 +1828,8 @@ function drawThing(g, s, i, px, py, k, big){
 const glideK = i => src[i] >= 0 ? Math.max(0, 1 - (simT - srcAt[i]) / tickMs) : 0;   // 1 just moved … 0 arrived
 let vari = new Uint8Array(W*H);
 let fallN = new Uint8Array(W*H), rot = new Float32Array(W*H), landAt = new Float64Array(W*H).fill(-1e9);   // drawing only
-let fallT = new Uint8Array(W*H);   // real gravity: ticks a thing has been falling
+let fallT = new Uint8Array(W*H);
+let dust = [], shakeAt = -1e9, hardHits = 0;   // hard landings: dust clouds and a short shake (drawing only)   // real gravity: ticks a thing has been falling
 /* Real gravity (optional, original caves only): what falls speeds up, one cell in its first tick, then two, then three. */
 let realGravity = false;
 try { realGravity = localStorage.getItem('boulder-duo-gravity') === '1'; } catch (e) {}   // look of each rock, gem or butterfly (drawing only); travels with it   // where each cell's content was a tick ago, for smooth drawing
@@ -1999,7 +2001,7 @@ function genCave(n){
 }
 
 function initLevel(n){
-  level = n; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
+  level = n; dust = []; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
   const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
@@ -2110,6 +2112,15 @@ function fallObj(i, x, y){
     if (bt === P1 || bt === P2) {
       if (players[bt-P1].immune <= 0) { explode(x, y+1, false); return; }
     } else if (bt === FIRE || bt === BUTT) { explode(x, y+1, bt === BUTT); return; }
+  }
+  // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
+  // and crumbles into dirt itself. Steel, the exit and diamonds hold.
+  if (realGravity && caveRules() && fall[i] && grid[i] === ROCK && fallN[i] >= 5 &&
+      (bt === DIRT || bt === WALL || bt === ROCK || bt === EXPW || bt === MAGIC)) {
+    grid[b] = E; fall[b] = 0; aux[b] = 0; src[b] = -1;
+    grid[i] = DIRT; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
+    dust.push({ x, y, at: nowT }); shakeAt = nowT; sfx.crash(); hardHits++;
+    return;
   }
   if (bt === ROCK || bt === GEM || bt === WALL) {
     if (grid[i-1] === E && grid[b-1] === E) { move(i, i-1); fall[i-1] = 1; return; }
@@ -2890,7 +2901,8 @@ function renderView(k){
   g.fillStyle = '#000'; g.fillRect(0, 0, VW*T, VH*T);
   if (!grid) return;
   if (k === 0 && mode === 'train' && state !== 'menu') return renderOverview(g);
-  const ox = Math.round(c.x * T * SS) / SS, oy = Math.round(c.y * T * SS) / SS;
+  const sh = (simT - shakeAt) / 220, shk = sh >= 0 && sh < 1 ? (1 - sh) * 1.6 : 0;
+  const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * SS) / SS, oy = Math.round((c.y * T + Math.cos(simT * .11) * shk) * SS) / SS;
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   const glide = [];
@@ -2924,6 +2936,15 @@ function renderView(k){
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T); });
+  dust = dust.filter(d => simT - d.at < 600);
+  dust.forEach(d => {
+    const q = (simT - d.at) / 600, R = rng(d.x * 97 + d.y * 13);
+    for (let k = 0; k < 10; k++){
+      const a = R() * Math.PI * 2, r = (R() * .7 + .3) * T * (.4 + q * .9);
+      g.fillStyle = `rgba(${170 + (R() * 40 | 0)},${140 + (R() * 30 | 0)},${100 + (R() * 30 | 0)},${.75 * (1 - q)})`;
+      g.beginPath(); g.arc(d.x*T - ox + T/2 + Math.cos(a) * r, (d.y + 1)*T - oy + Math.sin(a) * r * .7, T * (.12 + R() * .12) * (1 - q * .5), 0, Math.PI * 2); g.fill();
+    }
+  });
   players.forEach(p => {
     const act = idleAct(p); if (act !== 'tap' && act !== 'sleep') return;
     const px = p.x*T - ox + T/2, py = p.y*T - oy, t = frame % 90 / 90;
@@ -3165,7 +3186,7 @@ window.__sim = {
     initLevel(n); state = 'play';
     for (let t=0; t<k && state === 'play'; t++) tick();
     const c = {}; grid.forEach(v => { c[v] = (c[v] || 0) + 1; });
-    const r = { state, need, timeLeft, magicState, counts: c }; menu(); return r;
+    const r = { state, need, timeLeft, magicState, counts: c, hardHits }; menu(); return r;
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
