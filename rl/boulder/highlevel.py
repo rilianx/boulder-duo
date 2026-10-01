@@ -31,6 +31,7 @@ class Commander:
         # usar (disparar, espada...): se aprende qué hace comparando qué desaparece al usar y al no usar
         self.P = {"use": True, "use_eps": 0.05, "use_R": 6, "use_lag": 10, "use_thr": 0.3, **self.P}
         self._probes = []
+        self._vanish_ds = {}
         # empujar (cajas de Sokoban): se aprende qué se corre al entrar y qué pasa al empujarlo contra cada cosa
         self.P = {"push": True, "push_new": 0.5, "push_states": 4000, "push_lam": 0.01, **self.P}
         know.avoid_push = self.P["push"]
@@ -555,11 +556,14 @@ class Commander:
                     r = table.setdefault(t, {}).setdefault(key, [0, 0])
                     r[0] += gone; r[1] += 1
                 if gone:
-                    killed.append(t)
+                    killed.append((oid, t, max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))))
             if used and killed:
-                ds = (st.score - sc0) / len(killed)
-                for t in killed:
-                    v = K.use_score.setdefault(t, [0.0, 0]); v[0] += ds; v[1] += 1
+                # puntaje del tick exacto en que desapareció cada uno (no de toda la ventana: ahí caen también
+                # los −1 de lo que llegó a una ciudad), y solo de los que estaban donde usar sí afecta
+                for oid, t, key_lift in killed:
+                    if key_lift < 0.5 or oid not in self._vanish_ds:
+                        continue
+                    v = K.use_score.setdefault(t, [0.0, 0]); v[0] += self._vanish_ds[oid]; v[1] += 1
         self._probes = keep
 
     def _danger_near(self, st, R, thr=0.3):
@@ -589,7 +593,7 @@ class Commander:
             if t in K.avatar_types:
                 continue
             if dt:
-                pth = getattr(self.nav, "_paths", {}).get(oid)
+                pth = getattr(self.nav, "_paths", {}).get(oid) if self.P.get("aim_paths", True) else None
                 if pth:                                    # perseguidor / fugitivo: adonde lo lleva su tendencia
                     x, y = pth[max(1, min(int(dt), len(pth))) - 1]
                 else:
@@ -624,6 +628,15 @@ class Commander:
         if self.P["push"]:
             self._learn_push(st)
         if self.P["use"]:
+            # qué desapareció este tick y cuánto cambió el puntaje justo ahora (para el valor de usar)
+            prev = getattr(self, "_prev_objs", None)
+            if prev is not None:
+                gone = [o for o in prev if o not in st.objects]
+                if gone:
+                    ds = (st.score - self._prev_score) / len(gone)
+                    for o in gone:
+                        self._vanish_ds[o] = ds
+            self._prev_objs, self._prev_score = set(st.objects), st.score
             self._resolve_probes(st)
             eps = self._use_eps()
             R = getattr(self.nav, "_R", None)              # no experimentar con peligro cerca: es gastar un tick
@@ -736,4 +749,6 @@ class Commander:
         self.plan, self._mv, self._pos_last = None, None, None
         self._eps_cache = None
         self._last_st = None
+        self._prev_objs = None
+        self._vanish_ds = {}
         self.nav.last = None

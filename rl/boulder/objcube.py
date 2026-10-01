@@ -271,7 +271,10 @@ class ObjectCubeNavigator(CubeNavigator):
                 # camión que va a la derecha "se acerca" por casualidad a lo que está a la derecha)
                 dd = self.track.dirs.get(t, {})
                 straight = max(dd.values()) / sum(dd.values()) if dd else 0.0
-                if attr is not None and attr[2] > straight and t not in self.know.avatar_types:
+                # y solo si el objetivo es el avatar, que se mueve: hacia algo quieto (un misil a una ciudad) la
+                # velocidad constante ya lo describe bien, y la tendencia empeoraba la puntería
+                to_avatar = attr is not None and (attr[0] == -1 or attr[0] in self.know.avatar_types)
+                if to_avatar and attr[2] > straight and t not in self.know.avatar_types:
                     pth = self.track.predict(st, oid, self.Hz, attr[:2], blocked)
                     if pth:
                         paths[oid] = pth
