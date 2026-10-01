@@ -42,7 +42,7 @@ Los bordes de la tierra que dan a un hueco son ondulados y con trazo de lápiz, 
 
 Los muros de ladrillo y el acero (placas remachadas) también están dibujados a mano. Las rocas y diamantes quietos se ven encajados en la tierra: detrás tienen tierra con sombra y solo se abren hacia las casillas vacías; las rocas se dibujan un poco más grandes para que las vecinas se toquen.
 
-Si nadie toca los controles, cada niño arma un plan al azar: tras un momento hace algunas de estas cosas en orden y duración al azar (mirar a los lados, saludar, silbar marcando el paso con el pie, bostezar) y casi siempre termina dormido apoyado en la pala.
+Si nadie toca los controles, cada niño arma un plan al azar: tras un momento hace algunas de estas cosas en orden y duración al azar (mirar a los lados, saludar, silbar marcando el paso con el pie, bostezar). Al final se aburren: la mitad de las veces se quedan dormidos apoyados en la pala y si no, el niño saca una pelota y juega a lanzarla y la niña se pone a leer un libro.
 
 Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o tijera: estiran el brazo hacia el otro y agitan el puño al ritmo de «piedra, papel, tijera», muestran la mano (puño, mano abierta o dos dedos), el que gana celebra y el marcador queda sobre ellos.
 
