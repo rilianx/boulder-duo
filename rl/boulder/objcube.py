@@ -253,8 +253,12 @@ class ObjectCubeNavigator(CubeNavigator):
             blocked = self.know.blocked_cells(st)
             for oid, (t, x, y) in st.objects.items():
                 attr = self.know.attractor(t)
-                if attr is not None and t not in self.know.avatar_types:
-                    pth = self.track.predict(st, oid, self.Hz, attr, blocked)
+                # solo si la tendencia explica sus movimientos mejor que ir siempre en la misma dirección (un
+                # camión que va a la derecha "se acerca" por casualidad a lo que está a la derecha)
+                dd = self.track.dirs.get(t, {})
+                straight = max(dd.values()) / sum(dd.values()) if dd else 0.0
+                if attr is not None and attr[2] > straight and t not in self.know.avatar_types:
+                    pth = self.track.predict(st, oid, self.Hz, attr[:2], blocked)
                     if pth:
                         paths[oid] = pth
         self._paths = paths

@@ -372,7 +372,7 @@ class Knowledge:
         return (r[3] / r[0] if r[2] > 0.5 * r[0] else 0.0), r[0]
 
     def attractor(self, t):
-        """(objetivo, signo) si los movimientos del tipo t casi siempre lo acercan (+1) o alejan (−1) de algo:
+        """(objetivo, signo, fracción) si los movimientos del tipo t casi siempre lo acercan (+1) o alejan (−1) de algo:
         objetivo −1 = avatar, u = tipo u. None si no hay una tendencia clara."""
         best = None
         for u, (c, f) in self.rel.get(t, {}).items():
@@ -383,7 +383,7 @@ class Knowledge:
                 q = k / n
                 if q >= 0.75 and (best is None or q > best[2]):
                     best = (u, sign, q)
-        return None if best is None else best[:2]
+        return best                                          # (objetivo, signo, fracción explicada)
 
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
