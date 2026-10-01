@@ -1861,7 +1861,8 @@ let src = new Int32Array(W*H).fill(-1), srcAt = new Float64Array(W*H), dugAt = n
 function glideEase(i, k){
   if (k <= 0) return 0;
   const from = src[i];
-  if (from === i - W && fallN[i] === 0) { const p = 1 - k; return 1 - p * p; }
+  const t = grid[i];
+  if (from === i - W && fallN[i] === 0 && (t === ROCK || t === GEM)) { const p = 1 - k; return 1 - p * p; }   // only things that fall, not a kid walking down
   return k;
 }
 function drawThing(g, s, i, px, py, k, big){
@@ -3464,7 +3465,8 @@ window.__sim = {
     return c.toDataURL();
   },
   cut(v, m, d){ return dirtCut(v, m, d).toDataURL(); },
-  glide(){ return [simT, ...glidePos(players[0])]; },
+  glide(){ return [simT, ...glidePos(players[0]), cams[0].x, cams[0].y]; },
+  column(x, y0, y1){ for (let y = y0; y <= y1; y++) if (grid[y*W + x] !== P1) grid[y*W + x] = DIRT; },
   // tests: put the two kids on row y at columns x1 and x2 with an open corridor between them
   kids(x1, x2, y){
     players.forEach(p => { grid[p.y*W + p.x] = E; });
