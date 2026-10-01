@@ -2243,9 +2243,17 @@ function fallObj(i, x, y){
     if (!(fall[i] || aux[i])) { aux[i] = 1; return; }
     const steps = realGravity && caveRules() && fall[i] ? Math.min(3, 1 + fallT[i]) : 1, ft = fall[i] ? fallT[i] + 1 : 0;
     let cur = i;
-    for (let k = 0; k < steps && grid[cur + W] === E; k++){ move(cur, cur + W); cur += W; fall[cur] = 1; }
+    let k = 0;
+    for (; k < steps && grid[cur + W] === E; k++){ move(cur, cur + W); cur += W; fall[cur] = 1; }
     fallT[cur] = Math.min(250, ft);
     if (cur !== i + W) { src[cur] = i; fallN[cur] = Math.max(1, fallN[cur]); }   // glide the whole drop of this tick
+    // real gravity: still carrying speed when it reaches someone below, it hits them now, not a tick later
+    // (otherwise a kid digging down would always stay one step ahead of a rock that falls faster than they walk)
+    if (k < steps) {
+      const nb = grid[cur + W], cx = cur % W, cy = cur / W | 0;
+      if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) explode(cx, cy + 1, false);
+      else if (nb === FIRE || nb === BUTT) explode(cx, cy + 1, nb === BUTT);
+    }
     return;
   }
   aux[i] = 0;
@@ -3468,6 +3476,8 @@ window.__sim = {
   },
   cut(v, m, d){ return dirtCut(v, m, d).toDataURL(); },
   glide(){ return [simT, ...glidePos(players[0]), cams[0].x, cams[0].y]; },
+  put(x, y, t){ grid[y*W + x] = t; fall[y*W + x] = 0; aux[y*W + x] = 0; },
+  lives(){ return players[0].lives + ',' + players[0].alive; },
   column(x, y0, y1){ for (let y = y0; y <= y1; y++) if (grid[y*W + x] !== P1) grid[y*W + x] = DIRT; },
   // tests: put the two kids on row y at columns x1 and x2 with an open corridor between them
   kids(x1, x2, y){
