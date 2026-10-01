@@ -58,6 +58,8 @@ button{font-family:var(--display);font-size:12px;padding:12px 16px;background:va
 button:hover{border-color:var(--gem)}
 button.b1{border-color:var(--p1)} button.b2{border-color:var(--p2)}
 .sets button{font-size:10px;padding:8px 10px}
+.cavegrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;width:100%}
+.cavegrid button{font-size:10px;padding:8px 2px} .cavegrid button.on{border-color:var(--warn);color:var(--warn)}
 @media (max-height:600px){ .card .long{display:none} .card{gap:10px} .card .row button{padding:9px 12px} } .sets button.on{border-color:var(--warn);color:var(--warn)}
 .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .legend > div{background:var(--panel);border:2px solid var(--line);padding:10px 12px;min-width:0}
@@ -1956,6 +1958,9 @@ function menu(){
       <button id="bpc" class="b2">CONTRA PC</button>
       <button id="btrain">ENTRENAR PC</button>
     </div>
+    <div class="row">
+      <button id="bpick">ELEGIR CUEVA · ${caveLabel(startN())}</button>
+    </div>
     <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
@@ -1966,9 +1971,32 @@ function menu(){
   $('bvs').onclick = () => startGame('versus');
   $('bpc').onclick = () => startGame('pc');
   $('btrain').onclick = () => startGame('train');
-  const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(1); menu(); };
+  const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
+  $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
   onEnter = () => startGame('coop');
+}
+
+/* Cave picker: 20 caves (A–P plus the four intermissions) and the five difficulty levels. The chosen cave shows
+   behind the menu and is where every game starts; it is remembered per game. */
+const startKey = () => 'boulder-duo-start-' + caveSet;
+function startN(){ try { const v = +localStorage.getItem(startKey()); if (v >= 1 && v <= 100) return v; } catch (e) {} return 1; }
+function setStartN(n){ try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
+function caveShort(nm){ const m = /^Cave ([A-Z])/.exec(nm), im = /^Intermission (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : nm.slice(0, 5); }
+function caveMenu(){
+  const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
+  initLevel(n0); state = 'menu';
+  showOverlay(`<div class="card">
+    <h2>ELEGIR CUEVA</h2>
+    <div class="cavegrid">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}</button>`).join('')}</div>
+    <div class="row sets lvls">${[0,1,2,3,4].map(l => `<button data-l="${l}" class="${l === lvl ? 'on' : ''}">NIVEL ${l + 1}</button>`).join('')}</div>
+    <p>${caveLabel(n0)}${caveTitle(n0) ? ' · ' + caveTitle(n0) : ''} · ${need} diamantes · ${timeLeft} s</p>
+    <div class="row"><button id="bpdone" class="b1">LISTO</button></div>
+  </div>`);
+  ov.querySelectorAll('.cavegrid button').forEach(b => b.onclick = () => { setStartN(+b.dataset.i + 1 + lvl * cs.length); caveMenu(); });
+  ov.querySelectorAll('.lvls button').forEach(b => b.onclick = () => { setStartN(idx + 1 + +b.dataset.l * cs.length); caveMenu(); });
+  $('bpdone').onclick = menu; onEnter = menu;
+  const sel = ov.querySelector('.cavegrid .on'); if (sel) sel.focus({ preventScroll: true });
 }
 
 function askTouch(){
@@ -2001,7 +2029,7 @@ function startGame(m){
   $('aipanel').hidden = !aiMode;
   $('speeds').hidden = mode !== 'train';
   setSpeed(1);
-  initLevel(1);
+  initLevel(mode === 'train' ? 1 : startN());
   drawAiPanel(true);
 }
 
@@ -2790,7 +2818,7 @@ window.__sim = {
 
 /* demo board behind the menu so the first frame shows a real mine */
 players = [newPlayer(0), newPlayer(1)];
-initLevel(1);
+initLevel(startN());
 menu();
 requestAnimationFrame(loop);
 })();
