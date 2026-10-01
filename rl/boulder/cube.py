@@ -86,7 +86,7 @@ class CubeNavigator(Navigator):
             # el camino se puede cerrar por un rato (una roca que cae o rebota): esperar; "inalcanzable"
             # solo tras 10 ticks sin camino (en total, en esta orden)
             self._unreach += 1
-            return None if self._unreach >= 10 else (math.inf, -1)
+            return None if self._unreach >= 10 else (math.inf, self._safest_move(st, R, now_blocked))
         # impaciencia: si el avatar no se acerca al destino, el peso del riesgo baja a la mitad cada
         # P["patience"] ticks (piso 0,1), para no esperar para siempre un peligro que nunca se va
         if goal != getattr(self, "_goal", None):
@@ -227,6 +227,25 @@ class CubeNavigator(Navigator):
         if dist[st.pos] is None and not blocked[st.pos]:
             pass
         return dist
+
+    def _safest_move(self, st, R, blocked, k=4):
+        """Sin camino a la meta no conviene quedarse quieto sin más (algo puede venir persiguiendo): el
+        movimiento (o quedarse, −1) con menos riesgo previsto en esa casilla durante los próximos k ticks."""
+        if not len(R):
+            return -1
+        W, N = st.W, len(st.masks)
+        x, y = st.pos % W, st.pos // W
+        best, act = None, -1
+        for d, (dx, dy) in [(-1, (0, 0)), (0, (0, -1)), (1, (1, 0)), (2, (0, 1)), (3, (-1, 0))]:
+            if not (0 <= x + dx < W and 0 <= y + dy < st.H):
+                continue
+            c = st.pos + dy * W + dx
+            if d >= 0 and blocked[c]:
+                continue
+            h = sum(-math.log(max(1e-4, 1 - float(R[i][c]))) for i in range(min(k, len(R))))
+            if best is None or h < best - 1e-6:
+                best, act = h, d
+        return act
 
     def _cube(self, st):
         return self._br.future(self.Hz, self.reps)

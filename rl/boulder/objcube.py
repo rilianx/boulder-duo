@@ -108,8 +108,21 @@ class ObjectTracker:
             r[0 if d1 < d0 else 1] += 1
 
     def speed(self, oid):
-        vx, vy = self.velocity(oid)
-        return abs(vx) + abs(vy)
+        """Casillas recorridas por tick (camino, no desplazamiento neto: lo que zigzaguea no es lento)."""
+        h = self.hist.get(oid, [])
+        if len(h) < 2:
+            return 0.0
+        path = sum(abs(b[1] - a[1]) + abs(b[2] - a[2]) for a, b in zip(h, h[1:]))
+        return path / max(h[-1][0] - h[0][0], 1)
+
+    def type_speed(self, st, t):
+        """Rapidez típica de un tipo (promedio de sus objetos con historia); sin datos, 1 (prudente): un
+        objeto recién aparecido (una cabra que se acaba de enojar) no tiene historia propia."""
+        vs = [self.speed(o) for o, (tt, _, _) in st.objects.items() if tt == t and len(self.hist.get(o, [])) >= 3]
+        if vs:
+            return sum(vs) / len(vs)
+        m = self.moves.get(t)
+        return 1.0 if not m else max(0.2, min(1.0, m[0] / max(1, sum(len(h) for h in self.hist.values()))))
 
     def predict(self, st, oid, H, attr, blocked):
         """Posiciones (x, y) en los ticks 1..H de un objeto que se acerca (signo +1) o aleja (−1) de su
@@ -122,7 +135,8 @@ class ObjectTracker:
             goals = [(i % st.W, i // st.W) for i, m in enumerate(st.masks) if m >> u & 1]
         if not goals:
             return None
-        v = max(self.speed(oid), 0.05)
+        v = self.speed(oid) if len(self.hist.get(oid, [])) >= 3 else self.type_speed(st, t)
+        v = max(v, 0.05)
         out = []
         for _ in range(H):
             best = None
@@ -132,7 +146,7 @@ class ObjectTracker:
                 if not (0 <= cx < st.W and 0 <= cy < st.H) or blocked[cy * st.W + cx] and (cx, cy) != (int(round(x)), int(round(y))):
                     continue
                 dist = min(abs(nx - gx) + abs(ny - gy) for gx, gy in goals)
-                key = -sign * dist
+                key = sign * dist                     # perseguidor: menor distancia; fugitivo: mayor
                 if best is None or key < best[0]:
                     best = (key, nx, ny)
             if best is not None:
@@ -262,12 +276,27 @@ class ObjectCubeNavigator(CubeNavigator):
                     if pth:
                         paths[oid] = pth
         self._paths = paths
+        chasers = {}                                     # perseguidores del avatar → su rapidez
+        for oid in paths:
+            t = st.objects[oid][0]
+            a = self.know.attractor(t)
+            if a[1] > 0 and (a[0] == -1 or a[0] in self.know.avatar_types):
+                h = self.track.hist.get(oid, [])
+                chasers[oid] = self.track.speed(oid) if len(h) >= 3 else self.track.type_speed(st, t)
         cube = []
         for k in range(1, self.Hz + 1):
             masks = list(static)
             for oid, (t, x, y) in st.objects.items():
                 bit = 1 << t
                 if oid in paths:                         # perseguidor / fugitivo: según su tendencia aprendida
+                    if oid in chasers:
+                        # persigue al avatar, que también se mueve: peligrosa toda la zona que alcanza en k ticks
+                        r = min(3, int(math.ceil(chasers[oid] * k)))
+                        cx, cy = int(round(x)), int(round(y))
+                        for yy in range(max(0, cy - r), min(H, cy + r + 1)):
+                            for xx in range(max(0, cx - r), min(W, cx + r + 1)):
+                                if abs(xx - cx) + abs(yy - cy) <= r:
+                                    masks[yy * W + xx] |= bit
                     px, py = paths[oid][k - 1]
                     for xx in {int(math.floor(px)), int(math.ceil(px))}:
                         for yy in {int(math.floor(py)), int(math.ceil(py))}:

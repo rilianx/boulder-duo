@@ -562,6 +562,15 @@ class Commander:
                     v = K.use_score.setdefault(t, [0.0, 0]); v[0] += ds; v[1] += 1
         self._probes = keep
 
+    def _danger_near(self, st, R, thr=0.3):
+        W = st.W
+        x, y = st.pos % W, st.pos // W
+        for k in range(min(3, len(R))):
+            for dx, dy in ((0, 0), (0, -1), (1, 0), (0, 1), (-1, 0)):
+                if 0 <= x + dx < W and 0 <= y + dy < st.H and float(R[k][st.pos + dy * W + dx]) > thr:
+                    return True
+        return False
+
     def _use_eps(self):
         """Probabilidad de usar al azar para aprender: baja a un décimo cuando ya se probó bastante y usar no
         hizo desaparecer nada más que sin usar (en Boulder Dash, por ejemplo, solo gasta ticks)."""
@@ -617,6 +626,9 @@ class Commander:
         if self.P["use"]:
             self._resolve_probes(st)
             eps = self._use_eps()
+            R = getattr(self.nav, "_R", None)              # no experimentar con peligro cerca: es gastar un tick
+            if R is not None and len(R) and self._danger_near(st, R):
+                eps = 0.0
             if self.learn and self.rng.random() < eps:                     # explorar: usar al azar...
                 self._probe(st, True)
                 return "use"
