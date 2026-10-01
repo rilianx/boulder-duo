@@ -199,6 +199,9 @@ class Knowledge:
         # al perder y a mitad de partida; y en qué tick terminó cada partida {tick: [partidas, victorias]}
         self.ends = {"win": {}, "loss": {}, "mid": {}}
         self.end_ticks = {}
+        # qué movimientos mueven al avatar: por dirección (arriba, derecha, abajo, izquierda), [se movió,
+        # intentos hacia una casilla libre]. Una nave tipo Space Invaders solo se mueve hacia los lados
+        self.dir_moves = [[0, 0], [0, 0], [0, 0], [0, 0]]
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -220,6 +223,13 @@ class Knowledge:
         for t in types:
             d = self.term.setdefault(t, {}).setdefault(f"{atype}|{res}", [0, 0])
             d[0] += 1
+
+    def lethality(self, t):
+        """Fracción de veces que tocar t terminó en derrota (contado, no estimado): 0 con pocos datos."""
+        e = self.eff.get(t)
+        if not e or e[4] < 3:
+            return 0.0
+        return e[4] / (e[4] + e[0])
 
     def p_win(self, t, atype, res):
         """P(ganar al tocar t | tipo de avatar, recursos): umbral de recursos aprendido de las victorias."""
@@ -308,6 +318,14 @@ class Knowledge:
             dd = self.teleport.setdefault(t, {})
             for e in landed:
                 dd[e] = dd.get(e, 0) + 1
+
+    def record_dir(self, d, moved):
+        r = self.dir_moves[d]; r[0] += int(moved); r[1] += 1
+
+    def dir_ok(self, d):
+        """¿Moverse en la dirección d mueve al avatar? False si se intentó bastante y casi nunca funcionó."""
+        m, n = self.dir_moves[d]
+        return not (n >= 15 and m <= 0.05 * n)
 
     def record_turn(self, moved):
         """Intento de moverse cambiando de dirección hacia una casilla pisable: ¿se movió o solo giró?"""
@@ -439,7 +457,7 @@ class Knowledge:
                 "use_score": self.use_score, "teleport": self.teleport, "push": self.push,
                 "push_into": {t: {str(m): v for m, v in dd.items()} for t, dd in self.push_into.items()},
                 "rel": {t: {str(u): v for u, v in dd.items()} for t, dd in self.rel.items()},
-                "ends": self.ends, "end_ticks": self.end_ticks}
+                "ends": self.ends, "end_ticks": self.end_ticks, "dir_moves": self.dir_moves}
 
     @classmethod
     def from_json(cls, d):
@@ -466,6 +484,7 @@ class Knowledge:
         for kind in ("win", "loss", "mid"):
             k.ends.setdefault(kind, {})
         k.end_ticks = {int(t): list(v) for t, v in d.get("end_ticks", {}).items()}
+        k.dir_moves = [list(v) for v in d.get("dir_moves", [[0, 0]] * 4)]
         k.push_into = {int(a): {int(m): list(v) for m, v in b.items()} for a, b in d.get("push_into", {}).items()}
         return k
 
@@ -601,7 +620,9 @@ class GenericAgent:
                 K.record_jump(mask, st.masks[st.pos])      # teletransporte: se movió, y lejos
                 moved = True
             # los avatares orientados giran sin moverse al cambiar de dirección: eso no es un bloqueo
-            if moved or same_dir:
+            if same_dir and not any(mask >> t & 1 and K.is_blocking(t) for t in range(63)):
+                K.record_dir(d, moved)
+            if (moved or same_dir) and K.dir_ok(d):        # si esa dirección no mueve, no es culpa de la casilla
                 K.record_move(mask, moved)
             if not moved and same_dir:                # chocar también es probar: agota la curiosidad
                 bumped = [t for t in range(63) if mask >> t & 1 and t not in K.avatar_types and t not in K.floor]

@@ -51,6 +51,27 @@ class CellRisk:
         return 1 / (1 + np.exp(-(pres @ self.w[: self.T] + self.b)))
 
 
+class KnownRisk:
+    """Riesgo por casilla = máximo entre el modelo aprendido (regresión logística) y lo contado: si tocar un
+    tipo casi siempre mató (≥ 50 %), su casilla tiene al menos ese riesgo. Con pocas muertes de entrenamiento
+    la regresión subestima (bombas de Ikaruga: 37 % estimado, 34 de 38 toques mortales contados)."""
+
+    def __init__(self, base, know):
+        self.base, self.know = base, know
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
+
+    def grid(self, masks):
+        r = self.base.grid(masks)
+        lethal = [(t, L) for t in list(self.know.eff) for L in [self.know.lethality(t)] if L >= 0.5 and t < 63]
+        if lethal:
+            m = np.array(masks, dtype=np.int64)
+            for t, L in lethal:
+                r = np.maximum(r, ((m >> t) & 1) * L)
+        return r
+
+
 class CubeNavigator(Navigator):
     def __init__(self, know, risk: CellRisk, P, horizon=H_DEFAULT, reps=3, danger=None, **kw):
         """danger (opcional): predictor de muerte sobre la grilla actual; el riesgo de un paso pasa a ser
@@ -124,6 +145,7 @@ class CubeNavigator(Navigator):
         pred = {}
         if self.pred is not None:
             pred = self.pred.probs(st, [j for j in range(N) if not now_blocked[j] and inwin(j)])
+        dirs_ok = [K.dir_ok(d) for d in range(4)]
         start = (st.pos, 0)
         best = {start: 0.0}; first = {start: -1}
         facing = {start: self.last_dir}                     # dirección del avatar (si gira antes de moverse)
@@ -152,6 +174,8 @@ class CubeNavigator(Navigator):
             x, y = c % W, c // W
             for d in range(5):
                 if d < 4:
+                    if not dirs_ok[d]:                       # esa dirección no mueve al avatar
+                        continue
                     xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
                     if not (0 <= xx < W and 0 <= yy < Hh):
                         continue
@@ -218,6 +242,8 @@ class CubeNavigator(Navigator):
             for i in fr:
                 x, y = i % W, i // W
                 for d, o in enumerate((-W, 1, W, -1)):
+                    if not self.know.dir_ok((d + 2) % 4):   # de j a i se va en la dirección opuesta
+                        continue
                     xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
                     j = i + o
                     if 0 <= xx < W and 0 <= yy < st.H and dist[j] is None and not blocked[j]:
@@ -240,7 +266,7 @@ class CubeNavigator(Navigator):
             if not (0 <= x + dx < W and 0 <= y + dy < st.H):
                 continue
             c = st.pos + dy * W + dx
-            if d >= 0 and blocked[c]:
+            if d >= 0 and (blocked[c] or not self.know.dir_ok(d)):
                 continue
             h = sum(-math.log(max(1e-4, 1 - float(R[i][c]))) for i in range(min(k, len(R))))
             if best is None or h < best - 1e-6:

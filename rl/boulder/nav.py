@@ -111,7 +111,9 @@ class Navigator:
                 types = [t for t in range(63) if mask >> t & 1 and t not in self.know.avatar_types]
                 log.add("move", types, expect != moved)
             if self.learn:
-                if moved or same:
+                if free and (same or not self.know.turn_cost) and not jump:
+                    self.know.record_dir(d, moved)
+                if (moved or same) and self.know.dir_ok(d):   # si esa dirección no mueve, no es la casilla
                     self.know.record_move(mask, moved, res)
                 if not same and free:
                     self.know.record_turn(moved)

@@ -97,6 +97,9 @@ def practice(a):
                     o = K0.teleport.get(t, {}).get(e, 0)
                     m = base.teleport.setdefault(t, {})
                     m[e] = m.get(e, 0) + cnt - o
+            for dd_i in range(4):
+                for q in range(2):
+                    base.dir_moves[dd_i][q] += k.dir_moves[dd_i][q] - K0.dir_moves[dd_i][q]
             for kind, dd in k.ends.items():
                 for t, v in dd.items():
                     o = K0.ends.get(kind, {}).get(t, [0, 0])

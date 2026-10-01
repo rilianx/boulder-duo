@@ -181,6 +181,9 @@ class ObjectTracker:
 
 class ObjectCubeNavigator(CubeNavigator):
     def __init__(self, know, risk, P, horizon=20, danger=None, **kw):
+        if P.get("lethal_floor", True):
+            from .cube import KnownRisk
+            risk = KnownRisk(risk, know)
         super().__init__(know, risk, P, horizon=horizon, reps=1, danger=danger, **kw)
         self.track = ObjectTracker()
         self.track.dirs = know.move_dirs            # hacia dónde se mueve cada tipo: persiste entre partidas

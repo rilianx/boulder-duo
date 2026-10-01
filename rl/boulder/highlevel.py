@@ -54,6 +54,7 @@ class Commander:
                                             and abs(j % W - ax) + abs(j // W - ay) <= 6])
         alpha, w = self.nav.P.get("alpha", 1.0), self.P["w_oracle"]
         offs = (-W, 1, W, -1)
+        dirs_ok = [K.dir_ok(d) for d in range(4)]
         best = {st.pos: 0.0}
         info = {st.pos: (0, 0.0)}
         self._prev = prev = {st.pos: None}
@@ -65,6 +66,8 @@ class Commander:
             t, H = info[i]
             x, y = i % W, i // W
             for d in range(4):
+                if not dirs_ok[d]:
+                    continue
                 xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
                 if not (0 <= xx < W and 0 <= yy < st.H):
                     continue
@@ -529,34 +532,45 @@ class Commander:
     # ------------------------------------------------------------------ usar
     FWD = {0: ((0, -1), (1, 0)), 1: ((1, 0), (0, 1)), 2: ((0, 1), (-1, 0)), 3: ((-1, 0), (0, -1))}
 
-    def _keys(self, dx, dy, facing):
+    def _keys(self, dx, dy, facing, atype=None):
         ks = [f"a|{dx}|{dy}"]
         if facing is not None:
             (fx, fy), (rx, ry) = self.FWD[facing]
             ks.append(f"f|{dx * rx + dy * ry}|{dx * fx + dy * fy}")
+        if atype is not None:                             # además, según el tipo de avatar (una nave blanca
+            ks += [f"t{atype}|{k}" for k in ks]           # no mata aliens negros)
         return ks
+
+    def _lift(self, t, dx, dy, facing, atype):
+        """Efecto de usar sobre t: el específico del tipo de avatar si hay datos, si no el general."""
+        K, best = self.know, 0.0
+        for k in self._keys(dx, dy, facing):
+            sk = f"t{atype}|{k}"
+            u = K.use_kill.get(t, {}).get(sk)
+            best = max(best, K.use_lift(t, sk) if u and u[1] >= 3 else K.use_lift(t, k))
+        return best
 
     def _probe(self, st, used):
         snap = {oid: (t, x, y) for oid, (t, x, y) in st.objects.items() if t not in self.know.avatar_types
                 and abs(x - st.fx) <= self.P["use_R"] and abs(y - st.fy) <= self.P["use_R"]}
         if snap:
-            self._probes.append((st.tick, used, st.fx, st.fy, self.nav.last_dir, snap, st.score))
+            self._probes.append((st.tick, used, st.fx, st.fy, self.nav.last_dir, snap, st.score, st.atype))
 
     def _resolve_probes(self, st):
         K, keep = self.know, []
         for pr in self._probes:
-            tick, used, ax, ay, facing, snap, sc0 = pr
+            tick, used, ax, ay, facing, snap, sc0, at = pr
             if st.tick - tick < self.P["use_lag"]:
                 keep.append(pr); continue
             table = K.use_kill if used else K.use_base
             killed = []
             for oid, (t, x, y) in snap.items():
                 gone = oid not in st.objects
-                for key in self._keys(int(round(x - ax)), int(round(y - ay)), facing):
+                for key in self._keys(int(round(x - ax)), int(round(y - ay)), facing, at):
                     r = table.setdefault(t, {}).setdefault(key, [0, 0])
                     r[0] += gone; r[1] += 1
                 if gone:
-                    killed.append((oid, t, max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))))
+                    killed.append((oid, t, self._lift(t, int(round(x - ax)), int(round(y - ay)), facing, at)))
             if used and killed:
                 # puntaje del tick exacto en que desapareció cada uno (no de toda la ventana: ahí caen también
                 # los −1 de lo que llegó a una ciudad), y solo de los que estaban donde usar sí afecta
@@ -599,7 +613,7 @@ class Commander:
                 else:
                     vx, vy = self.nav.track.velocity(oid)
                     x, y = x + vx * dt, y + vy * dt
-            lift = max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))
+            lift = self._lift(t, int(round(x - ax)), int(round(y - ay)), facing, st.atype)
             if lift > 0:
                 v = K.use_value(t)
                 a = K.attractor(t)
@@ -647,7 +661,8 @@ class Commander:
                 return "use"
             if self.learn and self.rng.random() < eps:                     # ...y la comparación sin usar
                 self._probe(st, False)
-            if self._use_ev(st, st.fx, st.fy, self.nav.last_dir) > self.P["use_thr"]:
+            danger_here = R is not None and len(R) and any(float(R[k][st.pos]) > 0.3 for k in range(min(6, len(R))))
+            if not danger_here and self._use_ev(st, st.fx, st.fy, self.nav.last_dir) > self.P["use_thr"]:
                 self.stats["use"] = self.stats.get("use", 0) + 1
                 self._probe(st, True)
                 return "use"
