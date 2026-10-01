@@ -167,7 +167,7 @@ class Sim:
     def _move(self, i, j):
         g, f, d = self.grid, self.fall, self.dir
         g[j] = g[i]; d[j] = d[i]; f[j] = f[i]
-        g[i] = E; f[i] = 0; self.moved[j] = 1
+        g[i] = E; f[i] = 0; self.aux[i] = self.aux[j] = 0; self.moved[j] = 1
 
     def _kill(self):
         a = self.agent
@@ -232,8 +232,13 @@ class Sim:
         b = i + W
         bt = g[b]
         if bt == E:
-            self._move(i, b); f[b] = 1
+            # quieta, espera un tick antes de empezar a caer (aux la marca)
+            if f[i] or self.aux[i]:
+                self._move(i, b); f[b] = 1
+            else:
+                self.aux[i] = 1
             return
+        self.aux[i] = 0
         if f[i]:
             if bt == P1 or bt == P2:
                 if bt != self.CELL or self.agent.immune <= 0:

@@ -537,7 +537,7 @@ function exitVisiblyOpen(){ return mode === 'coop' ? exitOpenFor(players[0]) : p
 
 function move(i, j){
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
-  grid[i] = E; fall[i] = 0; moved[j] = 1;
+  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1;
 }
 
 function killPlayer(p){
@@ -584,7 +584,9 @@ function stepPlayer(p){
 
 function fallObj(i, x, y){
   const b = i + W, bt = grid[b];
-  if (bt === E) { move(i, b); fall[b] = 1; return; }
+  // A resting rock or gem waits one tick before it starts to fall (aux marks it), so you can step out from under it.
+  if (bt === E) { if (fall[i] || aux[i]) { move(i, b); fall[b] = 1; } else aux[i] = 1; return; }
+  aux[i] = 0;
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (players[bt-P1].immune <= 0) { explode(x, y+1, false); return; }

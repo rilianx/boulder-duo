@@ -14,6 +14,8 @@ Se juega en **horizontal**: J1 desliza en el tablero de la izquierda y J2 en el 
 
 La salida está escondida en la fila de abajo del mapa y aparece al juntar las gemas necesarias: suena una fanfarria, sale el aviso «¡SALIDA ABIERTA!» y, si no está en pantalla, una flecha en el borde del tablero apunta hacia ella.
 
+Las rocas y gemas quietas esperan un tick antes de empezar a caer cuando les quitan el piso, así alcanzas a salir de debajo.
+
 ## Modos
 
 - **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta.
