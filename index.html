@@ -2658,6 +2658,20 @@ function updateHud(){
 const cams = [{x:0, y:0}, {x:0, y:0}];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const idleSecs = p => p.alive && !p.ai && state === 'play' ? p.idle * TICK / 1000 : 0;
+/* What a kid does while nobody plays it: a new random plan each time it stops (drawing only, not the game).
+   It waits a moment, then does a few things in random order and for random lengths, and may end up asleep. */
+function idleAct(p){
+  const it = idleSecs(p);
+  if (it <= 0) { p.idlePlan = null; return ''; }
+  if (!p.idlePlan) {
+    const acts = ['look', 'wave', 'tap', 'yawn', 'look', 'tap'].sort(() => Math.random() - .5).slice(0, 2 + Math.floor(Math.random() * 3));
+    let t = 1.5 + Math.random() * 3; const plan = [['', t]];
+    acts.forEach(a => { t += a === 'yawn' ? 2 + Math.random() : 2 + Math.random() * 3; plan.push([a, t]); plan.push(['', t += Math.random() * 2]); });
+    plan.push([Math.random() < .7 ? 'sleep' : 'look', Infinity]);
+    p.idlePlan = plan;
+  }
+  return p.idlePlan.find(([, until]) => it < until)[0];
+}
 function glidePos(p){
   const from = src[p.y*W + p.x], k = 1 - lerpT;
   return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k, p.y + ((from / W | 0) - p.y) * k] : [p.x, p.y];
@@ -2714,12 +2728,12 @@ function tileSprite(t, i, x, y, af, open){
       const set = PL_T[p.id];
       if (p.dig >= 0 && lerpT < 1) return set.dig[p.dig][lerpT < .5 ? 0 : 1][p.face];
       // nobody touching the controls: look around, wave, whistle tapping a foot, yawn, then doze off
-      const it = idleSecs(p);
-      if (it >= 14) return set.sleep[p.face];
-      if (it >= 11.5) return set.yawn[p.face];
-      if (it >= 8) return set.tap[(frame >> 3) & 1][p.face];
-      if (it >= 5) return set.wave[(frame >> 3) & 1][p.face];
-      if (it >= 2) { const f = (frame / 50 | 0) & 1 ? 1 - p.face : p.face; return frame % 100 < 6 ? set.blink[f] : set.idle[f]; }
+      const act = idleAct(p);
+      if (act === 'sleep') return set.sleep[p.face];
+      if (act === 'yawn') return set.yawn[p.face];
+      if (act === 'tap') return set.tap[(frame >> 3) & 1][p.face];
+      if (act === 'wave') return set.wave[(frame >> 3) & 1][p.face];
+      if (act === 'look') { const f = (frame / 50 | 0) & 1 ? 1 - p.face : p.face; return frame % 100 < 6 ? set.blink[f] : set.idle[f]; }
       if (p.walking) return set.walk[p.stepN % 2][p.face];
       return frame % 180 < 8 ? set.blink[p.face] : set.idle[p.face];
     }
@@ -2787,10 +2801,10 @@ function renderView(k){
   }
   glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T));
   players.forEach(p => {
-    const it = idleSecs(p); if (it < 8 || (it >= 11.5 && it < 14)) return;
+    const act = idleAct(p); if (act !== 'tap' && act !== 'sleep') return;
     const px = p.x*T - ox + T/2, py = p.y*T - oy, t = frame % 90 / 90;
     g.save(); g.textAlign = 'center'; g.globalAlpha = 1 - t;
-    if (it >= 14) {
+    if (act === 'sleep') {
       g.fillStyle = '#e8f0ff'; g.strokeStyle = '#000'; g.lineWidth = .8;
       [[0, 4], [.33, 5], [.66, 6]].forEach(([o, sz]) => { const u = (t + o) % 1; g.globalAlpha = 1 - u; g.font = `bold ${sz}px "Press Start 2P", monospace`; g.strokeText('z', px + 4 + u * 6, py - u * 9); g.fillText('z', px + 4 + u * 6, py - u * 9); });
     } else {

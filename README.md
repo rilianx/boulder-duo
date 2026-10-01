@@ -32,7 +32,7 @@ Los dos llevan una pala y la mueven hacia donde cavan (a los lados, arriba o aba
 
 Los muros de ladrillo y el acero (placas remachadas) también están dibujados a mano. Las rocas y diamantes quietos se ven encajados en la tierra: detrás tienen tierra con sombra y solo se abren hacia las casillas vacías; las rocas se dibujan un poco más grandes para que las vecinas se toquen.
 
-Si nadie toca los controles, los niños miran a los lados, saludan, silban marcando el paso con el pie, bostezan y se quedan dormidos apoyados en la pala.
+Si nadie toca los controles, cada niño arma un plan al azar: tras un momento hace algunas de estas cosas en orden y duración al azar (mirar a los lados, saludar, silbar marcando el paso con el pie, bostezar) y casi siempre termina dormido apoyado en la pala.
 
 ![Una cueva con los nuevos dibujos](docs/cueva.png) ![Durmiendo](docs/durmiendo.png)
 
