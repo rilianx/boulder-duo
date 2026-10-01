@@ -1578,9 +1578,11 @@ const BOOM_T = [0,1,2,3].map(st => {
 
 /* The players: a boy (J1, blue) and a girl (J2, orange), round-faced and soft like a hand-drawn film, drawn at
    64×64 and shown in one 16×16 tile. Original characters. step 0 stands, 1 and 2 are the two strides. */
-function kidSprite(girl, step, blink, flip, dig){
+function kidSprite(girl, step, blink, flip, dig, pose){
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
   if (flip) { g.translate(64, 0); g.scale(-1, 1); }
+  const pk = pose ? pose.k : '', pf = pose ? pose.f : 0;
+  if (pk === 'sleep') { g.translate(32, 60); g.rotate(.07); g.translate(-32, -60); }   // dozing, leaning on the shovel
   const OL = '#3b2619', SKIN = '#fbdcc2', HAND = '#f4c9a8';
   g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = 2.2; g.strokeStyle = OL;
   const paint = (fill, path) => { g.beginPath(); path(); g.fillStyle = fill; g.fill(); g.stroke(); };
@@ -1589,14 +1591,21 @@ function kidSprite(girl, step, blink, flip, dig){
   // legs and shoes
   const legs = step === 1 ? [22, 40] : step === 2 ? [28, 35] : [26, 36];
   legs.forEach((lx, k) => {
-    const lift = step && k === (step === 1 ? 1 : 0) ? -2 : 0;
+    const lift = step && k === (step === 1 ? 1 : 0) ? -2 : pk === 'tap' && pf && k === 1 ? -3 : 0;
     paint(SKIN, () => rr(lx - 3, 47 + lift, 6, 10, 2));
     paint(girl ? '#c8352e' : '#5a3a26', () => g.ellipse(lx + 1, 58 + lift, 5, 3, 0, 0, Math.PI * 2));
   });
   g.save(); g.translate(0, bob);
   // arms swing with the stride (the front hand holds the shovel, drawn after the clothes)
   const sw = step === 1 ? 3 : step === 2 ? -3 : 0;
-  if (!dig) paint(HAND, () => g.ellipse(18 - sw * .3, 44 + sw * .4, 3.2, 3.2, 0, 0, Math.PI * 2));
+  if (pk === 'wave') {
+    // back arm up, waving
+    const hx = pf ? 9 : 13, hy = pf ? 15 : 12;
+    g.lineWidth = 6.5; g.beginPath(); g.moveTo(21, 37); g.lineTo(hx + 2, hy + 4); g.stroke();
+    g.lineWidth = 4; g.strokeStyle = girl ? '#e8693f' : '#5b9be0'; g.beginPath(); g.moveTo(21, 37); g.lineTo(hx + 2, hy + 4); g.stroke();
+    g.lineWidth = 2.2; g.strokeStyle = OL;
+    paint(HAND, () => g.ellipse(hx, hy, 3.4, 3.4, 0, 0, Math.PI * 2));
+  } else if (!dig) paint(HAND, () => g.ellipse(18 - sw * .3, 44 + sw * .4, 3.2, 3.2, 0, 0, Math.PI * 2));
   if (girl) {
     // dress, flared, with a white collar
     paint('#e8693f', () => { g.moveTo(24, 33); g.lineTo(40, 33); g.quadraticCurveTo(44, 40, 49, 50); g.quadraticCurveTo(32, 54, 15, 50); g.quadraticCurveTo(20, 40, 24, 33); g.closePath(); });
@@ -1611,7 +1620,7 @@ function kidSprite(girl, step, blink, flip, dig){
   }
   paint('#ffffff', () => { g.moveTo(26, 33); g.lineTo(32, 38); g.lineTo(38, 33); g.closePath(); });
   // the shovel: wooden handle, steel blade at the far end, held in both hands while digging
-  const SH = !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
+  const SH = pk === 'yawn' || pk === 'sleep' ? [49, 26, 51, 64] : !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
            : dig.dir === 'down' ? (dig.f ? [41, 30, 44, 61] : [41, 24, 44, 52]) : (dig.f ? [48, 50, 56, 2] : [47, 52, 55, 12]);
   const [hx1, hy1, hx2, hy2] = SH, ang = Math.atan2(hy2 - hy1, hx2 - hx1);
   const at = t => [hx1 + (hx2 - hx1) * t, hy1 + (hy2 - hy1) * t];
@@ -1624,7 +1633,7 @@ function kidSprite(girl, step, blink, flip, dig){
   g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(2, -3, 6, 1.6);
   g.restore();
   if (dig) paint(HAND, () => g.ellipse(...at(.2), 3.2, 3.2, 0, 0, Math.PI * 2));
-  paint(HAND, () => g.ellipse(...(dig ? at(.5) : [46 + sw * .3, 44 - sw * .4]), 3.2, 3.2, 0, 0, Math.PI * 2));
+  paint(HAND, () => g.ellipse(...(dig ? at(.5) : pk === 'yawn' || pk === 'sleep' ? at(.08) : [46 + sw * .3, 44 - sw * .4]), 3.2, 3.2, 0, 0, Math.PI * 2));
   // back hair for the girl's bob
   if (girl) paint('#8c4322', () => rr(14, 7, 36, 28, 13));
   // head
@@ -1643,14 +1652,16 @@ function kidSprite(girl, step, blink, flip, dig){
   }
   // face looks to the right
   const ex = [34, 43];
-  if (blink) { g.lineWidth = 2; ex.forEach(x => { g.beginPath(); g.arc(x, 21, 2.6, .15 * Math.PI, .85 * Math.PI); g.stroke(); }); g.lineWidth = 2.2; }
+  if (blink || pk === 'yawn' || pk === 'sleep') { g.lineWidth = 2; ex.forEach(x => { g.beginPath(); g.arc(x, 21, 2.6, .15 * Math.PI, .85 * Math.PI); g.stroke(); }); g.lineWidth = 2.2; }
   else ex.forEach(x => {
     g.beginPath(); g.ellipse(x, 21, 2.5, 3.6, 0, 0, Math.PI * 2); g.fillStyle = '#24160f'; g.fill();
     g.beginPath(); g.arc(x + .8, 19.6, 1, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill();
   });
   g.fillStyle = 'rgba(238,118,118,.55)';
   ex.forEach(x => { g.beginPath(); g.ellipse(x - 1, 26.5, 2.8, 1.6, 0, 0, Math.PI * 2); g.fill(); });
-  g.lineWidth = 1.6; g.beginPath(); g.arc(39.5, 27.5, 2, .1 * Math.PI, .9 * Math.PI); g.stroke();
+  if (pk === 'yawn') { g.beginPath(); g.ellipse(39.5, 28.5, 2.4, 3.2, 0, 0, Math.PI * 2); g.fillStyle = '#5a2418'; g.fill(); g.lineWidth = 1.4; g.stroke(); }
+  else if (pk === 'tap') { g.beginPath(); g.ellipse(40.5, 28, 1.4, 1.6, 0, 0, Math.PI * 2); g.fillStyle = '#5a2418'; g.fill(); }   // whistling
+  else { g.lineWidth = 1.6; g.beginPath(); g.arc(39.5, 27.5, pk === 'wave' ? 2.8 : 2, .1 * Math.PI, .9 * Math.PI); g.stroke(); }
   g.restore();
   return c;
 }
@@ -1659,7 +1670,9 @@ function playerSprites(girl){
   const digs = dir => [0, 1].map(f => both(1 + f, false, { dir, f }));
   // dig[d][frame][face], d as in OFF (0 up, 1 right, 2 down, 3 left: left is the mirrored side dig)
   const side = digs('side');
-  return { idle: both(0, false), walk: [both(1, false), both(2, false)], blink: both(0, true), dig: [digs('up'), side, digs('down'), side] };
+  const pose = (k, f) => [kidSprite(girl, 0, false, false, null, { k, f }), kidSprite(girl, 0, false, true, null, { k, f })];
+  return { idle: both(0, false), walk: [both(1, false), both(2, false)], blink: both(0, true), dig: [digs('up'), side, digs('down'), side],
+           wave: [pose('wave', 0), pose('wave', 1)], tap: [pose('tap', 0), pose('tap', 1)], yawn: pose('yawn', 0), sleep: pose('sleep', 0) };
 }
 const PL_T = [playerSprites(false), playerSprites(true)];
 /* ---------- audio ---------- */
@@ -1712,7 +1725,7 @@ function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let 
 
 function newPlayer(id){
   return { id, cell: P1 + id, x:0, y:0, sx:0, sy:0, alive:false, exited:false, lives:3, gems:0, score:0, wins:0,
-           respawn:-1, immune:0, face:0, walking:false, dig:-1, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
+           respawn:-1, immune:0, face:0, walking:false, dig:-1, idle:0, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
 }
 
 function genLevel(n){
@@ -1871,7 +1884,7 @@ function initLevel(n){
   const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
-    p.gems = 0; p.exited = false; p.push = 0; p.held = []; p.walking = false; p.pend = null; p.aiR = 0; p.tr = [];
+    p.gems = 0; p.exited = false; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.pend = null; p.aiR = 0; p.tr = [];
     if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = 16; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
   });
@@ -1910,7 +1923,8 @@ function stepPlayer(p){
   if (!p.alive) return;
   const d = p.held[p.held.length-1];
   p.dig = -1;
-  if (d === undefined) { p.walking = false; p.push = 0; return; }
+  if (d === undefined) { p.walking = false; p.push = 0; p.idle++; return; }
+  p.idle = 0;
   const [dx, dy] = DXY[d];
   if (dx) p.face = dx < 0 ? 1 : 0;
   const i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
@@ -2621,6 +2635,7 @@ function updateHud(){
 /* ---------- cameras ---------- */
 const cams = [{x:0, y:0}, {x:0, y:0}];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const idleSecs = p => p.alive && !p.ai && state === 'play' ? p.idle * TICK / 1000 : 0;
 function glidePos(p){
   const from = src[p.y*W + p.x], k = 1 - lerpT;
   return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k, p.y + ((from / W | 0) - p.y) * k] : [p.x, p.y];
@@ -2676,6 +2691,13 @@ function tileSprite(t, i, x, y, af, open){
       if (p.immune > 0 && (frame >> 2) % 2) return null;
       const set = PL_T[p.id];
       if (p.dig >= 0 && lerpT < 1) return set.dig[p.dig][lerpT < .5 ? 0 : 1][p.face];
+      // nobody touching the controls: look around, wave, whistle tapping a foot, yawn, then doze off
+      const it = idleSecs(p);
+      if (it >= 14) return set.sleep[p.face];
+      if (it >= 11.5) return set.yawn[p.face];
+      if (it >= 8) return set.tap[(frame >> 3) & 1][p.face];
+      if (it >= 5) return set.wave[(frame >> 3) & 1][p.face];
+      if (it >= 2) { const f = (frame / 50 | 0) & 1 ? 1 - p.face : p.face; return frame % 100 < 6 ? set.blink[f] : set.idle[f]; }
       if (p.walking) return set.walk[p.stepN % 2][p.face];
       return frame % 180 < 8 ? set.blink[p.face] : set.idle[p.face];
     }
@@ -2724,6 +2746,18 @@ function renderView(k){
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T));
+  players.forEach(p => {
+    const it = idleSecs(p); if (it < 8 || (it >= 11.5 && it < 14)) return;
+    const px = p.x*T - ox + T/2, py = p.y*T - oy, t = frame % 90 / 90;
+    g.save(); g.textAlign = 'center'; g.globalAlpha = 1 - t;
+    if (it >= 14) {
+      g.fillStyle = '#e8f0ff'; g.strokeStyle = '#000'; g.lineWidth = .8;
+      [[0, 4], [.33, 5], [.66, 6]].forEach(([o, sz]) => { const u = (t + o) % 1; g.globalAlpha = 1 - u; g.font = `bold ${sz}px "Press Start 2P", monospace`; g.strokeText('z', px + 4 + u * 6, py - u * 9); g.fillText('z', px + 4 + u * 6, py - u * 9); });
+    } else {
+      g.fillStyle = '#ffd24a'; g.font = '7px serif'; g.fillText('♪', px + (p.face ? -6 : 6) + Math.sin(t * 6) * 1.5, py + 2 - t * 8);
+    }
+    g.restore();
+  });
   const a = players[1];
   if (k === 1 && a && a.ai && a.alive && AI.showWin && state !== 'menu') {
     const [wx0, wy0, wx1, wy1] = aiWindow(a);
@@ -2949,11 +2983,11 @@ window.__sim = {
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
-    const ps = PL_T.flatMap(set => [set.idle[0], set.walk[0][0], set.walk[1][0], set.blink[1], set.dig[1][0][0], set.dig[1][1][0], set.dig[3][1][1], set.dig[2][0][0], set.dig[2][1][0], set.dig[0][0][1], set.dig[0][1][1]]);
+    const ps = PL_T.flatMap(set => [set.idle[0], set.walk[0][0], set.walk[1][0], set.blink[1], set.dig[1][0][0], set.dig[1][1][0], set.dig[3][1][1], set.dig[2][0][0], set.dig[2][1][0], set.dig[0][0][1], set.dig[0][1][1], set.wave[0][0], set.wave[1][0], set.tap[1][0], set.yawn[0], set.sleep[0]]);
     const os = [...ROCK_T, ...GEM_T.map(f => f[0]), ...BUTT_T.map(f => f[0]), FIRE_T[0], ...BOOM_T.slice(1, 3)];
-    const c = document.createElement('canvas'), z = 96; c.width = 11 * z; c.height = 4 * z;
+    const c = document.createElement('canvas'), z = 96; c.width = 16 * z; c.height = 4 * z;
     const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
-    ps.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, Math.floor(k / 11) * z, z, z));
+    ps.forEach((sp, k) => g.drawImage(sp, (k % 16) * z, Math.floor(k / 16) * z, z, z));
     os.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, (2 + Math.floor(k / 11)) * z, z * .92, z * .92));
     return c.toDataURL();
   },
