@@ -44,7 +44,7 @@ Los muros de ladrillo y el acero (placas remachadas) también están dibujados a
 
 Si nadie toca los controles, cada niño arma un plan al azar: tras un momento hace algunas de estas cosas en orden y duración al azar (mirar a los lados, saludar, silbar marcando el paso con el pie, bostezar). Al final se aburren: la mitad de las veces se quedan dormidos apoyados en la pala y si no, el niño saca una pelota y juega a lanzarla y la niña se pone a leer un libro. Si la niña está quieta a pocas casillas en la misma fila, sin nada entre ellos, el niño en vez de la pelota saca una honda y le tira una bolita de papel; ella cierra los ojos y dice «¡AY!», deja lo que estaba haciendo y se da vuelta enojada mostrándole el puño, mientras él esconde la honda y se pone a silbar mirando para otro lado. Al rato lo vuelve a intentar.
 
-Al empujar una roca, a veces (4 de cada 10) aparece algo que vivía debajo: un ratón que se asusta y corre por el túnel hasta esconderse tras otra roca o perderse, dos bolitas de hollín que saltan y se meten de vuelta en la tierra, o un gusano que asoma la cabeza desde el suelo, mira a los lados y se esconde. Es solo dibujo.
+La primera vez que se empuja una roca, a veces (la mitad de las veces) aparece algo que vivía debajo: un topo que se asusta, corre por el túnel y se mete cavando un hoyo en el suelo, dos bolitas de hollín que saltan y se meten de vuelta en la tierra, o un gusano que asoma la cabeza desde el suelo, mira a los lados y se esconde. Es solo dibujo.
 
 Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o tijera: estiran el brazo hacia el otro y agitan el puño al ritmo de «piedra, papel, tijera», muestran la mano (puño, mano abierta o dos dedos), el que gana celebra y el marcador queda sobre ellos.
 
