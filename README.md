@@ -30,7 +30,11 @@ Los jugadores son un niño (J1, azul) y una niña (J2, naranja), personajes prop
 
 Los dos llevan una pala y la mueven hacia donde cavan (a los lados, arriba o abajo); la tierra se va abriendo desde el centro de la casilla hacia los bordes durante el tick. Las rocas, diamantes, luciérnagas, mariposas, explosiones y la tierra también están dibujados a 64×64, con trazo y sombreado de lápiz como hechos a mano. Hay 8 tipos de roca, diamantes de 6 colores y mariposas de 6 colores; a cada objeto le toca uno al azar y lo conserva al moverse. Todos funcionan igual: solo cambia el dibujo.
 
-![Una cueva con los nuevos dibujos](docs/cueva.png)
+Los muros de ladrillo y el acero (placas remachadas) también están dibujados a mano. Las rocas y diamantes quietos se ven encajados en la tierra: detrás tienen tierra con sombra y solo se abren hacia las casillas vacías; las rocas se dibujan un poco más grandes para que las vecinas se toquen.
+
+Si nadie toca los controles, los niños miran a los lados, saludan, silban marcando el paso con el pie, bostezan y se quedan dormidos apoyados en la pala.
+
+![Una cueva con los nuevos dibujos](docs/cueva.png) ![Durmiendo](docs/durmiendo.png)
 
 ![Personajes y objetos](docs/sprites.png)
 
