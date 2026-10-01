@@ -1980,8 +1980,14 @@ function menu(){
 /* Cave picker: 20 caves (A–P plus the four intermissions) and the five difficulty levels. The chosen cave shows
    behind the menu and is where every game starts; it is remembered per game. */
 const startKey = () => 'boulder-duo-start-' + caveSet;
-function startN(){ try { const v = +localStorage.getItem(startKey()); if (v >= 1 && v <= 100) return v; } catch (e) {} return 1; }
-function setStartN(n){ try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
+// kept in memory first: some phone browsers block storage for a downloaded file, and the choice must still work
+const startMem = {};
+function startN(){
+  if (startMem[caveSet]) return startMem[caveSet];
+  try { const v = +localStorage.getItem(startKey()); if (v >= 1 && v <= 100) return startMem[caveSet] = v; } catch (e) {}
+  return 1;
+}
+function setStartN(n){ startMem[caveSet] = n; try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
 function caveShort(nm){ const m = /^Cave ([A-Z])/.exec(nm), im = /^Intermission (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : nm.slice(0, 5); }
 function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
