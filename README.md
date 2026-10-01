@@ -28,6 +28,10 @@ Los jugadores son un niño (J1, azul) y una niña (J2, naranja), personajes prop
 
 ![El niño y la niña](docs/ninos.png)
 
+Los dos llevan una pala y la mueven hacia donde cavan (a los lados, arriba o abajo); la tierra se va abriendo desde el centro de la casilla hacia los bordes durante el tick. Las rocas, diamantes, luciérnagas, mariposas y explosiones también están dibujados a 64×64.
+
+![Personajes y objetos](docs/sprites.png)
+
 ## Modos
 
 - **1 jugador:** solo J1, con un único tablero más grande.
