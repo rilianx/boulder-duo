@@ -26,6 +26,8 @@ Empujar una roca no cuesta siempre lo mismo: en cada tick que empujas se mueve c
 
 Cada jugador tiene su propio reloj: el paso empieza apenas aprietas (si el anterior ya terminó), sin esperar el tick de la cueva. Las rocas, diamantes y enemigos siguen el reloj de la cueva, así que el minero y el mundo no se mueven en el mismo instante. Un paso dura lo mismo que un tick. Las reglas no cambian; por ejemplo, la roca que se queda sin piso sigue esperando su tick antes de caer. En Entrenar PC todo sigue avanzando en ticks.
 
+**Gravedad.** Siempre: lo que cae arranca lento y acelera durante la primera casilla, las rocas giran al rodar y al aterrizar se aplastan un poco, rebotan y levantan polvo (solo dibujo). Opcional, con el botón **GRAVEDAD REAL** del menú: lo que cae acelera de verdad, una casilla en su primer tick, dos en el siguiente y tres desde ahí; escapar de una roca que viene de lejos es más difícil. Solo en las cuevas originales.
+
 La velocidad depende del nivel de dificultad de la cueva: un tick dura 170 ms en el nivel 1, 145 en el 2, 120 en el 3, 105 en el 4 y 92 en el 5 (el modo Entrenar PC sigue en 120 ms). El reloj de la cueva cuenta segundos reales.
 
 El movimiento se dibuja suave: cada roca, gema, enemigo o minero se desliza de su casilla a la nueva durante el tick (unos 7 cuadros a 60 Hz), sin cambiar la mecánica, que sigue avanzando de a una casilla por tick.

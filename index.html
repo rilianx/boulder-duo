@@ -1649,10 +1649,10 @@ const BUTT_T = BUTT_COLS.map(([w1, w2], v) => [1, .62, .28, .62].map(open => {
 /* Explosion: a flash, a fireball, then smoke (4 steps). */
 const BOOM_T = [0,1,2,3].map(st => {
   const c = mk64(), g = c.getContext('2d'), R = rng(st * 31 + 5);
-  const n = [7, 12, 14, 12][st], rad = [16, 26, 32, 30][st];
+  const n = [7, 12, 14, 12][st], rad = [14, 21, 25, 24][st];
   const cols = [['#ffffff','#fff2a8'], ['#fff2a8','#ffb43a','#ff6a1a'], ['#ffb43a','#ff6a1a','#b8361a','#5a5a5a'], ['#7a7a7a','#5a5a5a','#3a3a3a']][st];
   for (let k=0; k<n; k++){
-    const a = R() * Math.PI * 2, d = R() * rad * .6, r = rad * (.35 + R() * .45);
+    const a = R() * Math.PI * 2, d = R() * rad * .4, r = rad * (.35 + R() * .4);
     g.beginPath(); g.arc(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, r, 0, Math.PI * 2);
     g.fillStyle = cols[k % cols.length]; g.globalAlpha = st === 3 ? .75 : .95; g.fill();
   }
@@ -1799,8 +1799,38 @@ let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
    the moment of whatever is being simulated, so a move knows when it began and the drawing can glide it. */
 let simT = 0, worldT = 0, nowT = 0;
 let src = new Int32Array(W*H).fill(-1), srcAt = new Float64Array(W*H), dugAt = new Float64Array(W*H).fill(-1e9);
+/* Falling starts slow and speeds up (ease-in on the first cell); a rock turns as it rolls and squashes and
+   kicks up dust when it lands. */
+function glideEase(i, k){
+  if (k <= 0) return 0;
+  const from = src[i];
+  if (from === i - W && fallN[i] === 0) { const p = 1 - k; return 1 - p * p; }
+  return k;
+}
+function drawThing(g, s, i, px, py, k, big){
+  const t = grid[i], land = (simT - landAt[i]) / 240, sz = big ? T * 1.12 : T;
+  let sx = 1, sy = 1, hop = 0, ang = 0;
+  if (t === ROCK) { const fx = src[i] >= 0 ? src[i] % W - i % W : 0; ang = rot[i] - (fx ? -fx : 0) * Math.PI / 2 * k; }
+  if (land >= 0 && land < 1 && k === 0) {
+    if (land < .35) { const q = Math.sin(Math.PI * land / .35); sy = 1 - .16 * q; sx = 1 + .1 * q; }
+    else hop = -T * .07 * Math.sin(Math.PI * (land - .35) / .65);
+  }
+  const cx = px + T / 2, by = py + T + (big ? T * .04 : 0);
+  g.save(); g.translate(cx, by + hop); g.scale(sx, sy);
+  if (ang) { g.translate(0, -sz / 2); g.rotate(ang); g.translate(0, sz / 2); }
+  g.drawImage(s, -sz / 2, -sz, sz, sz); g.restore();
+  if (land >= 0 && land < 1 && k === 0) {
+    g.fillStyle = `rgba(190,170,140,${.55 * (1 - land)})`;
+    [-1, 1].forEach(side => [0, 1].forEach(n => { g.beginPath(); g.arc(cx + side * (T * .3 + land * T * (.35 + n * .2)), py + T - T * .08 - n * T * .1 * land, T * (.09 + .05 * n) * (1 - land * .5), 0, Math.PI * 2); g.fill(); }));
+  }
+}
 const glideK = i => src[i] >= 0 ? Math.max(0, 1 - (simT - srcAt[i]) / tickMs) : 0;   // 1 just moved … 0 arrived
-let vari = new Uint8Array(W*H);   // look of each rock, gem or butterfly (drawing only); travels with it   // where each cell's content was a tick ago, for smooth drawing
+let vari = new Uint8Array(W*H);
+let fallN = new Uint8Array(W*H), rot = new Float32Array(W*H), landAt = new Float64Array(W*H).fill(-1e9);   // drawing only
+let fallT = new Uint8Array(W*H);   // real gravity: ticks a thing has been falling
+/* Real gravity (optional, original caves only): what falls speeds up, one cell in its first tick, then two, then three. */
+let realGravity = false;
+try { realGravity = localStorage.getItem('boulder-duo-gravity') === '1'; } catch (e) {}   // look of each rock, gem or butterfly (drawing only); travels with it   // where each cell's content was a tick ago, for smooth drawing
 let landThisTick = false, frame = 0, dirtVar, exitSeen = [-1, -1], caveShownAt = -999;
 let gemVal = 10, gemExtra = 20, crng = Math.random;
 let magicTime = 0, magicState = 0, magicLeft = 0;          // 0 dormant, 1 running, 2 spent
@@ -1969,7 +1999,7 @@ function genCave(n){
 }
 
 function initLevel(n){
-  level = n; src.fill(-1); dugAt.fill(-1e9); worldT = simT;
+  level = n; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
   const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
@@ -1989,6 +2019,10 @@ function exitOpenFor(p){
 function exitVisiblyOpen(){ return mode === 'coop' ? exitOpenFor(players[0]) : players.some(exitOpenFor); }
 
 function move(i, j){
+  // drawing only: how many cells it has been falling, and how far a rock has rolled (it turns as it goes)
+  fallN[j] = j === i + W ? (fall[i] ? Math.min(250, fallN[i] + 1) : 0) : 0;
+  rot[j] = rot[i] + (j === i + 1 ? 1 : j === i - 1 ? -1 : 0) * Math.PI / 2;
+  fallT[j] = 0;
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
   grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; vari[j] = vari[i];
 }
@@ -2049,7 +2083,15 @@ function stepPlayer(p){
 function fallObj(i, x, y){
   const b = i + W, bt = grid[b];
   // A resting rock or gem waits one tick before it starts to fall (aux marks it), so you can step out from under it.
-  if (bt === E) { if (fall[i] || aux[i]) { move(i, b); fall[b] = 1; } else aux[i] = 1; return; }
+  if (bt === E) {
+    if (!(fall[i] || aux[i])) { aux[i] = 1; return; }
+    const steps = realGravity && caveRules() && fall[i] ? Math.min(3, 1 + fallT[i]) : 1, ft = fall[i] ? fallT[i] + 1 : 0;
+    let cur = i;
+    for (let k = 0; k < steps && grid[cur + W] === E; k++){ move(cur, cur + W); cur += W; fall[cur] = 1; }
+    fallT[cur] = Math.min(250, ft);
+    if (cur !== i + W) { src[cur] = i; fallN[cur] = Math.max(1, fallN[cur]); }   // glide the whole drop of this tick
+    return;
+  }
   aux[i] = 0;
   // magic wall: a falling rock goes through as a gem and a gem as a rock, while the wall runs
   if (bt === MAGIC && fall[i] && magicState !== 2) {
@@ -2073,8 +2115,8 @@ function fallObj(i, x, y){
     if (grid[i-1] === E && grid[b-1] === E) { move(i, i-1); fall[i-1] = 1; return; }
     if (grid[i+1] === E && grid[b+1] === E) { move(i, i+1); fall[i+1] = 1; return; }
   }
-  if (fall[i]) landThisTick = true;
-  fall[i] = 0;
+  if (fall[i]) { landThisTick = true; landAt[i] = nowT; }
+  fall[i] = 0; fallT[i] = 0;
 }
 
 function enemy(i, x, y, t){
@@ -2198,6 +2240,9 @@ function menu(){
       <button id="bpick">ELEGIR CUEVA · ${caveLabel(startN())}</button>
     </div>
     <div class="row sets">
+      <button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>
+    </div>
+    <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
     </div>
@@ -2210,6 +2255,7 @@ function menu(){
   $('btrain').onclick = () => startGame('train');
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
+  $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
   onEnter = () => startGame('coop');
 }
@@ -2872,12 +2918,12 @@ function renderView(k){
       // a resting rock or gem sits in the earth: dirt behind it, opened only towards empty neighbours
       const px = x*T - ox, py = y*T - oy;
       g.drawImage(dirtCut(DVAR[i], openMask(i), true), px, py, T, T);
-      if (tt === ROCK) { g.drawImage(s, px - T*.06, py - T*.08, T*1.12, T*1.12); continue; }
+      if (tt === ROCK || tt === GEM) { drawThing(g, s, i, px, py, 0, tt === ROCK); continue; }
     }
-    if (gk > 0) { const k = gk; glide.push([s, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
+    if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
-  glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T));
+  glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T); });
   players.forEach(p => {
     const act = idleAct(p); if (act !== 'tap' && act !== 'sleep') return;
     const px = p.x*T - ox + T/2, py = p.y*T - oy, t = frame % 90 / 90;
