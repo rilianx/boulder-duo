@@ -1704,7 +1704,7 @@ function kidSprite(girl, step, blink, flip, dig, pose){
   }
   paint('#ffffff', () => { g.moveTo(26, 33); g.lineTo(32, 38); g.lineTo(38, 33); g.closePath(); });
   // the shovel: wooden handle, steel blade at the far end, held in both hands while digging
-  const SH = pk === 'rps' || pk === 'book' || pk === 'ball' || pk === 'sling' ? [17, 24, 13, 64] : pk === 'yawn' || pk === 'sleep' ? [49, 26, 51, 64] : !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
+  const SH = pk === 'rps' || pk === 'angry' || pk === 'book' || pk === 'ball' || pk === 'sling' ? [17, 24, 13, 64] : pk === 'yawn' || pk === 'sleep' ? [49, 26, 51, 64] : !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
            : dig.dir === 'down' ? (dig.f ? [41, 30, 44, 61] : [41, 24, 44, 52]) : (dig.f ? [48, 50, 56, 2] : [47, 52, 55, 12]);
   const [hx1, hy1, hx2, hy2] = SH, ang = Math.atan2(hy2 - hy1, hx2 - hx1);
   const at = t => [hx1 + (hx2 - hx1) * t, hy1 + (hy2 - hy1) * t];
@@ -1717,13 +1717,13 @@ function kidSprite(girl, step, blink, flip, dig, pose){
   g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(2, -3, 6, 1.6);
   g.restore();
   if (dig) paint(HAND, () => g.ellipse(...at(.2), 3.2, 3.2, 0, 0, Math.PI * 2));
-  if (pk === 'rps') {
+  if (pk === 'rps' || pk === 'angry') {
     // arm stretched out in front, the hand big: fist (rock), open hand (paper) or two fingers (scissors)
-    const hx = 52, hy = 36 + (pf ? 5 : 0), sleeve = girl ? '#e8693f' : '#5b9be0';
+    const hx = 52, hy = (pk === 'angry' ? 29 : 36) + (pf ? 5 : 0), sleeve = girl ? '#e8693f' : '#5b9be0';
     g.lineWidth = 7; g.beginPath(); g.moveTo(38, 38); g.lineTo(hx - 4, hy); g.stroke();
     g.lineWidth = 4.6; g.strokeStyle = sleeve; g.beginPath(); g.moveTo(38, 38); g.lineTo(hx - 5, hy); g.stroke();
     g.lineWidth = 2.2; g.strokeStyle = OL;
-    const hand = pose.h || 0;
+    const hand = pk === 'angry' ? 0 : pose.h || 0;
     if (hand === 1) {
       paint(HAND, () => rr(hx - 5, hy - 13, 13, 20, 5));
       paint(HAND, () => g.ellipse(hx - 6, hy + 2, 3.2, 4.8, -.5, 0, Math.PI * 2));
@@ -1793,7 +1793,11 @@ function kidSprite(girl, step, blink, flip, dig, pose){
   });
   g.fillStyle = 'rgba(238,118,118,.55)';
   ex.forEach(x => { g.beginPath(); g.ellipse(x - 1, 26.5, 2.8, 1.6, 0, 0, Math.PI * 2); g.fill(); });
-  if (pk === 'yawn') { g.beginPath(); g.ellipse(39.5, 28.5, 2.4, 3.2, 0, 0, Math.PI * 2); g.fillStyle = '#5a2418'; g.fill(); g.lineWidth = 1.4; g.stroke(); }
+  if (pk === 'angry') {
+    // cross: eyebrows down towards the nose and a frown
+    g.lineWidth = 2; g.beginPath(); g.moveTo(30.5, 14.5); g.lineTo(36.5, 17.5); g.moveTo(46.5, 14.5); g.lineTo(40.5, 17.5); g.stroke();
+    g.lineWidth = 1.6; g.beginPath(); g.arc(39.5, 30.5, 2.2, 1.15 * Math.PI, 1.85 * Math.PI); g.stroke();
+  } else if (pk === 'yawn') { g.beginPath(); g.ellipse(39.5, 28.5, 2.4, 3.2, 0, 0, Math.PI * 2); g.fillStyle = '#5a2418'; g.fill(); g.lineWidth = 1.4; g.stroke(); }
   else if (pk === 'tap') { g.beginPath(); g.ellipse(40.5, 28, 1.4, 1.6, 0, 0, Math.PI * 2); g.fillStyle = '#5a2418'; g.fill(); }   // whistling
   else { g.lineWidth = 1.6; g.beginPath(); g.arc(39.5, 27.5, pk === 'wave' ? 2.8 : 2, .1 * Math.PI, .9 * Math.PI); g.stroke(); }
   g.restore();
@@ -1806,7 +1810,7 @@ function playerSprites(girl){
   const side = digs('side');
   const pose = (k, f, h, bl) => [kidSprite(girl, 0, !!bl, false, null, { k, f, h }), kidSprite(girl, 0, !!bl, true, null, { k, f, h })];
   return { idle: both(0, false), walk: [both(1, false), both(2, false)], blink: both(0, true), dig: [digs('up'), side, digs('down'), side],
-           wave: [pose('wave', 0), pose('wave', 1)], book: [pose('book', 0), pose('book', 1)], ball: [pose('ball', 0), pose('ball', 1)], sling: [pose('sling', 0), pose('sling', 1)],
+           wave: [pose('wave', 0), pose('wave', 1)], book: [pose('book', 0), pose('book', 1)], ball: [pose('ball', 0), pose('ball', 1)], sling: [pose('sling', 0), pose('sling', 1)], angry: [pose('angry', 0), pose('angry', 1)],
            rps: [0, 1].map(f => [0, 1, 2].map(h => pose('rps', f, h))), rpsSad: [0, 1, 2].map(h => pose('rps', 0, h, true)), tap: [pose('tap', 0), pose('tap', 1)], yawn: pose('yawn', 0), sleep: pose('sleep', 0) };
 }
 const PL_T = [playerSprites(false), playerSprites(true)];
@@ -2847,7 +2851,7 @@ const cams = [{x:0, y:0}, {x:0, y:0}];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /* A prank: when the boy is bored and the girl stands still a few cells away on the same row with nothing in
    between, he flicks a paper ball at her with a slingshot every few seconds instead of playing with his ball. */
-const SLING_LEN = 3.4;
+const SLING_LEN = 12;   // aim 0–1, flight –1.55, hit –2.3, she shakes her fist –4.5, he whistles looking away to the end
 function slingOn(){
   const [a, b] = players;
   if (!a || !b || rpsNow || mode === 'train' || !a.alive || !b.alive || a.ai || b.ai || a.y !== b.y) return false;
@@ -2978,10 +2982,18 @@ function tileSprite(t, i, x, y, af, open){
       if (rpsNow) return rpsSprite(p, set);
       // nobody touching the controls: look around, wave, whistle tapping a foot, yawn, then doze off
       const act = idleAct(p);
+      if (p.id === 1 && slingOn()) {
+        const q = slingPhase(), f = players[0].x < p.x ? 1 : 0;   // face the boy
+        if (q >= 1.55 && q < 2.3) return set.blink[f];        // hit: eyes shut
+        if (q >= 2.3 && q < 4.5) return set.angry[(frame >> 2) & 1][f];   // turns round and shakes her fist at him
+      }
       if (act === 'sleep') return set.sleep[p.face];
       if (act === 'book') return set.book[(frame / 70 | 0) % 5 === 4 ? 1 : 0][p.face];
-      if (p.id === 0 && act === 'ball' && slingOn()) { const f = players[1].x > p.x ? 0 : 1; return set.sling[slingPhase() < 1 ? 0 : 1][f]; }
-      if (p.id === 1 && slingOn() && slingPhase() >= 1.55 && slingPhase() < 2.3) return set.blink[players[0].x > p.x ? 1 : 0];   // hit: eyes shut
+      if (p.id === 0 && act === 'ball' && slingOn()) {
+        const q = slingPhase(), f = players[1].x > p.x ? 0 : 1;
+        if (q < 2.3) return set.sling[q < 1 ? 0 : 1][f];
+        return set.tap[(frame >> 3) & 1][1 - f];             // slingshot hidden, whistling, looking the other way
+      }
       if (act === 'ball') return set.ball[ballPhase() < .12 || ballPhase() > .88 ? 1 : 0][p.face];
       if (act === 'yawn') return set.yawn[p.face];
       if (act === 'tap') return set.tap[(frame >> 3) & 1][p.face];
@@ -3071,6 +3083,18 @@ function renderView(k){
         const x1 = girl.x*T - ox + T/2, y1 = girl.y*T - oy + T * .3;
         const bx = x0 + (x1 - x0) * t, by = y0 + (y1 - y0) * t - Math.sin(Math.PI * t) * T * .45;
         g.save(); g.beginPath(); g.arc(bx, by, 1.4, 0, Math.PI * 2); g.fillStyle = '#fdfbf2'; g.fill(); g.lineWidth = .4; g.strokeStyle = '#3b2619'; g.stroke(); g.restore();
+      }
+      if (q >= 2.3) {
+        const bx = p.x*T - ox + T/2 - dirx * 6, t = (simT % 1500) / 1500;
+        g.save(); g.textAlign = 'center'; g.globalAlpha = 1 - t; g.fillStyle = '#ffd24a'; g.font = '7px serif';
+        g.fillText('♪', bx + Math.sin(t * 6) * 1.5, p.y*T - oy + 2 - t * 8); g.restore();
+      }
+      if (q >= 2.3 && q < 4.5) {
+        // a little anger mark by her head
+        const ax = girl.x*T - ox + T/2 + dirx * 4, ay = girl.y*T - oy + 1, sc = 1 + .15 * Math.sin(simT / 60);
+        g.save(); g.translate(ax, ay); g.scale(sc, sc); g.strokeStyle = '#e8443a'; g.lineWidth = .9; g.beginPath();
+        [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(([sx, sy]) => { g.moveTo(sx * .6, sy * 2.2); g.quadraticCurveTo(sx * .6, sy * .6, sx * 2.2, sy * .6); });
+        g.stroke(); g.restore();
       }
       if (q >= 1.55 && q < 2.3) {
         const x1 = girl.x*T - ox + T/2, y1 = girl.y*T - oy;
