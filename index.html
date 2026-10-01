@@ -1862,7 +1862,9 @@ function glideEase(i, k){
   if (k <= 0) return 0;
   const from = src[i];
   const t = grid[i];
-  if (from === i - W && fallN[i] === 0 && (t === ROCK || t === GEM)) { const p = 1 - k; return 1 - p * p; }   // only things that fall, not a kid walking down
+  // first cell of a fall: starts from rest and ends at exactly the speed of the cells that follow (2p²−p³ has
+  // slope 0 at the start and 1 at the end), so it does not look like it brakes after speeding up. Rocks and gems only.
+  if (from === i - W && fallN[i] === 0 && (t === ROCK || t === GEM)) { const p = 1 - k; return 1 - (2 * p * p - p * p * p); }
   return k;
 }
 function drawThing(g, s, i, px, py, k, big){
