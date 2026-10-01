@@ -36,7 +36,7 @@ Los jugadores son un niño (J1, azul) y una niña (J2, naranja), personajes prop
 
 ![El niño y la niña](docs/ninos.png)
 
-Los dos llevan una pala y la mueven hacia donde cavan (a los lados, arriba o abajo); la tierra se va abriendo desde el centro de la casilla hacia los bordes durante el tick. Las rocas, diamantes, luciérnagas, mariposas, explosiones y la tierra también están dibujados a 64×64, con trazo y sombreado de lápiz como hechos a mano. Hay 8 tipos de roca, diamantes de 6 colores y mariposas de 6 colores; a cada objeto le toca uno al azar y lo conserva al moverse. Todos funcionan igual: solo cambia el dibujo.
+Los dos llevan una pala y la mueven hacia donde cavan (a los lados, arriba o abajo); la tierra se va abriendo desde el centro de la casilla hacia los bordes durante el tick. Las rocas, diamantes, luciérnagas, mariposas, explosiones y la tierra también están dibujados a 64×64, con trazo y sombreado de lápiz como hechos a mano. Hay 8 tipos de roca, diamantes de 6 colores y 16 mariposas cuyas alas pasan de un color a otro en un degradado de dirección al azar; a cada objeto le toca uno al azar y lo conserva al moverse. Todos funcionan igual: solo cambia el dibujo.
 
 Los bordes de la tierra que dan a un hueco son ondulados y con trazo de lápiz, y las esquinas de los huecos son redondeadas.
 

@@ -1682,14 +1682,23 @@ const FIRE_T = [0,1,2,3].map(f => {
 });
 
 /* Butterflies in six colours, hand-drawn, wings flapping (open, half, closed, half). */
-const BUTT_COLS = [['#8a64e8','#b39bff'], ['#3f8ef0','#8cc4ff'], ['#f2b630','#ffe08a'], ['#f06aa8','#ffb3d6'], ['#3fbf6a','#9ae8a8'], ['#f07a3a','#ffc08a']];
-const BUTT_T = BUTT_COLS.map(([w1, w2], v) => [1, .62, .28, .62].map(open => {
+/* Butterflies: each wing blends two random colours, in a random direction (16 variants, picked per butterfly). */
+const BUTT_COLS = Array.from({ length: 16 }, (_, v) => {
+  const R = rng(4242 + v * 97), h1 = R() * 360, h2 = (h1 + 110 + R() * 140) % 360;
+  const c = (h, l) => `hsl(${h | 0},${88 + (R() * 12 | 0)}%,${l}%)`;
+  return { a: c(h1, 52), b: c(h2, 60), al: c(h1, 72), bl: c(h2, 78), ang: R() * Math.PI * 2 };
+});
+const BUTT_T = BUTT_COLS.map((col, v) => [1, .62, .28, .62].map(open => {
   const c = mk64(), g = c.getContext('2d'), R = rng(600 + v * 23);
   [-1, 1].forEach(side => {
     g.save(); g.translate(32, 32); g.scale(side * open, 1);
     const up = blobPts(14, -10, 13, 12, R, .12, .95), lo = blobPts(12, 11, 10, 11, R, .12, .9);
-    shaky(g, up, R, 0); g.fillStyle = w1; g.fill();
-    shaky(g, lo, R, 0); g.fillStyle = w2; g.fill();
+    // gradient across the whole wing pair: from colour a to colour b along a random direction
+    const dx = Math.cos(col.ang) * 15, dy = Math.sin(col.ang) * 15;
+    const gu = g.createLinearGradient(13 - dx, -dy, 13 + dx, dy); gu.addColorStop(0, col.a); gu.addColorStop(1, col.b);
+    const gl = g.createLinearGradient(13 - dx, -dy, 13 + dx, dy); gl.addColorStop(0, col.al); gl.addColorStop(1, col.bl);
+    shaky(g, up, R, 0); g.fillStyle = gu; g.fill();
+    shaky(g, lo, R, 0); g.fillStyle = gl; g.fill();
     g.save(); shaky(g, up, R, 0); g.clip(); hatch(g, R, 'rgba(20,10,40,.25)', 0, -24, 30, 0, 3.2); g.restore();
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(18, -12, 3.2, 0, Math.PI * 2); g.arc(14, 12, 2.2, 0, Math.PI * 2); g.fill();
     g.fillStyle = 'rgba(30,15,50,.6)'; g.beginPath(); g.arc(9, -6, 2, 0, Math.PI * 2); g.fill();
@@ -3705,6 +3714,7 @@ window.__sim = {
   },
   critter(kind, x, y, d){ critterFromRock(y*W + x, d, players[0], kind); return critters.length; },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
+  butts(){ const c = document.createElement('canvas'); c.width = 8 * 96; c.height = 2 * 96; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); BUTT_T.forEach((f, k) => g.drawImage(f[0], (k % 8) * 96, (k / 8 | 0) * 96, 96, 96)); return c.toDataURL(); },
   map(n){
     level = n; genCave(n);
     const c = document.createElement('canvas'); c.width = W*T; c.height = H*T;
