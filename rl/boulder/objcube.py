@@ -31,6 +31,8 @@ class ObjectTracker:
         # modelo de movimiento por tipo (objetos al azar): [movimientos de casilla, oportunidades]; cada tick
         # observado suma como oportunidad la fracción de vecinas libres (si hay muro, el intento no se ve)
         self.moverate = {}
+        self.rel = {}            # movimiento relativo (lo comparte el conocimiento: know.rel)
+        self._apos = None        # posición del avatar en el tick anterior
 
     def update(self, st, free=None):
         for oid, (t, x, y) in st.objects.items():
@@ -50,6 +52,7 @@ class ObjectTracker:
                     self.lastdir[oid] = d
                     dd = self.dirs.setdefault(t, {})
                     dd[d] = dd.get(d, 0) + 1
+                    self._record_rel(st, t, px, py, x, y)
             # cuándo avanza en su dirección: según qué había adelante en el tick anterior
             if h and self.fall is not None and getattr(st, "prev", None) is not None and st.tick - h[-1][0] == 1:
                 d = self.main_dir(t)
@@ -73,6 +76,69 @@ class ObjectTracker:
         for oid in list(self.hist):
             if oid not in st.objects:
                 del self.hist[oid]
+        self._apos = (st.fx, st.fy)
+        self._cells = None
+
+    def _type_cells(self, st):
+        """Casillas de cada tipo poco numeroso (≤ 30) en el tick anterior: candidatos a objetivo."""
+        if self._cells is None:
+            masks = st.prev or st.masks
+            cells = {}
+            for i, m in enumerate(masks):
+                while m:
+                    b = m & -m; u = b.bit_length() - 1; m ^= b
+                    cells.setdefault(u, []).append((i % st.W, i // st.W))
+            self._cells = {u: c for u, c in cells.items() if len(c) <= 30}
+        return self._cells
+
+    def _record_rel(self, st, t, px, py, x, y):
+        """¿El movimiento acercó o alejó al objeto del avatar y de la instancia más cercana de cada tipo?"""
+        targets = {}
+        if self._apos is not None:
+            targets[-1] = [self._apos]
+        for u, c in self._type_cells(st).items():
+            if u != t:
+                targets[u] = c
+        for u, cells in targets.items():
+            d0 = min(abs(px - cx) + abs(py - cy) for cx, cy in cells)
+            d1 = min(abs(x - cx) + abs(y - cy) for cx, cy in cells)
+            if abs(d1 - d0) < 1e-6 or d0 == 0:
+                continue
+            r = self.rel.setdefault(t, {}).setdefault(u, [0, 0])
+            r[0 if d1 < d0 else 1] += 1
+
+    def speed(self, oid):
+        vx, vy = self.velocity(oid)
+        return abs(vx) + abs(vy)
+
+    def predict(self, st, oid, H, attr, blocked):
+        """Posiciones (x, y) en los ticks 1..H de un objeto que se acerca (signo +1) o aleja (−1) de su
+        objetivo, a su rapidez observada, por casillas libres. El objetivo se toma quieto (el avatar donde está)."""
+        t, x, y = st.objects[oid]
+        u, sign = attr
+        if u == -1:
+            goals = [(st.fx, st.fy)]
+        else:
+            goals = [(i % st.W, i // st.W) for i, m in enumerate(st.masks) if m >> u & 1]
+        if not goals:
+            return None
+        v = max(self.speed(oid), 0.05)
+        out = []
+        for _ in range(H):
+            best = None
+            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
+                nx, ny = x + dx * v, y + dy * v
+                cx, cy = int(round(nx)), int(round(ny))
+                if not (0 <= cx < st.W and 0 <= cy < st.H) or blocked[cy * st.W + cx] and (cx, cy) != (int(round(x)), int(round(y))):
+                    continue
+                dist = min(abs(nx - gx) + abs(ny - gy) for gx, gy in goals)
+                key = -sign * dist
+                if best is None or key < best[0]:
+                    best = (key, nx, ny)
+            if best is not None:
+                x, y = best[1], best[2]
+            out.append((x, y))
+        return out
 
     def random_type(self, t):
         m = self.moves.get(t)
@@ -105,6 +171,7 @@ class ObjectCubeNavigator(CubeNavigator):
         self.track = ObjectTracker()
         self.track.dirs = know.move_dirs            # hacia dónde se mueve cada tipo: persiste entre partidas
         self.track.fall = know.fall
+        self.track.rel = know.rel
 
     def step(self, st, goal, br=None):
         self._t0 = time.perf_counter()               # el presupuesto por decisión cuenta desde aquí
@@ -130,7 +197,7 @@ class ObjectCubeNavigator(CubeNavigator):
         lethal = {}
         surv = [np.ones((H, W)) for _ in R]
         for oid, (t, x, y) in st.objects.items():
-            if not self.track.random_type(t):
+            if not self.track.random_type(t) or oid in getattr(self, "_paths", {}):
                 continue
             if t not in lethal:
                 base = float(self.risk.grid([floor])[0])
@@ -181,11 +248,28 @@ class ObjectCubeNavigator(CubeNavigator):
         obj_types = {t for t, _, _ in st.objects.values()}
         clear = ~sum(1 << t for t in obj_types) if obj_types else ~0
         static = [m & clear for m in st.masks]
+        paths = {}
+        if self.P.get("relmodel", True):
+            blocked = self.know.blocked_cells(st)
+            for oid, (t, x, y) in st.objects.items():
+                attr = self.know.attractor(t)
+                if attr is not None and t not in self.know.avatar_types:
+                    pth = self.track.predict(st, oid, self.Hz, attr, blocked)
+                    if pth:
+                        paths[oid] = pth
+        self._paths = paths
         cube = []
         for k in range(1, self.Hz + 1):
             masks = list(static)
             for oid, (t, x, y) in st.objects.items():
                 bit = 1 << t
+                if oid in paths:                         # perseguidor / fugitivo: según su tendencia aprendida
+                    px, py = paths[oid][k - 1]
+                    for xx in {int(math.floor(px)), int(math.ceil(px))}:
+                        for yy in {int(math.floor(py)), int(math.ceil(py))}:
+                            if 0 <= xx < W and 0 <= yy < H:
+                                masks[yy * W + xx] |= bit
+                    continue
                 if self.track.random_type(t) and self.P.get("objmodel"):
                     continue                              # va como distribución de probabilidad (_adjust_risk)
                 if self.track.random_type(t):

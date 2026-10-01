@@ -97,6 +97,11 @@ def practice(a):
                     o = K0.teleport.get(t, {}).get(e, 0)
                     m = base.teleport.setdefault(t, {})
                     m[e] = m.get(e, 0) + cnt - o
+            for t, dd in k.rel.items():
+                for u, v in dd.items():
+                    o = K0.rel.get(t, {}).get(u, [0, 0])
+                    m = base.rel.setdefault(t, {}).setdefault(u, [0, 0])
+                    m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
             for t, v in k.push.items():
                 o = K0.push.get(t, [0, 0])
                 m = base.push.setdefault(t, [0, 0])

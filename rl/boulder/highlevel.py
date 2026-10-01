@@ -548,8 +548,12 @@ class Commander:
             if t in K.avatar_types:
                 continue
             if dt:
-                vx, vy = self.nav.track.velocity(oid)
-                x, y = x + vx * dt, y + vy * dt
+                pth = getattr(self.nav, "_paths", {}).get(oid)
+                if pth:                                    # perseguidor / fugitivo: adonde lo lleva su tendencia
+                    x, y = pth[max(1, min(int(dt), len(pth))) - 1]
+                else:
+                    vx, vy = self.nav.track.velocity(oid)
+                    x, y = x + vx * dt, y + vy * dt
             lift = max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))
             if lift > 0:
                 ev += lift * K.use_value(t)

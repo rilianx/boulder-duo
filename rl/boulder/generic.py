@@ -191,6 +191,10 @@ class Knowledge:
         self.push = {}
         self.push_into = {}
         self.avoid_push = False
+        # movimiento relativo: tipo → {objetivo: [se acercó, se alejó]}; objetivo −1 = el avatar, u ≥ 0 = la
+        # instancia más cercana del tipo u (un perseguidor se acerca al avatar, un fugitivo se aleja, un
+        # misil va hacia las ciudades)
+        self.rel = {}
 
     def _e(self, t):
         return self.eff.setdefault(t, [0, 0.0, 0.0, 0, 0])
@@ -367,6 +371,20 @@ class Knowledge:
             return 0.0, 0
         return (r[3] / r[0] if r[2] > 0.5 * r[0] else 0.0), r[0]
 
+    def attractor(self, t):
+        """(objetivo, signo) si los movimientos del tipo t casi siempre lo acercan (+1) o alejan (−1) de algo:
+        objetivo −1 = avatar, u = tipo u. None si no hay una tendencia clara."""
+        best = None
+        for u, (c, f) in self.rel.get(t, {}).items():
+            n = c + f
+            if n < 10:
+                continue
+            for sign, k in ((1, c), (-1, f)):
+                q = k / n
+                if q >= 0.75 and (best is None or q > best[2]):
+                    best = (u, sign, q)
+        return None if best is None else best[:2]
+
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
         return {t for t, (a, b) in self.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
@@ -385,7 +403,8 @@ class Knowledge:
                 "fall": {t: {str(m): v for m, v in dd.items()} for t, dd in self.fall.items()},
                 "consumed": self.consumed, "use_kill": self.use_kill, "use_base": self.use_base,
                 "use_score": self.use_score, "teleport": self.teleport, "push": self.push,
-                "push_into": {t: {str(m): v for m, v in dd.items()} for t, dd in self.push_into.items()}}
+                "push_into": {t: {str(m): v for m, v in dd.items()} for t, dd in self.push_into.items()},
+                "rel": {t: {str(u): v for u, v in dd.items()} for t, dd in self.rel.items()}}
 
     @classmethod
     def from_json(cls, d):
@@ -407,6 +426,7 @@ class Knowledge:
         k.use_score = {int(a): list(b) for a, b in d.get("use_score", {}).items()}
         k.teleport = {int(a): {int(e): n for e, n in b.items()} for a, b in d.get("teleport", {}).items()}
         k.push = {int(a): list(b) for a, b in d.get("push", {}).items()}
+        k.rel = {int(a): {int(u): list(v) for u, v in b.items()} for a, b in d.get("rel", {}).items()}
         k.push_into = {int(a): {int(m): list(v) for m, v in b.items()} for a, b in d.get("push_into", {}).items()}
         return k
 
