@@ -58,6 +58,7 @@ button{font-family:var(--display);font-size:12px;padding:12px 16px;background:va
 button:hover{border-color:var(--gem)}
 button.b1{border-color:var(--p1)} button.b2{border-color:var(--p2)}
 .sets button{font-size:10px;padding:8px 10px}
+.views.solo{grid-template-columns:1fr;max-width:860px;width:100%;margin-inline:auto} .views.solo .p2v{display:none}
 .cavegrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;width:100%}
 .cavegrid button{font-size:10px;padding:8px 2px} .cavegrid button.on{border-color:var(--warn);color:var(--warn)}
 @media (max-height:600px){ .card .long{display:none} .card{gap:10px} .card .row button{padding:9px 12px} } .sets button.on{border-color:var(--warn);color:var(--warn)}
@@ -118,6 +119,7 @@ button:disabled{opacity:.4;cursor:default}
 .rotate{display:none}
 @media (orientation:portrait){
   .touch .views{width:min(100%, calc((100dvh - 110px) / 1.45));margin-inline:auto}
+  .touch .views.solo{width:100%}
   .touch:not(.portrait-ok) .rotate{display:flex;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
   .rotate h2{font-family:var(--display);font-size:16px;margin:0;line-height:1.6}
   .rotate p{margin:0;color:var(--muted)}
@@ -130,6 +132,7 @@ button:disabled{opacity:.4;cursor:default}
   .touch header .tbtn{font-size:8px;padding:3px 6px} .touch .pause{width:28px;height:28px}
   .touch .bar{font-size:15px;padding:3px 8px;gap:8px}
   .touch .views{grid-template-columns:1fr 1fr;gap:4px;width:min(100%, calc((100dvh - 60px) * 2.75));margin-inline:auto}
+  .touch .views.solo{grid-template-columns:1fr;width:min(100%, calc((100dvh - 60px) * 1.36))}
 }
 </style>
 
@@ -1582,6 +1585,7 @@ let grid, fall, dir, aux, moved;
 let players = [];
 let mode = 'coop', level = 1, state = 'menu';
 let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
+let src = new Int32Array(W*H).fill(-1), lerpT = 1;   // where each cell's content was a tick ago, for smooth drawing
 let landThisTick = false, frame = 0, dirtVar, exitSeen = [-1, -1], caveShownAt = -999;
 let gemVal = 10, gemExtra = 20, crng = Math.random;
 let magicTime = 0, magicState = 0, magicLeft = 0;          // 0 dormant, 1 running, 2 spent
@@ -1749,7 +1753,7 @@ function genCave(n){
 }
 
 function initLevel(n){
-  level = n;
+  level = n; src.fill(-1);
   const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
@@ -1769,7 +1773,7 @@ function exitVisiblyOpen(){ return mode === 'coop' ? exitOpenFor(players[0]) : p
 
 function move(i, j){
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
-  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1;
+  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i;
 }
 
 function killPlayer(p){
@@ -1795,7 +1799,7 @@ function stepPlayer(p){
   const [dx, dy] = DXY[d];
   if (dx) p.face = dx < 0 ? 1 : 0;
   const i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
-  const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; p.x += dx; p.y += dy; p.walking = true; p.stepN++; };
+  const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; src[j] = i; p.x += dx; p.y += dy; p.walking = true; p.stepN++; };
   if (t === E || t === DIRT) { go(); p.push = 0; if (t === DIRT) sfx.step(); }
   else if (t === GEM) {
     const over = mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
@@ -1824,12 +1828,12 @@ function fallObj(i, x, y){
     if (magicState === 0) { magicState = 1; magicLeft = magicTime * 1000; }
     const c = b + W, t = grid[i];
     grid[i] = E; fall[i] = 0;
-    if (grid[c] === E) { grid[c] = t === ROCK ? GEM : ROCK; fall[c] = 1; aux[c] = 0; moved[c] = 1; }
+    if (grid[c] === E) { grid[c] = t === ROCK ? GEM : ROCK; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; }
     return;
   }
   // slime: rocks and gems seep through it now and then
   if (bt === SLIME && grid[b + W] === E && slimePerm > 0 && crng() < slimePerm) {
-    const c = b + W; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; grid[i] = E; fall[i] = 0;
+    const c = b + W; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; grid[i] = E; fall[i] = 0;
     return;
   }
   if (fall[i]) {
@@ -1871,7 +1875,7 @@ function amoebaCell(i){
 }
 
 function tick(){
-  moved.fill(0); landThisTick = false;
+  moved.fill(0); src.fill(-1); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(stepPlayer);
@@ -1951,6 +1955,7 @@ function menu(){
     <h2>BOULDER DÚO</h2>
     <p class="long">Caven túneles, junten gemas y lleguen a la salida antes de que se acabe el tiempo. Las rocas caen, ruedan y aplastan. Las luciérnagas explotan al tocarte; las mariposas, al caerles una roca, se vuelven gemas.</p>
     <div class="row">
+      <button id="bsolo" class="b1">1 JUGADOR</button>
       <button id="bcoop" class="b1">COOPERATIVO</button>
       <button id="bvs" class="b2">VERSUS</button>
     </div>
@@ -1965,8 +1970,9 @@ function menu(){
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
     </div>
-    <p class="long">Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega. Entrenar PC: el PC juega solo y puedes acelerar el tiempo.</p>
+    <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega. Entrenar PC: el PC juega solo y puedes acelerar el tiempo.</p>
   </div>`);
+  $('bsolo').onclick = () => startGame('solo');
   $('bcoop').onclick = () => startGame('coop');
   $('bvs').onclick = () => startGame('versus');
   $('bpc').onclick = () => startGame('pc');
@@ -2021,12 +2027,16 @@ function askTouch(){
   onEnter = () => pick(false);
 }
 
+/* One player is the cooperative game with J2 left out: J2 never enters the cave and its view is hidden. */
+let solo = false;
 function startGame(m){
   audioOn();
   if (touchPref) goLandscape();
   if (turbo) setTurbo(false);
-  mode = m;
+  solo = m === 'solo'; mode = solo ? 'coop' : m;
+  $('views').classList.toggle('solo', solo);
   players = [newPlayer(0), newPlayer(1)];
+  if (solo) players[1].lives = 0;
   $('w0wrap').hidden = $('w1wrap').hidden = !(mode === 'versus' || mode === 'pc');
   const aiMode = mode === 'pc' || mode === 'train';
   players[1].ai = aiMode;
@@ -2043,10 +2053,10 @@ function levelWon(){
   state = 'between';
   const saved = players.filter(p => p.exited).length;
   showOverlay(`<div class="card"><h2>${caveLabel(level)} SUPERADA</h2>
-    <p>${saved === 2 ? 'Salieron los dos.' : 'Salió un minero.'} Puntos: J1 ${players[0].score} · J2 ${players[1].score}</p>
+    <p>${solo ? 'Puntos: ' + players[0].score : (saved === 2 ? 'Salieron los dos.' : 'Salió un minero.') + ' Puntos: J1 ' + players[0].score + ' · J2 ' + players[1].score}</p>
     <div class="row"><button id="bnext">${caveLabel(level + 1)}</button></div>
-    <p>Un jugador sin vidas vuelve con 1 en la cueva siguiente.</p></div>`);
-  const go = () => { players.forEach(p => { if (p.lives <= 0) p.lives = 1; }); initLevel(level + 1); };
+    ${solo ? '' : '<p>Un jugador sin vidas vuelve con 1 en la cueva siguiente.</p>'}</div>`);
+  const go = () => { players.forEach(p => { if (p.lives <= 0 && !(solo && p.id === 1)) p.lives = 1; }); initLevel(level + 1); };
   $('bnext').onclick = go; onEnter = go;
 }
 function levelLost(msg){
@@ -2496,12 +2506,16 @@ function updateHud(){
 /* ---------- cameras ---------- */
 const cams = [{x:0, y:0}, {x:0, y:0}];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function glidePos(p){
+  const from = src[p.y*W + p.x], k = 1 - lerpT;
+  return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k, p.y + ((from / W | 0) - p.y) * k] : [p.x, p.y];
+}
 function camFocus(k){
   const p = players[k], o = players[1-k];
   if (!p) return null;
-  if (p.alive) return [p.x, p.y];
+  if (p.alive) return glidePos(p);
   if (!p.exited && p.respawn > 0) return [p.sx, p.sy];
-  if (o && o.alive) return [o.x, o.y];
+  if (o && o.alive) return glidePos(o);
   return [p.x, p.y];
 }
 function snapCams(){
@@ -2578,10 +2592,15 @@ function renderView(k){
   const ox = Math.round(c.x * T), oy = Math.round(c.y * T);
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
-  for (let y = y0; y <= Math.min(H-1, y0 + VH); y++) for (let x = x0; x <= Math.min(W-1, x0 + VW); x++){
+  const glide = [];
+  for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + VH + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + VW + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
-    if (s) g.drawImage(s, x*T - ox, y*T - oy);
+    if (!s) continue;
+    const from = src[i];
+    if (from >= 0 && lerpT < 1) { const k = 1 - lerpT; glide.push([s, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
+    else g.drawImage(s, x*T - ox, y*T - oy);
   }
+  glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px), Math.round(py)));
   const a = players[1];
   if (k === 1 && a && a.ai && a.alive && AI.showWin && state !== 'menu') {
     const [wx0, wy0, wx1, wy1] = aiWindow(a);
@@ -2646,6 +2665,8 @@ function loop(now){
     while (acc >= TICK && state === 'play' && n < cap) { acc -= TICK; tick(); n++; }
     if (n >= cap) acc = 0;
   } else acc = 0;
+  // drawing glides each moved thing from its old cell to its new one over the tick (only at normal speed)
+  lerpT = state === 'play' && speed === 1 ? Math.min(1, acc / TICK) : 1;
   frame++;
   render();
   drawAiPanel();

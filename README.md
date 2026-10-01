@@ -22,8 +22,11 @@ Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**
 
 ![Las 16 cuevas](docs/cuevas.png)
 
+El movimiento se dibuja suave: cada roca, gema, enemigo o minero se desliza de su casilla a la nueva durante el tick (unos 7 cuadros a 60 Hz), sin cambiar la mecánica, que sigue avanzando de a una casilla por tick.
+
 ## Modos
 
+- **1 jugador:** solo J1, con un único tablero más grande.
 - **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta.
 - **Versus:** cada uno junta sus gemas y gana el primero en salir.
 - **Contra PC:** el rival aprende con Q(λ) mientras juegas.
