@@ -673,3 +673,28 @@ La evaluación es igual que la de la tabla anterior.
 - **YOLOBOT y OLETS consultan el simulador en cada tick.** Nosotros no lo consultamos nunca, ni al entrenar ni al jugar, y quedamos 4–5 puntos por debajo de ellos en promedio.
 
 **Advertencia:** estos 10 juegos son el conjunto de entrenamiento público de CIG 2014. Los conocían los autores de YOLOBOT y OLETS, y también nosotros: usar, empujar y portales se diseñaron mirando estos fallos. La prueba limpia es congelar el código y evaluar en juegos de GVGAI que nadie de este trabajo haya mirado.
+
+#### Versión adaptativa (sin fracciones ni prudencia fijadas a mano)
+
+- **Explorar:** el explorador barato sigue mientras aprende algo nuevo y para tras 20 partidas y el 5 % del presupuesto sin novedades (tope 30 %). Cuentan como novedad los tipos tocados, los bloqueos, los portales, los arrastres, los empujes y las situaciones de riesgo (pisar un tipo y morir o sobrevivir).
+- **Riesgo:** se reajusta cada 30 s de práctica.
+- **`w_risk`:** lo elige un bandido UCB entre 6, 12, 20 y 40, con el puntaje de cada partida de práctica.
+
+| Juego | 5 min fijo | 5 min adaptativo | explorar (s) | `w_risk` elegido |
+|---|---|---|---|---|
+| Sokoban | 100 % | 100 % | 72 | 6 |
+| Zelda | 87 % | 84 % | 28 | 20 |
+| Aliens | 83 % | 80 % | 38 | 40 |
+| Butterflies | 97 % | 87 % | 17 | 20 |
+| Boulder Dash | 53 % | 52 % | 35 | 6 |
+| Missilecommand | 50 % | 50 % | 22 | 20 |
+| Portals | 30 % | 43 % | 27 | 20 |
+| Frogs | 19 % | 0 % (51 % en otra corrida) | 41 | 40 (12 en la de 51 %) |
+| Chase | 3 % | 0 % | 29 | 6 |
+| Survivezombies | 0 % | 0 % | — | — |
+| **Promedio** | 52 % | 50 % (55 % con la otra corrida de Frogs) | | |
+
+**Lectura:**
+- Lo adaptativo no cambia el promedio y quita los parámetros fijados a mano.
+- **Frogs con 5 minutos es inestable.** Depende de que la exploración inicial junte buenos datos del río: en la corrida mala no se ganó ninguna de las 35 partidas de práctica.
+- **Pendiente:** 3 semillas de entrenamiento por juego, para reportar media y dispersión.
