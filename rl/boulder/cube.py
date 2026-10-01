@@ -77,6 +77,7 @@ class CubeNavigator(Navigator):
         C = np.array(cube, dtype=np.int64) if H else np.zeros((0, N), np.int64)
         blocked = (C & bm) != 0                              # [H, N]
         R = self._adjust_risk([self.risk.grid(c) for c in cube])
+        self._R = R                                          # riesgo por casilla y tick (lo usa el alto nivel)
         now_blocked = (np.array(st.masks, dtype=np.int64) & bm) != 0
         dist = self._dist_to_goal(st, goal, now_blocked)
         if goal != getattr(self, "_ugoal", None):

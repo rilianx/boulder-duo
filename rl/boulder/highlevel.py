@@ -191,6 +191,8 @@ class Commander:
             choice = self.portal_hop(st, info, vals, targets)
         if choice is None and self.P.get("unlock", True):
             choice = self.unlock(st, info, vals, targets)
+        if choice is None and self.P.get("survive", True) and K.time_limit() is not None:
+            choice = self.safest(st, info)
         if choice is None:                         # explorar
             blocked = K.blocked_cells(st)
             cand = [(self.visits.get(j, 0) * 5 + t, j, t) for j, (t, H) in info.items()
@@ -199,6 +201,30 @@ class Commander:
                 _, j, t = min(cand)
                 choice = (j, t)
                 self.stats["explore"] += 1
+        return choice
+
+    # ------------------------------------------------------------------ sobrevivir
+    def safest(self, st, info):
+        """Se gana por llegar vivo a cierto tick: sin nada mejor que hacer, ir a la casilla alcanzable donde el
+        riesgo previsto (cubo del navegador, próximos ticks) más el de llegar es menor."""
+        R = getattr(self.nav, "_R", None)
+        if not R:
+            return None
+        K = self.know
+        blocked = K.blocked_cells(st)
+        best, choice = math.inf, None
+        Hk = min(len(R), 10)
+        for j, (t, H) in info.items():
+            if blocked[j] or t > Hk:
+                continue
+            haz = H + sum(-math.log(max(1e-4, 1 - float(R[k][j]))) for k in range(min(t, Hk - 1), Hk))
+            sc = haz + 0.01 * t
+            if sc < best:
+                best, choice = sc, (j, max(t, 1))
+        if choice is not None:
+            self.stats["survive"] = self.stats.get("survive", 0) + 1
+            if choice[0] == st.pos:
+                return None
         return choice
 
     # ------------------------------------------------------------------ teletransportes
@@ -562,11 +588,29 @@ class Commander:
                     x, y = x + vx * dt, y + vy * dt
             lift = max(K.use_lift(t, k) for k in self._keys(int(round(x - ax)), int(round(y - ay)), facing))
             if lift > 0:
-                ev += lift * K.use_value(t)
+                v = K.use_value(t)
+                a = K.attractor(t)
+                if a is not None and a[0] >= 0 and a[1] > 0 and K.extinct_loss(a[0]):
+                    v += self.P.get("protect", 1.0)      # va hacia algo que hay que proteger: eliminarlo vale más
+                ev += lift * v
         return ev
+
+    @staticmethod
+    def _counts(st):
+        c = {}
+        for m in st.masks:
+            while m:
+                b = m & -m; t = b.bit_length() - 1; m ^= b
+                c[t] = c.get(t, 0) + 1
+        for t in st.types:
+            c.setdefault(t, 0)
+        return c
 
     def __call__(self, st, br):
         self.know.observe_types(st)
+        self._last_st = st
+        if self.learn and st.tick % 50 == 25:              # muestras de mitad de partida (para el fin por conteo)
+            self.know.record_counts("mid", self._counts(st))
         self._learn_touch(st)
         if self.P["push"]:
             self._learn_push(st)
@@ -662,7 +706,16 @@ class Commander:
         return any(m >> t & 1 and self.va._value(t, st, avatars) > 0 for t in targets)
 
     def end(self, won):
-        if self.touch is not None and self.learn and won is not None:
+        K, last = self.know, getattr(self, "_last_st", None)
+        by_time = False
+        if last is not None and self.learn and won is not None:
+            tick = last.tick + 1
+            r = K.end_ticks.setdefault(tick, [0, 0]); r[0] += 1; r[1] += int(won == 1)
+            T = K.time_limit()
+            by_time = won == 1 and T is not None and abs(tick - T) <= 2
+            if not by_time:                                # ganar por tiempo no dice nada de qué quedaba
+                K.record_counts("win" if won == 1 else "loss", self._counts(last))
+        if self.touch is not None and self.learn and won is not None and not by_time:
             types, _, res, atype, _, _ = self.touch
             if types:
                 self.know.record_terminal_touch(types, atype, res, won == 1)   # ganó o perdió al tocarlo
@@ -670,4 +723,5 @@ class Commander:
         self.goal = None
         self.plan, self._mv, self._pos_last = None, None, None
         self._eps_cache = None
+        self._last_st = None
         self.nav.last = None
