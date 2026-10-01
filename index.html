@@ -1425,6 +1425,64 @@ function dirtSprite(dm, dd, ds, v){
   g.globalAlpha = 1;
   return c;
 }
+/* Dirt next to open space: the tile is cut with soft, wavy edges on the open sides and rounded corners where two
+   open sides meet, then outlined there with a pencil line. m: bits 1 up, 2 right, 4 down, 8 left are open.
+   deep pulls the cut halfway in (dirt behind a rock or gem). Cached per palette, variant, mask. */
+function dirtCut(v, m, deep){
+  const key = v * 32 + m * 2 + (deep ? 1 : 0), cache = TL.cut || (TL.cut = new Map());
+  if (cache.has(key)) return cache.get(key);
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), R = rng(2000 + key * 7);
+  const S = 64, inn = deep ? 21 : 3, r = deep ? 10 : 20;
+  const open = [m & 1, m & 2, m & 4, m & 8].map(Boolean);           // sides: up, right, down, left
+  const xl = open[3] ? inn : 0, xr = S - (open[1] ? inn : 0), yt = open[0] ? inn : 0, yb = S - (open[2] ? inn : 0);
+  const corner = [[xl, yt], [xr, yt], [xr, yb], [xl, yb]];          // clockwise from top-left
+  const centre = [[xl + r, yt + r], [xr - r, yt + r], [xr - r, yb - r], [xl + r, yb - r]];
+  const round = k => open[(k + 3) % 4] && open[k];                  // corner k sits between side k-1 and side k
+  const first = k => round(k) ? [centre[k][0] + Math.cos((180 + 90 * k) * Math.PI / 180) * r, centre[k][1] + Math.sin((180 + 90 * k) * Math.PI / 180) * r] : corner[k];
+  const nrm = [[0, 1], [-1, 0], [0, -1], [1, 0]];
+  const pts = [], openSeg = [];   // openSeg[k]: the segment from point k to point k+1 runs along open space
+  const push = (x, y, o) => { pts.push([x, y]); openSeg.push(o); };
+  for (let k = 0; k < 4; k++){
+    if (round(k)) for (let t = 0; t <= 6; t++){ const a = (180 + 90 * k + t * 15) * Math.PI / 180; push(centre[k][0] + Math.cos(a) * r, centre[k][1] + Math.sin(a) * r, t < 6 || open[k]); }
+    else push(corner[k][0], corner[k][1], open[k]);
+    if (open[k]) {
+      const [x0, y0] = pts[pts.length - 1], [x1, y1] = first((k + 1) % 4);
+      const ph = R() * 6, amp = 1.2 + R() * 1.4, n = 10;
+      for (let t = 1; t < n; t++){ const w = (Math.sin(ph + t * 1.3) * amp + Math.sin(ph * 2 + t * 2.9) * amp * .45 + amp) * Math.sin(Math.PI * t / n); push(x0 + (x1 - x0) * t / n + nrm[k][0] * w, y0 + (y1 - y0) * t / n + nrm[k][1] * w, true); }
+    }
+  }
+  const trace = () => { g.beginPath(); pts.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); };
+  g.save(); trace(); g.clip(); g.drawImage(TL.DIRT[v], 0, 0);
+  if (deep) { const sh = g.createRadialGradient(32, 40, 18, 32, 38, 46); sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sh; g.fillRect(0, 0, 64, 64); }
+  g.restore();
+  // pencil outline, only along the open edges (the closed ones meet the next dirt tile)
+  g.strokeStyle = 'rgba(40,22,10,.85)'; g.lineWidth = 2.4; g.lineCap = 'round';
+  g.lineJoin = 'round'; g.beginPath();
+  for (let k = 0; k < pts.length; k++){
+    const a = pts[k], b = pts[(k + 1) % pts.length];
+    if (openSeg[k]) { g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); }
+  }
+  g.stroke();
+  cache.set(key, c);
+  return c;
+}
+/* A fillet of dirt in the corner of an open cell whose two sides there are dirt, so holes get round corners.
+   c: 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left. */
+function dirtFillet(v, c){
+  const key = 1000 + v * 4 + c, cache = TL.cut || (TL.cut = new Map());
+  if (cache.has(key)) return cache.get(key);
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+  const r = 18, cx = c === 0 || c === 3 ? 0 : 64, cy = c < 2 ? 0 : 64;
+  const ox = cx ? 64 - r : r, oy = cy ? 64 - r : r, a0 = [1, 1.5, 0, .5][c] * Math.PI, a1 = a0 + Math.PI / 2;
+  g.save(); g.beginPath(); g.moveTo(cx, cy); g.lineTo(ox + Math.cos(a0) * r, oy + Math.sin(a0) * r); g.arc(ox, oy, r, a0, a1); g.closePath();
+  g.clip(); g.drawImage(TL.DIRT[v], 0, 0); g.restore();
+  g.strokeStyle = 'rgba(40,22,10,.85)'; g.lineWidth = 2.4; g.lineCap = 'round';
+  g.beginPath(); g.arc(ox, oy, r, a0, a1); g.stroke();
+  cache.set(key, cv);
+  return cv;
+}
+const isOpenCell = t => t === E || t === P1 || t === P2 || t === FIRE || t === BUTT || t === BOOM;
+const openMask = i => (isOpenCell(grid[i - W]) ? 1 : 0) | (isOpenCell(grid[i + 1]) ? 2 : 0) | (isOpenCell(grid[i + W]) ? 4 : 0) | (isOpenCell(grid[i - 1]) ? 8 : 0);
 const DVAR = Array.from({ length: W*H }, (_, i) => Math.floor(hash(i * 13 + 7) * 4));
 
 function makeTiles(pal){
@@ -2731,7 +2789,7 @@ function updateCams(){
 /* ---------- render ---------- */
 function tileSprite(t, i, x, y, af, open){
   switch (t) {
-    case DIRT: return TL.DIRT[DVAR[i]];
+    case DIRT: { const m = i > W && i < W*(H-1) ? openMask(i) : 0; return m ? dirtCut(DVAR[i], m, false) : TL.DIRT[DVAR[i]]; }
     case WALL: return TL.WALL;
     case STEEL: return TL.STEEL;
     case ROCK: return ROCK_T[vari[i] % ROCK_T.length];
@@ -2792,6 +2850,13 @@ function renderView(k){
   const glide = [];
   for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + VH + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + VW + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
+    if (isOpenCell(grid[i]) && x > 0 && y > 0 && x < W-1 && y < H-1) {
+      // round the corners of the hole where two dirt sides meet
+      const up = grid[i - W] === DIRT, rt = grid[i + 1] === DIRT, dn = grid[i + W] === DIRT, lf = grid[i - 1] === DIRT;
+      [[up && lf, i - W - 1], [up && rt, i - W + 1], [dn && rt, i + W + 1], [dn && lf, i + W - 1]].forEach(([ok, di], c) => {
+        if (ok && (simT - dugAt[i]) / tickMs >= 1) g.drawImage(dirtFillet(DVAR[di], c), x*T - ox, y*T - oy, T, T);
+      });
+    }
     const dk = (simT - dugAt[i]) / tickMs;
     if (dk < 1) {
       // dirt being dug: the hole opens in the middle of the tile and spreads to its sides
@@ -2806,18 +2871,7 @@ function renderView(k){
     if ((tt === ROCK || tt === GEM) && !(gk > 0)) {
       // a resting rock or gem sits in the earth: dirt behind it, opened only towards empty neighbours
       const px = x*T - ox, py = y*T - oy;
-      g.drawImage(TL.DIRT[DVAR[i]], px, py, T, T);
-      const sh = g.createRadialGradient(px + T/2, py + T*.62, T*.3, px + T/2, py + T*.6, T*.72);
-      sh.addColorStop(0, 'rgba(0,0,0,.55)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = sh; g.fillRect(px, py, T, T);
-      g.fillStyle = '#000';
-      for (let k=0; k<4; k++){
-        const n = grid[i + OFF[k]];
-        if (n === E || n === P1 || n === P2 || n === BOOM || (n === FIRE || n === BUTT)) {
-          if (k === 0) g.fillRect(px, py, T, T/2); else if (k === 1) g.fillRect(px + T/2, py, T/2, T);
-          else if (k === 2) g.fillRect(px, py + T/2, T, T/2); else g.fillRect(px, py, T/2, T);
-        }
-      }
+      g.drawImage(dirtCut(DVAR[i], openMask(i), true), px, py, T, T);
       if (tt === ROCK) { g.drawImage(s, px - T*.06, py - T*.08, T*1.12, T*1.12); continue; }
     }
     if (gk > 0) { const k = gk; glide.push([s, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
@@ -3074,6 +3128,7 @@ window.__sim = {
     os.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, (2 + Math.floor(k / 11)) * z, z * .92, z * .92));
     return c.toDataURL();
   },
+  cut(v, m, d){ return dirtCut(v, m, d).toDataURL(); },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
   map(n){
     level = n; genCave(n);
