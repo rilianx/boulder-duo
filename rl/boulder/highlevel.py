@@ -137,7 +137,10 @@ class Commander:
         def safe_mover(t):
             ds, dr, da, pd, n = K.effect(t)
             return self.P.get("chase_movers", False) and n >= 3 and (ds > 0 or dr > 0) and pd < 0.1
-        targets = [t for t in targets if st.types.get(t, ("", -1))[1] not in (3, 6) or safe_mover(t)]
+        # lo que se mueve = lo que se vio moverse (no la categoría VGDL: la miel es "móvil" y nunca se mueve)
+        def moves(t):
+            return st.types.get(t, ("", -1))[1] == 3 or sum(K.move_dirs.get(t, {}).values()) >= 3
+        targets = [t for t in targets if not moves(t) or safe_mover(t)]
         vals = {t: self.va._value(t, st, avatars) for t in targets}
         best, choice = self.P["min_score"], None
         self._scores = {}
@@ -316,8 +319,11 @@ class Commander:
             r = K.push_into.setdefault(t, {}).setdefault(masks0[dest] & ~self._abits(), [0, 0, 0, 0.0])
             if st.pos == c:
                 o = st.objects.get(oid)
-                if o is None:                                     # se corrió y desapareció
-                    p[0] += 1; r[0] += 1; r[2] += 1; r[3] += st.score - sc0
+                if o is None:
+                    # desapareció: si ya se lo vio correrse es "lo empujé y cayó" (la caja en el hoyo); si no,
+                    # es que se consume al tocarlo (la miel), y eso no es empujar
+                    if K.pushable(t):
+                        p[0] += 1; r[0] += 1; r[2] += 1; r[3] += st.score - sc0
                 elif int(round(o[2])) * W + int(round(o[1])) == dest:
                     p[0] += 1; r[0] += 1; r[3] += st.score - sc0
                 else:
