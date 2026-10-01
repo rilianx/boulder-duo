@@ -1946,6 +1946,8 @@ function explode(cx, cy, toGem){
   sfx.boom();
 }
 
+// rules of the original caves (not the random training levels, which must match the Python copy in rl/)
+const caveRules = () => mode !== 'train' && !simHook;
 function stepPlayer(p){
   if (!p.alive) return;
   const d = p.held[p.held.length-1];
@@ -1967,6 +1969,12 @@ function stepPlayer(p){
     p.score += timeLeft * 2; sfx.exit();
     if (p.ai) { AI.exits++; aiTerminal(p, 60, 'x'); }
     if (mode === 'versus' || mode === 'pc') roundWin(p);
+  }
+  else if (t === ROCK && dy === 0 && grid[j + OFF[d]] === E && caveRules()) {
+    // original caves: each tick of pushing moves the rock with probability 1/2, so on average it takes two ticks,
+    // as long as a rock takes to start falling and drop one cell; with luck it goes at once, even while falling
+    if (crng() < .5) { const f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; go(); p.push = 0; }
+    else p.push++;
   }
   else if (t === ROCK && dy === 0 && grid[j + OFF[d]] === E && !fall[j]) {
     if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; go(); p.push = 0; }
