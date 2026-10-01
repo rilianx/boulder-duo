@@ -2114,11 +2114,11 @@ function fallObj(i, x, y){
     } else if (bt === FIRE || bt === BUTT) { explode(x, y+1, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
-  // and crumbles into dirt itself. Steel, the exit and diamonds hold.
+  // and crumbles into dirt that fills that hole. Steel, the exit and diamonds hold.
   if (realGravity && caveRules() && fall[i] && grid[i] === ROCK && fallN[i] >= 5 &&
       (bt === DIRT || bt === WALL || bt === ROCK || bt === EXPW || bt === MAGIC)) {
-    grid[b] = E; fall[b] = 0; aux[b] = 0; src[b] = -1;
-    grid[i] = DIRT; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
+    grid[b] = DIRT; fall[b] = 0; aux[b] = 0; src[b] = -1; fallT[b] = 0;   // the rock crumbles into the hole it broke
+    grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
     dust.push({ x, y, at: nowT }); shakeAt = nowT; sfx.crash(); hardHits++;
     return;
   }
