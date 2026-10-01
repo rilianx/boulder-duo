@@ -3002,7 +3002,10 @@ function loop(now){
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
       if (state !== 'play' || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
-      nowT = simT; stepPlayer(p); p.nextAt = simT + tickMs;
+      // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
+      // noticed it, or each step would run late by part of a frame and the walk would pulse
+      const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
+      nowT = t0; stepPlayer(p); p.nextAt = t0 + tickMs;
       if (state === 'play') checkEnd();
     });
   } else worldT = simT;
@@ -3175,6 +3178,7 @@ window.__sim = {
     return c.toDataURL();
   },
   cut(v, m, d){ return dirtCut(v, m, d).toDataURL(); },
+  glide(){ return [simT, ...glidePos(players[0])]; },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
   map(n){
     level = n; genCave(n);
