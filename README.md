@@ -6,13 +6,13 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 
 ## Jugar con celular
 
-Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular y, si dices que sí, muestra una cruceta táctil: mantén el dedo hacia donde quieras cavar y moverte (puedes deslizarlo para girar sin levantarlo). El botón **TÁCTIL** de arriba la activa o desactiva cuando quieras, y la elección se recuerda.
+Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular. Si dices que sí, te mueves **deslizando el dedo sobre tu propio tablero**: lo apoyas en cualquier parte y lo arrastras hacia abajo, la izquierda, arriba o la derecha; mientras no lo levantes el minero sigue caminando, y para girar basta con arrastrar hacia el otro lado. Un círculo marca dónde pusiste el dedo y la flecha, la dirección. El botón **TÁCTIL** de arriba lo activa o desactiva y la elección se recuerda.
 
-Se juega en **horizontal**: los tableros llenan la pantalla y las crucetas, semitransparentes, quedan encima de las esquinas inferiores (J1 a la izquierda, J2 a la derecha; contra el PC solo aparece la de J1). Si el celular está en vertical, el juego pide girarlo; en Android intenta además pasar a pantalla completa y fijar la orientación.
+Se juega en **horizontal**: J1 desliza en el tablero de la izquierda y J2 en el de la derecha; contra el PC sirven los dos tableros para J1. Si el celular está en vertical, el juego pide girarlo.
 
 **Pantalla completa:** botón **PANT. COMPLETA** arriba (Android y computador). En iPhone, Safari no lo permite en páginas: hay que agregar el juego a la pantalla de inicio (Compartir → Agregar a inicio) y abrirlo desde ahí, y se abre sin barras.
 
-La salida está en la fila de abajo del mapa: cerrada se ve como una puerta de acero y empieza a parpadear cuando se juntan las gemas necesarias.
+La salida está escondida en la fila de abajo del mapa y aparece al juntar las gemas necesarias: suena una fanfarria, sale el aviso «¡SALIDA ABIERTA!» y, si no está en pantalla, una flecha en el borde del tablero apunta hacia ella.
 
 ## Modos
 

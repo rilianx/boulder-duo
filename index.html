@@ -103,37 +103,28 @@ button:disabled{opacity:.4;cursor:default}
   .views{grid-template-columns:1fr}
   .legend{grid-template-columns:1fr}
 }
-/* Touch: one virtual stick per human player. Portrait stacks the views and puts the sticks underneath; landscape floats them at the sides. */
-.touchpads{display:none}
-.touch .touchpads{display:flex;justify-content:space-between;gap:12px;position:sticky;bottom:0;padding:6px 0 calc(6px + env(safe-area-inset-bottom));background:var(--bg);z-index:3}
-.stick{width:150px;height:150px;border-radius:50%;border:3px solid rgba(95,180,255,.55);background:transparent;position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
-.stick.s2{border-color:rgba(255,138,76,.55);margin-left:auto}
-.stick span{position:absolute;font-family:var(--display);font-size:14px;color:rgba(244,241,234,.75);text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}
-.stick .u{top:10px;left:50%;transform:translateX(-50%)} .stick .d{bottom:10px;left:50%;transform:translateX(-50%)}
-.stick .l{left:12px;top:50%;transform:translateY(-50%)} .stick .r{right:12px;top:50%;transform:translateY(-50%)}
-.stick b{text-shadow:0 0 3px #000,0 0 3px #000;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:10px;font-weight:normal;color:var(--p1);pointer-events:none}
-.stick.s2 b{color:var(--p2)}
-.stick span.on{color:var(--warn)}
+/* Touch: each player drags on their own board; a ring marks where the finger landed and the arrow shows the direction. */
+.touch .view{touch-action:none;user-select:none;-webkit-user-select:none}
+.swipe{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:2px solid rgba(255,255,255,.6);pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:18px;color:#ffd24a;text-shadow:0 0 3px #000,0 0 3px #000}
+.p1v .swipe{border-color:rgba(95,180,255,.8)} .p2v .swipe{border-color:rgba(255,138,76,.8)}
 .touch button{touch-action:manipulation}
 .touch .legend{display:none}
 .overlay{overflow:auto}
 .rotate{display:none}
 @media (orientation:portrait){
-  .touch .views{width:min(100%, calc((100dvh - 290px) / 1.45));margin-inline:auto}
+  .touch .views{width:min(100%, calc((100dvh - 110px) / 1.45));margin-inline:auto}
   .touch:not(.portrait-ok) .rotate{display:flex;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
   .rotate h2{font-family:var(--display);font-size:16px;margin:0;line-height:1.6}
   .rotate p{margin:0;color:var(--muted)}
   .rotate .phone{width:60px;height:100px;border:4px solid var(--ink);border-radius:10px;animation:turn 1.8s ease-in-out infinite}
   @keyframes turn{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
 }
-/* Landscape phone: the boards fill the screen and the sticks float, see-through, over the bottom corners of each board. */
+/* Landscape phone: the boards fill the screen. */
 @media (orientation:landscape) and (max-height:600px){
   .touch .wrap{padding-block:4px 0;padding-inline:max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));gap:4px}
   .touch header .tbtn{font-size:8px;padding:3px 6px} .touch .pause{width:28px;height:28px}
   .touch .bar{font-size:15px;padding:3px 8px;gap:8px}
   .touch .views{grid-template-columns:1fr 1fr;gap:4px;width:min(100%, calc((100dvh - 60px) * 2.75));margin-inline:auto}
-  .touch .touchpads{position:fixed;inset:auto max(14px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));background:none;pointer-events:none;padding:0}
-  .touch .stick{pointer-events:auto;width:118px;height:118px}
 }
 </style>
 
@@ -176,14 +167,10 @@ button:disabled{opacity:.4;cursor:default}
   <div class="rotate" role="dialog" aria-label="Gira el celular">
     <div class="phone"></div>
     <h2>GIRA EL CELULAR</h2>
-    <p>El juego se juega en horizontal, con los controles sobre el tablero.</p>
+    <p>El juego se juega en horizontal: deslizas el dedo sobre tu tablero para moverte.</p>
     <button id="bportrait">SEGUIR EN VERTICAL</button>
   </div>
 
-  <div class="touchpads" id="touchpads">
-    <div class="stick s1" id="stick0" aria-label="Controles del jugador 1"><span class="u">▲</span><span class="r">▶</span><span class="d">▼</span><span class="l">◀</span><b>J1</b></div>
-    <div class="stick s2" id="stick1" aria-label="Controles del jugador 2"><span class="u">▲</span><span class="r">▶</span><span class="d">▼</span><span class="l">◀</span><b>J2</b></div>
-  </div>
 
   <section class="turbo" id="turbo" hidden>
     <h2>ENTRENAMIENTO TURBO · SIN PANTALLA</h2>
@@ -334,16 +321,6 @@ const EXIT_T = [0,1].map(f => {
   return c;
 });
 
-/* closed exit: a locked steel door, so players know where to head before it opens */
-const EXIT_SHUT_T = (() => {
-  const c = mk(), g = c.getContext('2d');
-  g.drawImage(STEEL_T,0,0);
-  g.fillStyle = '#3a3a3a'; g.fillRect(3,2,10,13);
-  g.fillStyle = '#7a7a7a'; g.fillRect(4,3,8,12);
-  g.fillStyle = '#ffd24a'; g.fillRect(10,8,2,2);
-  return c;
-})();
-
 const ROCK_T = spr([
   "..gggg..",
   ".gwwggg.",
@@ -465,7 +442,7 @@ let grid, fall, dir, aux, moved;
 let players = [];
 let mode = 'coop', level = 1, state = 'menu';
 let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
-let landThisTick = false, frame = 0, dirtVar;
+let landThisTick = false, frame = 0, dirtVar, exitSeen = [-1, -1];
 
 function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
@@ -548,7 +525,7 @@ function initLevel(n){
     if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = 16; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
   });
-  timeAcc = 0; exitOpenShown = false; snapCams();
+  timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; snapCams();
   state = 'play'; hideOverlay(); updateHud();
 }
 
@@ -723,12 +700,12 @@ function menu(){
 function askTouch(){
   showOverlay(`<div class="card">
     <h2>¿JUEGAS CON CELULAR?</h2>
-    <p>Con los controles táctiles aparece una cruceta en pantalla: mantén el dedo hacia donde quieras cavar y moverte.</p>
+    <p>Pon el dedo en tu tablero y deslízalo hacia donde quieras ir: abajo, izquierda, arriba o derecha. Mientras no lo levantes, el minero sigue caminando.</p>
     <div class="row">
       <button id="btyes" class="b1">SÍ, JUGAR CON CELULAR</button>
       <button id="btno">NO, USO TECLADO</button>
     </div>
-    <p>Se juega con el celular en horizontal. De a dos, J1 usa la cruceta izquierda y J2 la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
+    <p>Se juega con el celular en horizontal. De a dos, J1 desliza en el tablero de la izquierda y J2 en el de la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
   </div>`);
   const pick = on => { setTouch(on); menu(); };
   $('btyes').onclick = () => { audioOn(); goLandscape(); pick(true); };
@@ -747,7 +724,6 @@ function startGame(m){
   players[1].ai = aiMode;
   if (mode === 'train') players[0].lives = 0;
   document.querySelector('.p2v .tag').textContent = aiMode ? 'PC' : 'J2';
-  $('stick1').hidden = aiMode;
   $('aipanel').hidden = !aiMode;
   $('speeds').hidden = mode !== 'train';
   setSpeed(1);
@@ -1249,7 +1225,7 @@ function tileSprite(t, i, x, y, af, open){
     case STEEL: return STEEL_T;
     case ROCK: return ROCK_T;
     case GEM: return GEM_T[Math.floor(frame / 3) % 8];
-    case EXIT: return open ? EXIT_T[Math.floor(frame/8) % 2] : EXIT_SHUT_T;
+    case EXIT: return open ? EXIT_T[Math.floor(frame/8) % 2] : STEEL_T;
     case FIRE: return FIRE_T[af];
     case BUTT: return BUTT_T[af];
     case BOOM: return BOOM_T[Math.min(3, aux[i])];
@@ -1288,7 +1264,7 @@ function renderView(k){
   if (k === 0 && mode === 'train' && state !== 'menu') return renderOverview(g);
   const ox = Math.round(c.x * T), oy = Math.round(c.y * T);
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
-  const af = Math.floor(frame / 6) % 4, open = exitVisiblyOpen();
+  const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   for (let y = y0; y <= Math.min(H-1, y0 + VH); y++) for (let x = x0; x <= Math.min(W-1, x0 + VW); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
     if (s) g.drawImage(s, x*T - ox, y*T - oy);
@@ -1311,7 +1287,29 @@ function renderView(k){
       g.fillStyle = 'rgba(0,0,0,.7)'; g.fillRect((VW*T - w)/2, 8, w, 16);
       g.fillStyle = k ? '#ff8a4c' : '#5fb4ff'; g.fillText(msg, VW*T/2, 20);
     }
+    if (open && !p.exited && !p.ai) drawExitHint(g, k, ox, oy);
   }
+}
+/* Once the exit opens: a banner for a few seconds, and an arrow on the edge of the view while it is off screen. */
+function drawExitHint(g, k, ox, oy){
+  if (exitSeen[k] < 0) exitSeen[k] = frame;
+  const i = grid.indexOf(EXIT); if (i < 0) return;
+  const ex = (i % W) * T + T/2 - ox, ey = Math.floor(i / W) * T + T/2 - oy, vw = VW*T, vh = VH*T;
+  g.save(); g.font = '8px "Press Start 2P", monospace'; g.textAlign = 'center';
+  if (frame - exitSeen[k] < 200) {
+    const msg = '¡SALIDA ABIERTA!', w = g.measureText(msg).width + 12;
+    g.fillStyle = 'rgba(0,0,0,.75)'; g.fillRect((vw - w)/2, 30, w, 16);
+    g.fillStyle = (frame >> 3) % 2 ? '#ffd24a' : '#fff'; g.fillText(msg, vw/2, 42);
+  }
+  if (ex < 0 || ey < 0 || ex > vw || ey > vh) {
+    const cx = vw/2, cy = vh/2, dx = ex - cx, dy = ey - cy;
+    const t = Math.min((vw/2 - 14) / Math.abs(dx || 1e-6), (vh/2 - 14) / Math.abs(dy || 1e-6));
+    const ax = cx + dx*t, ay = cy + dy*t, ang = Math.atan2(dy, dx);
+    g.translate(ax, ay); g.rotate(ang);
+    g.fillStyle = (frame >> 3) % 2 ? '#ffd24a' : '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -8); g.lineTo(-2, 0); g.lineTo(-6, 8); g.closePath(); g.stroke(); g.fill();
+  }
+  g.restore();
 }
 function render(){ updateCams(); renderView(0); renderView(1); }
 
@@ -1361,7 +1359,8 @@ window.addEventListener('keyup', e => {
 });
 window.addEventListener('blur', () => players.forEach(p => { if (!p.ai) p.held = []; }));
 
-/* Touch sticks: the direction is the side of the stick the finger is on, so sliding the thumb turns without lifting it. */
+/* Swipe on the board: the direction is where the finger has moved from where it landed. The anchor trails the finger,
+   so turning back needs only a short drag. Against the PC both boards steer J1. */
 const isTouchDevice = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
 let touchPref = null;
 try { const v = localStorage.getItem('boulder-duo-touch'); if (v === '1' || v === '0') touchPref = v === '1'; } catch (e) {}
@@ -1371,23 +1370,27 @@ function setTouch(on){
   document.body.classList.toggle('touch', on);
   const b = $('btouch'); b.innerHTML = on ? 'TÁCTIL<br>ON' : 'TÁCTIL<br>OFF'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
 }
-[0, 1].forEach(id => {
-  const st = $('stick' + id), arrows = [...st.querySelectorAll('span')];
-  const set = d => {
-    const p = players[id];
-    if (p && !p.ai) p.held = d < 0 ? [] : [d];
-    arrows.forEach((a, i) => a.classList.toggle('on', i === d));
-  };
-  const aim = e => {
-    const r = st.getBoundingClientRect();
-    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-    if (Math.hypot(dx, dy) < r.width * 0.12) return set(-1);
+document.querySelectorAll('.view').forEach((view, k) => {
+  const ring = document.createElement('div'); ring.className = 'swipe'; ring.hidden = true; view.appendChild(ring);
+  let pid = null, ax = 0, ay = 0, d = -1;
+  const who = () => { const p = players[k]; return p && !p.ai ? p : players[0] && !players[0].ai && players[1] && players[1].ai ? players[0] : null; };
+  const put = () => { const r = view.getBoundingClientRect(); ring.style.left = (ax - r.left) + 'px'; ring.style.top = (ay - r.top) + 'px'; };
+  const set = nd => { d = nd; const p = who(); if (p) p.held = d < 0 ? [] : [d]; ring.textContent = d < 0 ? '' : '▲▶▼◀'[d]; };
+  view.addEventListener('pointerdown', e => {
+    if (!document.body.classList.contains('touch') || pid !== null || !ov.hidden || !who()) return;
+    e.preventDefault(); audioOn(); pid = e.pointerId; view.setPointerCapture(pid);
+    ax = e.clientX; ay = e.clientY; put(); ring.hidden = false; set(-1);
+  });
+  view.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid) return;
+    let dx = e.clientX - ax, dy = e.clientY - ay; const dist = Math.hypot(dx, dy);
+    if (dist < 14) return;
     set(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
-  };
-  st.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); st.setPointerCapture(e.pointerId); aim(e); });
-  st.addEventListener('pointermove', e => { if (st.hasPointerCapture(e.pointerId)) aim(e); });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => st.addEventListener(t, () => set(-1)));
-  st.addEventListener('contextmenu', e => e.preventDefault());
+    if (dist > 36) { ax = e.clientX - dx / dist * 36; ay = e.clientY - dy / dist * 36; put(); }
+  });
+  const end = e => { if (e.pointerId !== pid) return; pid = null; ring.hidden = true; set(-1); };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => view.addEventListener(t, end));
+  view.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch')) e.preventDefault(); });
 });
 /* Best effort: Android Chrome can go fullscreen and lock landscape; elsewhere the "gira el celular" screen asks for it. */
 function goLandscape(){
