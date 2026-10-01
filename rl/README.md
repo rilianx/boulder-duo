@@ -698,3 +698,35 @@ La evaluación es igual que la de la tabla anterior.
 - Lo adaptativo no cambia el promedio y quita los parámetros fijados a mano.
 - **Frogs con 5 minutos es inestable.** Depende de que la exploración inicial junte buenos datos del río: en la corrida mala no se ganó ninguna de las 35 partidas de práctica.
 - **Pendiente:** 3 semillas de entrenamiento por juego, para reportar media y dispersión.
+
+### Rama `mecanicas`: plantillas nuevas (movimiento relativo, fin por conteo, fin por tiempo)
+
+Las plantillas nuevas se aprenden sin nombres de juego:
+- un tipo que se acerca o se aleja del avatar, o de otro tipo;
+- el tipo cuya extinción gana o pierde la partida;
+- ganar por llegar vivo a cierto tick.
+
+En el camino aparecieron fallas generales, corregidas:
+- el signo de la predicción de perseguidores estaba invertido;
+- los objetos recién aparecidos se predecían quietos;
+- la rapidez se medía con el desplazamiento neto, no con el camino recorrido;
+- sin camino a la meta, el navegador esperaba quieto aunque algo lo persiguiera;
+- la exploración de "usar" ocurría con peligro cerca;
+- la miel contaba como caja empujable;
+- las metas se excluían por la categoría VGDL, no por haberse visto moverse.
+
+| Juego | `main` | `mecanicas` | YOLOBOT | OLETS |
+|---|---|---|---|---|
+| Boulder Dash | 55 % | 55 % | 63 % | 30 % |
+| Zelda | 84 % | 83 % | 80 % | 83 % |
+| Frogs | 87 % | **99 %** | 83 % | 80 % |
+| Butterflies | 100 % | 100 % | 100 % | 97 % |
+| Chase | 0 % | **13 %** | 3 % | 10 % |
+| Missilecommand | 60 % | 50 % | 67 % | 57 % |
+| Aliens | 93 % | 87 % | 60 % | 93 % |
+| Portals | 23 % | 27 % | 20 % | 67 % |
+| Sokoban | 100 % | 100 % | 97 % | 47 % |
+| Survivezombies | 0 % | 0 % | 0 % | 0 % |
+| **Promedio** | 60 % | **61 %** | 57 % | 56 % |
+
+Con 30 partidas por juego (75 en BD, Zelda y Frogs), el margen es de ±11 a ±15 puntos. Lo único que sale del ruido es Chase: de 0 % a 13 %, ahora mejor que YOLOBOT y OLETS.
