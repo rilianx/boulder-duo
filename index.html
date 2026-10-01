@@ -1356,25 +1356,38 @@ function palFromColors(names){
   const [c1, c2, c3] = names.map(k => C64[k] || '#888888');
   return [c1, shade(c1, .6), shade(c1, 1.35), c2, c3 || '#ffffff', shade(c2, .45), shade(c2, .7)];
 }
+/* Hand-drawn look: shapes are traced twice with a slightly shaky line, shadows are pencil hatching. */
+function shaky(g, pts, R, amt){ g.beginPath(); pts.forEach(([x, y], k) => { const jx = x + (R() - .5) * amt, jy = y + (R() - .5) * amt; k ? g.lineTo(jx, jy) : g.moveTo(jx, jy); }); g.closePath(); }
+function sketch(g, pts, R, col, w){ shaky(g, pts, R, 1.4); g.lineWidth = w; g.strokeStyle = col; g.stroke(); shaky(g, pts, R, 2.2); g.lineWidth = w * .55; g.stroke(); }
+function hatch(g, R, col, x0, y0, x1, y1, gap){
+  g.strokeStyle = col; g.lineWidth = 1.1; g.beginPath();
+  for (let k = x0 - (y1 - y0); k < x1; k += gap){ g.moveTo(k + (R() - .5), y1 + (R() - .5)); g.lineTo(k + (y1 - y0) + (R() - .5), y0 + (R() - .5)); }
+  g.stroke();
+}
+const blobPts = (cx, cy, r, n, R, rough, sy = 1) => Array.from({ length: n }, (_, k) => { const a = k / n * Math.PI * 2, rr = r * (1 + (R() - .5) * rough); return [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * sy]; });
+/* Dirt at 64×64: soft clods in three tones, small pebbles and pencil specks. Four variants break the repetition. */
+function dirtSprite(dm, dd, ds, v){
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), R = rng(911 + v * 37);
+  g.fillStyle = dm; g.fillRect(0, 0, 64, 64);
+  for (let k=0; k<26; k++){ shaky(g, blobPts(R() * 64, R() * 64, 3 + R() * 7, 9, R, .5, .7), R, 1); g.fillStyle = R() < .55 ? dd : ds; g.globalAlpha = .28 + R() * .25; g.fill(); }
+  g.globalAlpha = 1;
+  for (let k=0; k<7; k++){
+    const x = 4 + R() * 56, y = 4 + R() * 56, r = 1.6 + R() * 2.2;
+    shaky(g, blobPts(x, y, r, 7, R, .4, .75), R, .6); g.fillStyle = R() < .5 ? ds : shade(dd, .8); g.fill();
+    g.lineWidth = .9; g.strokeStyle = shade(dd, .55); g.stroke();
+  }
+  g.fillStyle = shade(dd, .5);
+  for (let k=0; k<40; k++){ g.fillRect(R() * 64, R() * 64, 1 + R() * 1.4, 1 + R() * 1.2); }
+  g.strokeStyle = shade(dd, .7); g.globalAlpha = .45; g.lineWidth = 1;
+  for (let k=0; k<6; k++){ const x = R() * 64, y = R() * 64; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + 3, y + (R() - .5) * 4, x + 6 + R() * 4, y + (R() - .5) * 3); g.stroke(); }
+  g.globalAlpha = 1;
+  return c;
+}
+const DVAR = Array.from({ length: W*H }, (_, i) => Math.floor(hash(i * 13 + 7) * 4));
+
 function makeTiles(pal){
   const [dm, dd, ds, br, bh, mo, st] = pal;
-  const DIRT = spr([
-  "oobooboo",
-  "booookbo",
-  "obobooob",
-  "osboboob",
-  "bookobbo",
-  "oboboooo",
-  "oobbooks",
-  "kooooboo",
-  "oobkoobo",
-  "bobooobo",
-  "oooboboo",
-  "obosobbo",
-  "ooboooko",
-  "bkoobobo",
-  "oobboooo",
-  "booboobo"], { ...C, o:dm, b:dd, s:ds });
+  const DIRT = [0,1,2,3].map(v => dirtSprite(dm, dd, ds, v));
   const STEEL = (() => {
     const c = mk(), g = c.getContext('2d');
     g.fillStyle=st; g.fillRect(0,0,T,T);
@@ -1469,43 +1482,51 @@ const caveTitle = n => { if (mode === 'train') return ''; const nm = caveOf(n).c
 
 /* Objects drawn at 64×64 (4× the tile) and shown in one tile, like the kids. */
 function mk64(){ const c = document.createElement('canvas'); c.width = c.height = 64; return c; }
-const ROCK_T = (() => {
-  const c = mk64(), g = c.getContext('2d'), R = rng(77);
-  const pts = []; for (let k=0; k<14; k++){ const a = k / 14 * Math.PI * 2, r = 26 + (R() - .5) * 4; pts.push([32 + Math.cos(a) * r, 34 + Math.sin(a) * r * .92]); }
-  g.beginPath(); pts.forEach(([x, y], k) => k ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
-  const gr = g.createRadialGradient(22, 22, 3, 32, 34, 32);
-  gr.addColorStop(0, '#f2f2ee'); gr.addColorStop(.45, '#a9a8a2'); gr.addColorStop(1, '#4e4d4a');
-  g.fillStyle = gr; g.fill(); g.lineWidth = 2.4; g.strokeStyle = '#26251f'; g.stroke();
-  g.save(); g.clip();
-  for (let k=0; k<40; k++){ g.fillStyle = R() < .5 ? 'rgba(0,0,0,.18)' : 'rgba(255,255,255,.22)'; g.beginPath(); g.arc(8 + R() * 48, 10 + R() * 48, .8 + R() * 1.6, 0, Math.PI * 2); g.fill(); }
-  g.strokeStyle = 'rgba(30,30,28,.55)'; g.lineWidth = 1.6;
-  g.beginPath(); g.moveTo(40, 22); g.lineTo(36, 30); g.lineTo(41, 37); g.moveTo(18, 40); g.lineTo(25, 44); g.stroke();
+/* Rocks: eight hand-drawn boulders of different shape and stone (they all behave the same). */
+const ROCK_TONES = [['#efeee8','#a9a8a2','#4e4d4a'], ['#ece4d6','#b0a28a','#5a4e3c'], ['#e4e9ee','#98a3ad','#434c56'], ['#f0e6dc','#b79c8a','#5e4638'],
+                    ['#e8e8e0','#8f8f86','#3e3e38'], ['#efe9d0','#b8ad84','#5c5434'], ['#e9e3ea','#a596a8','#4c3f50'], ['#e6ece4','#9eab98','#46523f']];
+const ROCK_T = ROCK_TONES.map((tone, v) => {
+  const c = mk64(), g = c.getContext('2d'), R = rng(77 + v * 131);
+  const sy = .8 + R() * .2, pts = blobPts(32, 34, 25 + R() * 3, 11 + (v % 4), R, .22 + (v % 3) * .06, sy);
+  shaky(g, pts, R, 0);
+  const gr = g.createRadialGradient(22, 22, 3, 32, 34, 33);
+  gr.addColorStop(0, tone[0]); gr.addColorStop(.5, tone[1]); gr.addColorStop(1, tone[2]);
+  g.fillStyle = gr; g.fill();
+  g.save(); shaky(g, pts, R, 0); g.clip();
+  hatch(g, R, 'rgba(30,26,22,.28)', 30, 36, 64, 64, 3.2);
+  for (let k=0; k<26; k++){ g.fillStyle = R() < .5 ? 'rgba(0,0,0,.2)' : 'rgba(255,255,255,.25)'; g.beginPath(); g.arc(8 + R() * 48, 10 + R() * 48, .7 + R() * 1.5, 0, Math.PI * 2); g.fill(); }
+  g.strokeStyle = 'rgba(30,26,22,.6)'; g.lineWidth = 1.5; g.beginPath();
+  for (let k=0; k<1 + v % 3; k++){ let x = 16 + R() * 30, y = 18 + R() * 26; g.moveTo(x, y); for (let j=0; j<3; j++){ x += (R() - .3) * 8; y += (R() - .3) * 8; g.lineTo(x, y); } }
+  g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.ellipse(22, 21, 5, 3, -.6, 0, Math.PI * 2); g.fill();
   g.restore();
+  sketch(g, pts, R, '#231f1a', 2.2);
   return c;
-})();
+});
 
-/* Diamonds: a cut stone whose facets shimmer and with a sparkle that travels round it (8 frames). */
-const GEM_T = [0,1,2,3,4,5,6,7].map(ph => {
-  const c = mk64(), g = c.getContext('2d');
-  const top = [[20,12],[44,12]], gl = [[7,26],[57,26]], tip = [32,58];
+/* Gems: a cut stone in six colours, traced by hand; its facets shimmer and a sparkle travels round it (8 frames). */
+const GEM_COLS = [
+  ['#e2f6ff','#8fd2ff','#4aa6f5','#1f6fd6','#123f8a'], ['#e6ffe9','#8cf0a0','#3fcf6a','#1c9a45','#0e5a28'],
+  ['#ffe6e8','#ff9aa5','#f2475e','#c0182f','#6e0a1a'], ['#f4e8ff','#cfa6ff','#9a5cf0','#6a2ec8','#3a1478'],
+  ['#fffbe0','#ffe98a','#ffcf2e','#e0a10a','#7a5404'], ['#ffeef8','#ffb3dc','#f56cb4','#c83a88','#6a1a48']];
+const GEM_T = GEM_COLS.map((cols, v) => [0,1,2,3,4,5,6,7].map(ph => {
+  const c = mk64(), g = c.getContext('2d'), R = rng(400 + v * 17 + ph);
   const facets = [
     [[20,12],[32,12],[26,26],[7,26]], [[32,12],[44,12],[57,26],[38,26]], [[32,12],[38,26],[26,26]],
     [[7,26],[26,26],[32,58]], [[26,26],[38,26],[32,58]], [[38,26],[57,26],[32,58]]];
-  const cols = ['#bfeaff','#5fb8ff','#2a7ae0','#9ad8ff','#e8f8ff','#1f5fc0'];
-  facets.forEach((f, k) => {
-    g.beginPath(); f.forEach(([x, y], j) => j ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
-    g.fillStyle = cols[(k + ph) % cols.length]; g.fill();
-  });
-  g.beginPath(); [top[0], top[1], gl[1], tip, gl[0]].forEach(([x, y], j) => j ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath();
-  g.lineWidth = 2.2; g.strokeStyle = '#0e2a5a'; g.stroke();
-  g.lineWidth = 1; g.strokeStyle = 'rgba(14,42,90,.6)';
-  g.beginPath(); g.moveTo(7,26); g.lineTo(57,26); g.moveTo(26,26); g.lineTo(32,12); g.lineTo(38,26); g.moveTo(26,26); g.lineTo(32,58); g.lineTo(38,26); g.stroke();
+  const shadeOf = [1, 2, 0, 2, 1, 3];
+  facets.forEach((f, k) => { shaky(g, f, R, 0); g.fillStyle = cols[(shadeOf[k] + ph) % 4]; g.fill(); });
+  g.save(); shaky(g, [[7,26],[57,26],[32,58]], R, 0); g.clip(); hatch(g, R, 'rgba(0,0,30,.22)', 32, 26, 64, 60, 3); g.restore();
+  g.strokeStyle = cols[4]; g.lineWidth = 1; g.globalAlpha = .7; g.beginPath();
+  g.moveTo(7,26); g.lineTo(57,26); g.moveTo(26,26); g.lineTo(32,12); g.lineTo(38,26); g.moveTo(26,26); g.lineTo(32,58); g.lineTo(38,26); g.stroke();
+  g.globalAlpha = 1;
+  sketch(g, [[20,12],[44,12],[57,26],[32,58],[7,26]], R, cols[4], 2.2);
   const sp = [[22,16],[40,15],[50,25],[38,40],[30,48],[16,28],[28,22],[44,30]][ph];
   g.fillStyle = '#ffffff'; g.beginPath();
   g.moveTo(sp[0], sp[1] - 6); g.lineTo(sp[0] + 1.4, sp[1] - 1.4); g.lineTo(sp[0] + 6, sp[1]); g.lineTo(sp[0] + 1.4, sp[1] + 1.4);
   g.lineTo(sp[0], sp[1] + 6); g.lineTo(sp[0] - 1.4, sp[1] + 1.4); g.lineTo(sp[0] - 6, sp[1]); g.lineTo(sp[0] - 1.4, sp[1] - 1.4); g.closePath(); g.fill();
   return c;
-});
+}));
 
 /* Firefly: a glowing square that spins, as in the original, with a hot core. */
 const FIRE_T = [0,1,2,3].map(f => {
@@ -1521,21 +1542,25 @@ const FIRE_T = [0,1,2,3].map(f => {
   return c;
 });
 
-/* Butterfly: wings that flap (open, half, closed, half). */
-const BUTT_T = [1, .62, .28, .62].map(open => {
-  const c = mk64(), g = c.getContext('2d');
-  g.lineWidth = 2; g.strokeStyle = '#2a1650';
+/* Butterflies in six colours, hand-drawn, wings flapping (open, half, closed, half). */
+const BUTT_COLS = [['#8a64e8','#b39bff'], ['#3f8ef0','#8cc4ff'], ['#f2b630','#ffe08a'], ['#f06aa8','#ffb3d6'], ['#3fbf6a','#9ae8a8'], ['#f07a3a','#ffc08a']];
+const BUTT_T = BUTT_COLS.map(([w1, w2], v) => [1, .62, .28, .62].map(open => {
+  const c = mk64(), g = c.getContext('2d'), R = rng(600 + v * 23);
   [-1, 1].forEach(side => {
     g.save(); g.translate(32, 32); g.scale(side * open, 1);
-    const wing = (y, ry, col) => { g.beginPath(); g.ellipse(13, y, 13, ry, side * 0, 0, Math.PI * 2); g.fillStyle = col; g.fill(); g.stroke(); };
-    wing(-9, 12, '#8a64e8'); wing(11, 9, '#b39bff');
-    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(17, -11, 3.2, 0, Math.PI * 2); g.arc(14, 12, 2.2, 0, Math.PI * 2); g.fill();
+    const up = blobPts(14, -10, 13, 12, R, .12, .95), lo = blobPts(12, 11, 10, 11, R, .12, .9);
+    shaky(g, up, R, 0); g.fillStyle = w1; g.fill();
+    shaky(g, lo, R, 0); g.fillStyle = w2; g.fill();
+    g.save(); shaky(g, up, R, 0); g.clip(); hatch(g, R, 'rgba(20,10,40,.25)', 0, -24, 30, 0, 3.2); g.restore();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(18, -12, 3.2, 0, Math.PI * 2); g.arc(14, 12, 2.2, 0, Math.PI * 2); g.fill();
+    g.fillStyle = 'rgba(30,15,50,.6)'; g.beginPath(); g.arc(9, -6, 2, 0, Math.PI * 2); g.fill();
+    sketch(g, up, R, '#2a1650', 2); sketch(g, lo, R, '#2a1650', 2);
     g.restore();
   });
   g.fillStyle = '#2a1650'; g.beginPath(); g.ellipse(32, 33, 3.2, 15, 0, 0, Math.PI * 2); g.fill();
   g.strokeStyle = '#2a1650'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(31, 19); g.quadraticCurveTo(26, 10, 22, 9); g.moveTo(33, 19); g.quadraticCurveTo(38, 10, 42, 9); g.stroke();
   return c;
-});
+}));
 
 /* Explosion: a flash, a fireball, then smoke (4 steps). */
 const BOOM_T = [0,1,2,3].map(st => {
@@ -1672,7 +1697,8 @@ let grid, fall, dir, aux, moved;
 let players = [];
 let mode = 'coop', level = 1, state = 'menu';
 let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
-let src = new Int32Array(W*H).fill(-1), dug = new Uint8Array(W*H), lerpT = 1;   // where each cell's content was a tick ago, for smooth drawing
+let src = new Int32Array(W*H).fill(-1), dug = new Uint8Array(W*H), lerpT = 1;
+let vari = new Uint8Array(W*H);   // look of each rock, gem or butterfly (drawing only); travels with it   // where each cell's content was a tick ago, for smooth drawing
 let landThisTick = false, frame = 0, dirtVar, exitSeen = [-1, -1], caveShownAt = -999;
 let gemVal = 10, gemExtra = 20, crng = Math.random;
 let magicTime = 0, magicState = 0, magicLeft = 0;          // 0 dormant, 1 running, 2 spent
@@ -1841,6 +1867,7 @@ function genCave(n){
 
 function initLevel(n){
   level = n; src.fill(-1); dug.fill(0);
+  for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
   const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
@@ -1860,7 +1887,7 @@ function exitVisiblyOpen(){ return mode === 'coop' ? exitOpenFor(players[0]) : p
 
 function move(i, j){
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
-  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i;
+  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i; vari[j] = vari[i];
 }
 
 function killPlayer(p){
@@ -1916,12 +1943,12 @@ function fallObj(i, x, y){
     if (magicState === 0) { magicState = 1; magicLeft = magicTime * 1000; }
     const c = b + W, t = grid[i];
     grid[i] = E; fall[i] = 0;
-    if (grid[c] === E) { grid[c] = t === ROCK ? GEM : ROCK; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; }
+    if (grid[c] === E) { grid[c] = t === ROCK ? GEM : ROCK; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; vari[c] = vari[i]; }
     return;
   }
   // slime: rocks and gems seep through it now and then
   if (bt === SLIME && grid[b + W] === E && slimePerm > 0 && crng() < slimePerm) {
-    const c = b + W; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; grid[i] = E; fall[i] = 0;
+    const c = b + W; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; vari[c] = vari[i]; grid[i] = E; fall[i] = 0;
     return;
   }
   if (fall[i]) {
@@ -2631,14 +2658,14 @@ function updateCams(){
 /* ---------- render ---------- */
 function tileSprite(t, i, x, y, af, open){
   switch (t) {
-    case DIRT: return TL.DIRT;
+    case DIRT: return TL.DIRT[DVAR[i]];
     case WALL: return TL.WALL;
     case STEEL: return TL.STEEL;
-    case ROCK: return ROCK_T;
-    case GEM: return GEM_T[Math.floor(frame / 3) % 8];
+    case ROCK: return ROCK_T[vari[i] % ROCK_T.length];
+    case GEM: return GEM_T[vari[i] % GEM_T.length][(Math.floor(frame / 3) + vari[i]) % 8];
     case EXIT: return open ? TL.EXIT[Math.floor(frame/8) % 2] : TL.STEEL;
     case FIRE: return FIRE_T[af];
-    case BUTT: return BUTT_T[af];
+    case BUTT: return BUTT_T[vari[i] % BUTT_T.length][af];
     case BOOM: return BOOM_T[Math.min(3, aux[i])];
     case MAGIC: return magicState === 1 ? MAGIC_T[(frame >> 2) % 4] : TL.WALL;
     case AMOEBA: return AMOEBA_T[((frame >> 3) + i) % 2];
@@ -2687,7 +2714,7 @@ function renderView(k){
     if (dug[i] && lerpT < 1) {
       // dirt being dug: the hole opens in the middle of the tile and spreads to its sides
       const px = x*T - ox, py = y*T - oy;
-      g.drawImage(TL.DIRT, px, py, T, T);
+      g.drawImage(TL.DIRT[DVAR[i]], px, py, T, T);
       g.save(); g.beginPath(); g.rect(px, py, T, T); g.clip(); g.fillStyle = '#000';
       g.beginPath(); g.arc(px + T/2, py + T/2, T * .72 * Math.min(1, lerpT * 1.15), 0, Math.PI * 2); g.fill(); g.restore();
     }
@@ -2923,11 +2950,11 @@ window.__sim = {
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
     const ps = PL_T.flatMap(set => [set.idle[0], set.walk[0][0], set.walk[1][0], set.blink[1], set.dig[1][0][0], set.dig[1][1][0], set.dig[3][1][1], set.dig[2][0][0], set.dig[2][1][0], set.dig[0][0][1], set.dig[0][1][1]]);
-    const os = [ROCK_T, ...GEM_T.slice(0, 4), ...FIRE_T.slice(0, 2), ...BUTT_T.slice(0, 3), ...BOOM_T];
-    const c = document.createElement('canvas'), z = 96; c.width = 11 * z; c.height = 3 * z;
+    const os = [...ROCK_T, ...GEM_T.map(f => f[0]), ...BUTT_T.map(f => f[0]), FIRE_T[0], ...BOOM_T.slice(1, 3)];
+    const c = document.createElement('canvas'), z = 96; c.width = 11 * z; c.height = 4 * z;
     const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
     ps.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, Math.floor(k / 11) * z, z, z));
-    os.forEach((sp, k) => g.drawImage(sp, k * z * 11 / os.length, 2 * z, z * .85, z * .85));
+    os.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, (2 + Math.floor(k / 11)) * z, z * .92, z * .92));
     return c.toDataURL();
   },
   map(n){
