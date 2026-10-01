@@ -16,6 +16,12 @@ La salida está escondida en la fila de abajo del mapa y aparece al juntar las g
 
 Las rocas y gemas quietas esperan un tick antes de empezar a caer cuando les quitan el piso, así alcanzas a salir de debajo.
 
+## Cuevas
+
+Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**, y cada una tiene sus propios colores C64 para la tierra, el muro de ladrillo y el acero. Después de la P se vuelve a la A con más dificultad (A2, B2…). El mapa de cada cueva lo sigue armando el generador del juego.
+
+![Las 16 cuevas](docs/cuevas.png)
+
 ## Modos
 
 - **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta.
