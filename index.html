@@ -1914,6 +1914,84 @@ let simT = 0, worldT = 0, nowT = 0;
 let src = new Int32Array(W*H).fill(-1), srcAt = new Float64Array(W*H), dugAt = new Float64Array(W*H).fill(-1e9);
 /* Falling starts slow and speeds up (ease-in on the first cell); a rock turns as it rolls and squashes and
    kicks up dust when it lands. */
+/* Living cave (drawing only): glowing mushrooms on some dirt floors, roots hanging from some dirt ceilings, and
+   now and then a water drop that forms on a ceiling, falls and splashes on the floor. Chosen per cell by a hash. */
+const shroomAt = i => grid[i] === E && grid[i + W] === DIRT && hash(i * 31 + 5) < .07;
+function drawAmbient(g, ox, oy, x0, y0){
+  for (let y = Math.max(1, y0); y <= Math.min(H - 2, y0 + VH); y++) for (let x = Math.max(1, x0); x <= Math.min(W - 2, x0 + VW); x++){
+    const i = y*W + x; if (grid[i] !== E) continue;
+    const px = x*T - ox, py = y*T - oy;
+    if (shroomAt(i)) {
+      const h = hash(i * 7), cap = h < .5 ? ['#7ae8ff', '#2a8aa8'] : ['#d79bff', '#7a3ab0'], n = 1 + (h * 10 | 0) % 3, glow = .55 + .25 * Math.sin(simT / 600 + i);
+      for (let k = 0; k < n; k++){
+        const mx = px + 3 + k * 4 + hash(i + k) * 3, my = py + T, sz = 1.4 + hash(i * 3 + k) * 1.2;
+        const gl = g.createRadialGradient(mx, my - sz, 0, mx, my - sz, sz * 3); gl.addColorStop(0, cap[0] + '88'); gl.addColorStop(1, cap[0] + '00');
+        g.globalAlpha = glow; g.fillStyle = gl; g.fillRect(mx - sz * 3, my - sz * 4, sz * 6, sz * 6); g.globalAlpha = 1;
+        g.fillStyle = '#e8e0cc'; g.fillRect(mx - .35, my - sz - .2, .7, sz + .2);
+        g.fillStyle = cap[1]; g.beginPath(); g.ellipse(mx, my - sz, sz, sz * .6, 0, Math.PI, 0); g.fill();
+        g.fillStyle = cap[0]; g.beginPath(); g.ellipse(mx, my - sz - .2, sz * .8, sz * .45, 0, Math.PI, 0); g.fill();
+      }
+    }
+    if (grid[i - W] === DIRT) {
+      const h = hash(i * 17 + 3);
+      if (h < .1) {
+        // roots
+        g.strokeStyle = 'rgba(120,80,40,.85)'; g.lineWidth = .45; g.beginPath();
+        for (let k = 0; k < 3; k++){
+          const rx = px + 3 + k * 4.5 + hash(i + k * 9) * 2, len = 3 + hash(i * 5 + k) * 5, sw = Math.sin(simT / 900 + k + i) * .6;
+          g.moveTo(rx, py); g.quadraticCurveTo(rx + 1 + sw, py + len * .5, rx + sw * 1.5, py + len);
+        }
+        g.stroke();
+      } else if (h < .16) {
+        // a drop: forms, falls to the floor, splashes
+        let fl = 0; while (fl < 8 && grid[i + (fl + 1) * W] === E) fl++;
+        const per = 2600 + hash(i) * 2400, q = ((simT + hash(i * 3) * per) % per) / per, dx = px + T * (.3 + hash(i * 11) * .4);
+        const fallT = .25 + fl * .04, floorY = py + (fl + 1) * T;
+        g.fillStyle = 'rgba(160,210,255,.9)';
+        if (q < .45) { const r = .3 + q / .45 * .7; g.beginPath(); g.arc(dx, py + r, r, 0, Math.PI * 2); g.fill(); }
+        else if (q < .45 + fallT) { const t = (q - .45) / fallT, y = py + 1 + (floorY - py - 1) * t * t; g.beginPath(); g.ellipse(dx, y, .7, 1.1, 0, 0, Math.PI * 2); g.fill(); }
+        else if (q < .45 + fallT + .12) { const t = (q - .45 - fallT) / .12; g.strokeStyle = `rgba(160,210,255,${1 - t})`; g.lineWidth = .4; g.beginPath(); g.ellipse(dx, floorY - .3, .6 + t * 2.5, .3 + t * .6, 0, Math.PI, 0); g.stroke(); }
+      }
+    }
+  }
+}
+/* Dark caves (option): only what a light shows can be seen — the kids' lanterns, fireflies, the glow of gems,
+   mushrooms, the open exit, stars and explosions. */
+let darkCaves = false;
+try { darkCaves = localStorage.getItem('boulder-duo-dark') === '1'; } catch (e) {}
+const DARK = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = VW * T * SS; c.height = VH * T * SS; return c; });
+function drawDark(g, k, ox, oy, x0, y0){
+  const dc = DARK[k], d = dc.getContext('2d');
+  d.setTransform(SS, 0, 0, SS, 0, 0); d.globalCompositeOperation = 'source-over';
+  d.fillStyle = 'rgba(3,2,8,.95)'; d.fillRect(0, 0, VW * T, VH * T);
+  d.globalCompositeOperation = 'destination-out';
+  const lights = [], warm = [];
+  const light = (x, y, r, a = 1) => { lights.push([x, y, r, a]); };
+  players.forEach(p => {
+    if (!p.alive) return;
+    const [gx, gy] = glidePos(p), r = T * (3.4 + .12 * Math.sin(simT / 140) + .06 * Math.sin(simT / 47));
+    light(gx * T - ox + T/2, gy * T - oy + T * .45, r); warm.push([gx * T - ox + T/2, gy * T - oy + T * .45, r]);
+  });
+  for (let y = Math.max(0, y0 - 1); y <= Math.min(H - 1, y0 + VH + 1); y++) for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x0 + VW + 1); x++){
+    const i = y*W + x, t = grid[i], cx = x*T - ox + T/2, cy = y*T - oy + T/2;
+    if (t === FIRE) { light(cx, cy, T * 1.7); warm.push([cx, cy, T * 1.7]); }
+    else if (t === GEM) light(cx, cy, T * (.55 + .2 * Math.sin(simT / 300 + i)), .8);
+    else if (t === BOOM) light(cx, cy, T * 2.2);
+    else if (t === STAR) light(cx, cy, T * 1.3);
+    else if (t === NEST || t === AMOEBA || t === BUTT) light(cx, cy, T * .8, .6);
+    else if (t === EXIT && exitVisiblyOpen()) light(cx, cy, T * 2);
+    else if (t === MAGIC && magicState === 1) light(cx, cy, T * 1.1, .8);
+    else if (shroomAt(i)) light(cx, cy + T * .3, T * .9, .7);
+  }
+  lights.forEach(([x, y, r, a]) => {
+    const gr = d.createRadialGradient(x, y, r * .15, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(.6, `rgba(0,0,0,${a * .75})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = gr; d.fillRect(x - r, y - r, r * 2, r * 2);
+  });
+  g.drawImage(dc, 0, 0, VW * T, VH * T);
+  g.save(); g.globalCompositeOperation = 'lighter';
+  warm.forEach(([x, y, r]) => { const gr = g.createRadialGradient(x, y, 0, x, y, r * .8); gr.addColorStop(0, 'rgba(255,170,60,.16)'); gr.addColorStop(1, 'rgba(255,140,40,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); });
+  g.restore();
+}
 function glideEase(i, k){
   if (k <= 0) return 0;
   const from = src[i];
@@ -2526,6 +2604,7 @@ function menu(){
     </div>
     <div class="row sets">
       <button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>
+      <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
     </div>
     <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
@@ -2540,6 +2619,7 @@ function menu(){
   $('btrain').onclick = () => startGame('train');
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
+  $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
   onEnter = () => startGame('coop');
@@ -3284,7 +3364,9 @@ function renderView(k){
     if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
+  drawAmbient(g, ox, oy, x0, y0);
   glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T); });
+  if (darkCaves && mode !== 'train' && state !== 'menu') drawDark(g, k, ox, oy, x0, y0);
   drawCritters(g, ox, oy);
   if (simT - exitOpenAt < 2200) {
     // the exit opens: golden rings and sparkles burst out of the door
