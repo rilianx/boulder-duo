@@ -44,7 +44,7 @@ Los muros de ladrillo y el acero (placas remachadas) también están dibujados a
 
 Si nadie toca los controles, cada niño arma un plan al azar: tras un momento hace algunas de estas cosas en orden y duración al azar (mirar a los lados, saludar, silbar marcando el paso con el pie, bostezar) y casi siempre termina dormido apoyado en la pala.
 
-Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o tijera: agitan la mano al ritmo de «piedra, papel, tijera», muestran su jugada en un globo, el que gana celebra y el marcador queda sobre ellos.
+Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o tijera: estiran el brazo hacia el otro y agitan el puño al ritmo de «piedra, papel, tijera», muestran la mano (puño, mano abierta o dos dedos), el que gana celebra y el marcador queda sobre ellos.
 
 ![Una cueva con los nuevos dibujos](docs/cueva.png) ![Piedra, papel o tijera](docs/cachipun.png) ![Durmiendo](docs/durmiendo.png)
 

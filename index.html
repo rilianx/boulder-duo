@@ -1704,7 +1704,7 @@ function kidSprite(girl, step, blink, flip, dig, pose){
   }
   paint('#ffffff', () => { g.moveTo(26, 33); g.lineTo(32, 38); g.lineTo(38, 33); g.closePath(); });
   // the shovel: wooden handle, steel blade at the far end, held in both hands while digging
-  const SH = pk === 'yawn' || pk === 'sleep' ? [49, 26, 51, 64] : !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
+  const SH = pk === 'rps' ? [17, 24, 13, 64] : pk === 'yawn' || pk === 'sleep' ? [49, 26, 51, 64] : !dig ? [40, 28 - sw * .4, 51, 55] : dig.dir === 'side' ? (dig.f ? [30, 41, 59, 43] : [22, 38, 50, 44])
            : dig.dir === 'down' ? (dig.f ? [41, 30, 44, 61] : [41, 24, 44, 52]) : (dig.f ? [48, 50, 56, 2] : [47, 52, 55, 12]);
   const [hx1, hy1, hx2, hy2] = SH, ang = Math.atan2(hy2 - hy1, hx2 - hx1);
   const at = t => [hx1 + (hx2 - hx1) * t, hy1 + (hy2 - hy1) * t];
@@ -1717,7 +1717,28 @@ function kidSprite(girl, step, blink, flip, dig, pose){
   g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(2, -3, 6, 1.6);
   g.restore();
   if (dig) paint(HAND, () => g.ellipse(...at(.2), 3.2, 3.2, 0, 0, Math.PI * 2));
-  paint(HAND, () => g.ellipse(...(dig ? at(.5) : pk === 'yawn' || pk === 'sleep' ? at(.08) : [46 + sw * .3, 44 - sw * .4]), 3.2, 3.2, 0, 0, Math.PI * 2));
+  if (pk === 'rps') {
+    // arm stretched out in front, the hand big: fist (rock), open hand (paper) or two fingers (scissors)
+    const hx = 52, hy = 36 + (pf ? 5 : 0), sleeve = girl ? '#e8693f' : '#5b9be0';
+    g.lineWidth = 7; g.beginPath(); g.moveTo(38, 38); g.lineTo(hx - 4, hy); g.stroke();
+    g.lineWidth = 4.6; g.strokeStyle = sleeve; g.beginPath(); g.moveTo(38, 38); g.lineTo(hx - 5, hy); g.stroke();
+    g.lineWidth = 2.2; g.strokeStyle = OL;
+    const hand = pose.h || 0;
+    if (hand === 1) {
+      paint(HAND, () => rr(hx - 5, hy - 13, 13, 20, 5));
+      paint(HAND, () => g.ellipse(hx - 6, hy + 2, 3.2, 4.8, -.5, 0, Math.PI * 2));
+      g.lineWidth = 1.4; g.beginPath(); for (let k = 0; k < 3; k++){ g.moveTo(hx - 1.6 + k * 3.3, hy - 12.5); g.lineTo(hx - 1.6 + k * 3.3, hy - 5); } g.stroke();
+    } else {
+      if (hand === 2) {
+        g.lineWidth = 7.4; g.beginPath(); g.moveTo(hx + 2, hy - 2); g.lineTo(hx + 9, hy - 13); g.moveTo(hx + 3, hy - 1); g.lineTo(hx + 11, hy - 6); g.stroke();
+        g.lineWidth = 4.6; g.strokeStyle = HAND; g.beginPath(); g.moveTo(hx + 2, hy - 2); g.lineTo(hx + 9, hy - 13); g.moveTo(hx + 3, hy - 1); g.lineTo(hx + 11, hy - 6); g.stroke();
+        g.lineWidth = 2.2; g.strokeStyle = OL;
+      }
+      paint(HAND, () => g.ellipse(hx, hy, 8, 7.2, 0, 0, Math.PI * 2));
+      g.lineWidth = 1.4; g.beginPath(); g.moveTo(hx + 2, hy - 4.8); g.lineTo(hx + 2, hy + 4.8); g.moveTo(hx + 5.2, hy - 3.6); g.lineTo(hx + 5.2, hy + 3.6); g.stroke();
+    }
+    g.lineWidth = 2.2;
+  } else paint(HAND, () => g.ellipse(...(dig ? at(.5) : pk === 'yawn' || pk === 'sleep' ? at(.08) : [46 + sw * .3, 44 - sw * .4]), 3.2, 3.2, 0, 0, Math.PI * 2));
   // back hair for the girl's bob
   if (girl) paint('#8c4322', () => rr(14, 7, 36, 28, 13));
   // head
@@ -1754,9 +1775,10 @@ function playerSprites(girl){
   const digs = dir => [0, 1].map(f => both(1 + f, false, { dir, f }));
   // dig[d][frame][face], d as in OFF (0 up, 1 right, 2 down, 3 left: left is the mirrored side dig)
   const side = digs('side');
-  const pose = (k, f) => [kidSprite(girl, 0, false, false, null, { k, f }), kidSprite(girl, 0, false, true, null, { k, f })];
+  const pose = (k, f, h, bl) => [kidSprite(girl, 0, !!bl, false, null, { k, f, h }), kidSprite(girl, 0, !!bl, true, null, { k, f, h })];
   return { idle: both(0, false), walk: [both(1, false), both(2, false)], blink: both(0, true), dig: [digs('up'), side, digs('down'), side],
-           wave: [pose('wave', 0), pose('wave', 1)], tap: [pose('tap', 0), pose('tap', 1)], yawn: pose('yawn', 0), sleep: pose('sleep', 0) };
+           wave: [pose('wave', 0), pose('wave', 1)],
+           rps: [0, 1].map(f => [0, 1, 2].map(h => pose('rps', f, h))), rpsSad: [0, 1, 2].map(h => pose('rps', 0, h, true)), tap: [pose('tap', 0), pose('tap', 1)], yawn: pose('yawn', 0), sleep: pose('sleep', 0) };
 }
 const PL_T = [playerSprites(false), playerSprites(true)];
 /* ---------- audio ---------- */
@@ -2817,27 +2839,11 @@ function rpsUpdate(){
 }
 function rpsSprite(p, set){
   const r = rpsNow, face = p.id === r.left ? 0 : 1;
-  if (r.ph < 1.5) return set.wave[(r.ph * 4 | 0) & 1][face];                 // pie-dra, pa-pel, ti-je-ra
-  if (r.ph < 2.5) return set.wave[0][face];                                    // show
+  if (r.ph < 1.5) return set.rps[(r.ph * 4 | 0) & 1][0][face];               // fist pumping: pie-dra, pa-pel, ti-je-ra
+  const h = r.ch[p.id];
+  if (r.ph < 2.5 || r.w < 0) return set.rps[0][h][face];                       // show the hand (and keep it on a tie)
   if (r.w === p.id) return set.wave[(frame >> 2) & 1][face];                   // winner cheers
-  return r.w < 0 ? set.idle[face] : set.blink[face];                           // tie, or the loser sulks
-}
-function drawHand(g, kind, x, y){
-  g.save(); g.translate(x, y);
-  g.fillStyle = '#ffffff'; g.strokeStyle = '#3b2619'; g.lineWidth = .5;
-  g.beginPath(); g.arc(0, 0, 5, 0, Math.PI * 2); g.fill(); g.stroke();
-  g.beginPath(); g.moveTo(-1.5, 4.6); g.lineTo(0, 7); g.lineTo(1.5, 4.6); g.fill();
-  if (kind === 0) {           // rock: a fist
-    g.fillStyle = '#f4c9a8'; g.beginPath(); g.arc(0, .3, 2.8, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.beginPath(); g.moveTo(-1.6, -.8); g.lineTo(1.6, -.8); g.moveTo(-1.8, .5); g.lineTo(1.8, .5); g.stroke();
-  } else if (kind === 1) {    // paper: a sheet
-    g.fillStyle = '#fdfbf2'; g.fillRect(-2.4, -3, 4.8, 6); g.strokeRect(-2.4, -3, 4.8, 6);
-    g.beginPath(); for (let k = 0; k < 3; k++){ g.moveTo(-1.6, -1.6 + k * 1.5); g.lineTo(1.6, -1.6 + k * 1.5); } g.stroke();
-  } else {                    // scissors
-    g.strokeStyle = '#7a8590'; g.lineWidth = .8; g.beginPath(); g.moveTo(-2.2, -2.8); g.lineTo(1.4, 1.4); g.moveTo(2.2, -2.8); g.lineTo(-1.4, 1.4); g.stroke();
-    g.strokeStyle = '#d6363a'; g.lineWidth = .7; g.beginPath(); g.arc(-1.6, 2.4, 1.1, 0, Math.PI * 2); g.moveTo(2.7, 2.4); g.arc(1.6, 2.4, 1.1, 0, Math.PI * 2); g.stroke();
-  }
-  g.restore();
+  return set.rpsSad[h][face];                                                  // the loser looks at its hand, eyes shut
 }
 function drawRps(g, ox, oy){
   const r = rpsNow; if (!r) return;
@@ -2852,7 +2858,6 @@ function drawRps(g, ox, oy){
     const word = ['PIEDRA', 'PAPEL', 'TIJERA'][Math.min(2, r.ph / .5 | 0)];
     g.font = '3px "Press Start 2P", monospace'; g.fillStyle = '#ffd24a'; g.fillText(word, mx, ty - 15);
   } else {
-    [a, b].forEach(p => drawHand(g, r.ch[p.id], p.x * T - ox + T / 2, p.y * T - oy - 3));
     if (r.ph >= 2.5) {
       g.font = '3px "Press Start 2P", monospace'; g.fillStyle = '#ffd24a';
       g.fillText(r.w < 0 ? 'EMPATE' : '¡GANA ' + (r.w ? 'J2' : 'J1') + '!', mx, ty - 15);
@@ -3255,11 +3260,11 @@ window.__sim = {
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
-    const ps = PL_T.flatMap(set => [set.idle[0], set.walk[0][0], set.walk[1][0], set.blink[1], set.dig[1][0][0], set.dig[1][1][0], set.dig[3][1][1], set.dig[2][0][0], set.dig[2][1][0], set.dig[0][0][1], set.dig[0][1][1], set.wave[0][0], set.wave[1][0], set.tap[1][0], set.yawn[0], set.sleep[0]]);
+    const ps = PL_T.flatMap(set => [set.idle[0], set.walk[0][0], set.walk[1][0], set.blink[1], set.dig[1][0][0], set.dig[1][1][0], set.dig[3][1][1], set.dig[2][0][0], set.dig[2][1][0], set.dig[0][0][1], set.dig[0][1][1], set.wave[0][0], set.wave[1][0], set.tap[1][0], set.yawn[0], set.sleep[0], set.rps[0][0][0], set.rps[0][1][0], set.rps[0][2][0]]);
     const os = [...ROCK_T, ...GEM_T.map(f => f[0]), ...BUTT_T.map(f => f[0]), FIRE_T[0], ...BOOM_T.slice(1, 3)];
-    const c = document.createElement('canvas'), z = 96; c.width = 16 * z; c.height = 4 * z;
+    const c = document.createElement('canvas'), z = 96; c.width = 19 * z; c.height = 4 * z;
     const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
-    ps.forEach((sp, k) => g.drawImage(sp, (k % 16) * z, Math.floor(k / 16) * z, z, z));
+    ps.forEach((sp, k) => g.drawImage(sp, (k % 19) * z, Math.floor(k / 19) * z, z, z));
     os.forEach((sp, k) => g.drawImage(sp, (k % 11) * z, (2 + Math.floor(k / 11)) * z, z * .92, z * .92));
     return c.toDataURL();
   },
