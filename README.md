@@ -8,8 +8,9 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 
 Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular y, si dices que sí, muestra una cruceta táctil: mantén el dedo hacia donde quieras cavar y moverte (puedes deslizarlo para girar sin levantarlo). El botón **TÁCTIL** de arriba la activa o desactiva cuando quieras, y la elección se recuerda.
 
-- **Vertical:** las dos pantallas se apilan y la cruceta queda abajo. Ideal para *Contra PC*.
-- **Horizontal:** dos crucetas a los lados, J1 a la izquierda y J2 a la derecha, para jugar de a dos en el mismo celular.
+Se juega en **horizontal**: los tableros llenan la pantalla y las crucetas, semitransparentes, quedan encima de las esquinas inferiores (J1 a la izquierda, J2 a la derecha; contra el PC solo aparece la de J1). Si el celular está en vertical, el juego pide girarlo; en Android intenta además pasar a pantalla completa y fijar la orientación.
+
+La salida está en la fila de abajo del mapa: cerrada se ve como una puerta de acero y empieza a parpadear cuando se juntan las gemas necesarias.
 
 ## Modos
 

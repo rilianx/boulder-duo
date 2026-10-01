@@ -104,8 +104,8 @@ button:disabled{opacity:.4;cursor:default}
 /* Touch: one virtual stick per human player. Portrait stacks the views and puts the sticks underneath; landscape floats them at the sides. */
 .touchpads{display:none}
 .touch .touchpads{display:flex;justify-content:space-between;gap:12px;position:sticky;bottom:0;padding:6px 0 calc(6px + env(safe-area-inset-bottom));background:var(--bg);z-index:3}
-.stick{width:150px;height:150px;border-radius:50%;border:3px solid #28476b;background:radial-gradient(circle,#1b1a1f 0 30%,#111 31%);position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
-.stick.s2{border-color:#6b3a20;margin-left:auto}
+.stick{width:150px;height:150px;border-radius:50%;border:3px solid rgba(95,180,255,.55);background:radial-gradient(circle,rgba(27,26,31,.55) 0 30%,rgba(10,10,12,.35) 31%);position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
+.stick.s2{border-color:rgba(255,138,76,.55);margin-left:auto}
 .stick span{position:absolute;font-family:var(--display);font-size:14px;color:var(--muted);pointer-events:none}
 .stick .u{top:10px;left:50%;transform:translateX(-50%)} .stick .d{bottom:10px;left:50%;transform:translateX(-50%)}
 .stick .l{left:12px;top:50%;transform:translateY(-50%)} .stick .r{right:12px;top:50%;transform:translateY(-50%)}
@@ -115,14 +115,23 @@ button:disabled{opacity:.4;cursor:default}
 .touch button{touch-action:manipulation}
 .touch .legend{display:none}
 .overlay{overflow:auto}
+.rotate{display:none}
 @media (orientation:portrait){
   .touch .views{width:min(100%, calc((100dvh - 290px) / 1.45));margin-inline:auto}
+  .touch:not(.portrait-ok) .rotate{display:flex;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
+  .rotate h2{font-family:var(--display);font-size:16px;margin:0;line-height:1.6}
+  .rotate p{margin:0;color:var(--muted)}
+  .rotate .phone{width:60px;height:100px;border:4px solid var(--ink);border-radius:10px;animation:turn 1.8s ease-in-out infinite}
+  @keyframes turn{0%,20%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
 }
+/* Landscape phone: the boards fill the screen and the sticks float, see-through, over the bottom corners of each board. */
 @media (orientation:landscape) and (max-height:600px){
-  .touch .wrap{padding-block:6px}
-  .touch .views{grid-template-columns:1fr 1fr;width:min(calc(100% - 300px), calc((100dvh - 70px) * 2.6));margin-inline:auto}
-  .touch .touchpads{position:fixed;inset:auto 10px calc(10px + env(safe-area-inset-bottom));background:none;pointer-events:none;padding:0}
-  .touch .stick{pointer-events:auto;width:130px;height:130px}
+  .touch .wrap{padding-block:4px 0;padding-inline:max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right));gap:4px}
+  .touch header .tbtn{font-size:8px;padding:3px 6px} .touch .pause{width:28px;height:28px}
+  .touch .bar{font-size:15px;padding:3px 8px;gap:8px}
+  .touch .views{grid-template-columns:1fr 1fr;gap:4px;width:min(100%, calc((100dvh - 60px) * 2.75));margin-inline:auto}
+  .touch .touchpads{position:fixed;inset:auto max(14px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));background:none;pointer-events:none;padding:0}
+  .touch .stick{pointer-events:auto;width:118px;height:118px}
 }
 </style>
 
@@ -159,6 +168,13 @@ button:disabled{opacity:.4;cursor:default}
       <canvas id="cv1" width="272" height="192"></canvas>
     </div>
     <div class="overlay" id="ov"></div>
+  </div>
+
+  <div class="rotate" role="dialog" aria-label="Gira el celular">
+    <div class="phone"></div>
+    <h2>GIRA EL CELULAR</h2>
+    <p>El juego se juega en horizontal, con los controles sobre el tablero.</p>
+    <button id="bportrait">SEGUIR EN VERTICAL</button>
   </div>
 
   <div class="touchpads" id="touchpads">
@@ -314,6 +330,16 @@ const EXIT_T = [0,1].map(f => {
   g.strokeStyle = f ? '#f2f2f2' : '#000'; g.lineWidth = 2; g.strokeRect(5,5,6,6);
   return c;
 });
+
+/* closed exit: a locked steel door, so players know where to head before it opens */
+const EXIT_SHUT_T = (() => {
+  const c = mk(), g = c.getContext('2d');
+  g.drawImage(STEEL_T,0,0);
+  g.fillStyle = '#3a3a3a'; g.fillRect(3,2,10,13);
+  g.fillStyle = '#7a7a7a'; g.fillRect(4,3,8,12);
+  g.fillStyle = '#ffd24a'; g.fillRect(10,8,2,2);
+  return c;
+})();
 
 const ROCK_T = spr([
   "..gggg..",
@@ -699,16 +725,17 @@ function askTouch(){
       <button id="btyes" class="b1">SÍ, JUGAR CON CELULAR</button>
       <button id="btno">NO, USO TECLADO</button>
     </div>
-    <p>Para dos jugadores en un celular, pónganlo horizontal: J1 usa la cruceta izquierda y J2 la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
+    <p>Se juega con el celular en horizontal. De a dos, J1 usa la cruceta izquierda y J2 la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
   </div>`);
   const pick = on => { setTouch(on); menu(); };
-  $('btyes').onclick = () => { audioOn(); pick(true); };
+  $('btyes').onclick = () => { audioOn(); goLandscape(); pick(true); };
   $('btno').onclick = () => pick(false);
   onEnter = () => pick(false);
 }
 
 function startGame(m){
   audioOn();
+  if (touchPref) goLandscape();
   if (turbo) setTurbo(false);
   mode = m;
   players = [newPlayer(0), newPlayer(1)];
@@ -1219,7 +1246,7 @@ function tileSprite(t, i, x, y, af, open){
     case STEEL: return STEEL_T;
     case ROCK: return ROCK_T;
     case GEM: return GEM_T[Math.floor(frame / 3) % 8];
-    case EXIT: return open ? EXIT_T[Math.floor(frame/8) % 2] : STEEL_T;
+    case EXIT: return open ? EXIT_T[Math.floor(frame/8) % 2] : EXIT_SHUT_T;
     case FIRE: return FIRE_T[af];
     case BUTT: return BUTT_T[af];
     case BOOM: return BOOM_T[Math.min(3, aux[i])];
@@ -1359,6 +1386,13 @@ function setTouch(on){
   ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => st.addEventListener(t, () => set(-1)));
   st.addEventListener('contextmenu', e => e.preventDefault());
 });
+/* Best effort: Android Chrome can go fullscreen and lock landscape; elsewhere the "gira el celular" screen asks for it. */
+function goLandscape(){
+  const el = document.documentElement;
+  if (document.fullscreenElement || !el.requestFullscreen || !matchMedia('(max-height:600px), (max-width:600px)').matches) return;
+  el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape')).catch(() => {});
+}
+$('bportrait').onclick = () => document.body.classList.add('portrait-ok');
 $('btouch').onclick = () => setTouch(!document.body.classList.contains('touch'));
 if (touchPref) setTouch(true);
 
