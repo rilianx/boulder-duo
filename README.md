@@ -4,6 +4,13 @@ Juego estilo Boulder Dash para el navegador, con gráficos al estilo C64 y panta
 
 Abre `index.html` en un navegador. No necesita instalar nada.
 
+## Jugar con celular
+
+Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular y, si dices que sí, muestra una cruceta táctil: mantén el dedo hacia donde quieras cavar y moverte (puedes deslizarlo para girar sin levantarlo). El botón **TÁCTIL** de arriba la activa o desactiva cuando quieras, y la elección se recuerda.
+
+- **Vertical:** las dos pantallas se apilan y la cruceta queda abajo. Ideal para *Contra PC*.
+- **Horizontal:** dos crucetas a los lados, J1 a la izquierda y J2 a la derecha, para jugar de a dos en el mismo celular.
+
 ## Modos
 
 - **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta.

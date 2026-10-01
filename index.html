@@ -101,6 +101,29 @@ button:disabled{opacity:.4;cursor:default}
   .views{grid-template-columns:1fr}
   .legend{grid-template-columns:1fr}
 }
+/* Touch: one virtual stick per human player. Portrait stacks the views and puts the sticks underneath; landscape floats them at the sides. */
+.touchpads{display:none}
+.touch .touchpads{display:flex;justify-content:space-between;gap:12px;position:sticky;bottom:0;padding:6px 0 calc(6px + env(safe-area-inset-bottom));background:var(--bg);z-index:3}
+.stick{width:150px;height:150px;border-radius:50%;border:3px solid #28476b;background:radial-gradient(circle,#1b1a1f 0 30%,#111 31%);position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
+.stick.s2{border-color:#6b3a20;margin-left:auto}
+.stick span{position:absolute;font-family:var(--display);font-size:14px;color:var(--muted);pointer-events:none}
+.stick .u{top:10px;left:50%;transform:translateX(-50%)} .stick .d{bottom:10px;left:50%;transform:translateX(-50%)}
+.stick .l{left:12px;top:50%;transform:translateY(-50%)} .stick .r{right:12px;top:50%;transform:translateY(-50%)}
+.stick b{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:10px;font-weight:normal;color:var(--p1);pointer-events:none}
+.stick.s2 b{color:var(--p2)}
+.stick span.on{color:var(--warn)}
+.touch button{touch-action:manipulation}
+.touch .legend{display:none}
+.overlay{overflow:auto}
+@media (orientation:portrait){
+  .touch .views{width:min(100%, calc((100dvh - 290px) / 1.45));margin-inline:auto}
+}
+@media (orientation:landscape) and (max-height:600px){
+  .touch .wrap{padding-block:6px}
+  .touch .views{grid-template-columns:1fr 1fr;width:min(calc(100% - 300px), calc((100dvh - 70px) * 2.6));margin-inline:auto}
+  .touch .touchpads{position:fixed;inset:auto 10px calc(10px + env(safe-area-inset-bottom));background:none;pointer-events:none;padding:0}
+  .touch .stick{pointer-events:auto;width:130px;height:130px}
+}
 </style>
 
 <div class="wrap">
@@ -108,6 +131,7 @@ button:disabled{opacity:.4;cursor:default}
     <button class="tbtn pause" id="bpause" aria-label="Pausa">II</button>
     <h1>BOULDER <span>DÚO</span></h1>
     <button class="tbtn" id="bcrt" aria-pressed="false">CRT<br>OFF</button>
+    <button class="tbtn" id="btouch" aria-pressed="false">TÁCTIL<br>OFF</button>
     <button class="tbtn" id="bsnd" aria-pressed="true">SON<br>ON</button>
   </header>
 
@@ -135,6 +159,11 @@ button:disabled{opacity:.4;cursor:default}
       <canvas id="cv1" width="272" height="192"></canvas>
     </div>
     <div class="overlay" id="ov"></div>
+  </div>
+
+  <div class="touchpads" id="touchpads">
+    <div class="stick s1" id="stick0" aria-label="Controles del jugador 1"><span class="u">▲</span><span class="r">▶</span><span class="d">▼</span><span class="l">◀</span><b>J1</b></div>
+    <div class="stick s2" id="stick1" aria-label="Controles del jugador 2"><span class="u">▲</span><span class="r">▶</span><span class="d">▼</span><span class="l">◀</span><b>J2</b></div>
   </div>
 
   <section class="turbo" id="turbo" hidden>
@@ -641,6 +670,7 @@ let onEnter = null;
 function menu(){
   if (turbo) setTurbo(false);
   state = 'menu';
+  if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
     <h2>BOULDER DÚO</h2>
     <p>Caven túneles, junten gemas y lleguen a la salida antes de que se acabe el tiempo. Las rocas caen, ruedan y aplastan. Las luciérnagas explotan al tocarte; las mariposas, al caerles una roca, se vuelven gemas.</p>
@@ -661,6 +691,22 @@ function menu(){
   onEnter = () => startGame('coop');
 }
 
+function askTouch(){
+  showOverlay(`<div class="card">
+    <h2>¿JUEGAS CON CELULAR?</h2>
+    <p>Con los controles táctiles aparece una cruceta en pantalla: mantén el dedo hacia donde quieras cavar y moverte.</p>
+    <div class="row">
+      <button id="btyes" class="b1">SÍ, JUGAR CON CELULAR</button>
+      <button id="btno">NO, USO TECLADO</button>
+    </div>
+    <p>Para dos jugadores en un celular, pónganlo horizontal: J1 usa la cruceta izquierda y J2 la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
+  </div>`);
+  const pick = on => { setTouch(on); menu(); };
+  $('btyes').onclick = () => { audioOn(); pick(true); };
+  $('btno').onclick = () => pick(false);
+  onEnter = () => pick(false);
+}
+
 function startGame(m){
   audioOn();
   if (turbo) setTurbo(false);
@@ -671,6 +717,7 @@ function startGame(m){
   players[1].ai = aiMode;
   if (mode === 'train') players[0].lives = 0;
   document.querySelector('.p2v .tag').textContent = aiMode ? 'PC' : 'J2';
+  $('stick1').hidden = aiMode;
   $('aipanel').hidden = !aiMode;
   $('speeds').hidden = mode !== 'train';
   setSpeed(1);
@@ -1283,6 +1330,37 @@ window.addEventListener('keyup', e => {
   if (m && players[m[0]] && !players[m[0]].ai) players[m[0]].held = players[m[0]].held.filter(d => d !== m[1]);
 });
 window.addEventListener('blur', () => players.forEach(p => { if (!p.ai) p.held = []; }));
+
+/* Touch sticks: the direction is the side of the stick the finger is on, so sliding the thumb turns without lifting it. */
+const isTouchDevice = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+let touchPref = null;
+try { const v = localStorage.getItem('boulder-duo-touch'); if (v === '1' || v === '0') touchPref = v === '1'; } catch (e) {}
+function setTouch(on){
+  touchPref = on;
+  try { localStorage.setItem('boulder-duo-touch', on ? '1' : '0'); } catch (e) {}
+  document.body.classList.toggle('touch', on);
+  const b = $('btouch'); b.innerHTML = on ? 'TÁCTIL<br>ON' : 'TÁCTIL<br>OFF'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
+}
+[0, 1].forEach(id => {
+  const st = $('stick' + id), arrows = [...st.querySelectorAll('span')];
+  const set = d => {
+    const p = players[id];
+    if (p && !p.ai) p.held = d < 0 ? [] : [d];
+    arrows.forEach((a, i) => a.classList.toggle('on', i === d));
+  };
+  const aim = e => {
+    const r = st.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    if (Math.hypot(dx, dy) < r.width * 0.12) return set(-1);
+    set(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+  };
+  st.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); st.setPointerCapture(e.pointerId); aim(e); });
+  st.addEventListener('pointermove', e => { if (st.hasPointerCapture(e.pointerId)) aim(e); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => st.addEventListener(t, () => set(-1)));
+  st.addEventListener('contextmenu', e => e.preventDefault());
+});
+$('btouch').onclick = () => setTouch(!document.body.classList.contains('touch'));
+if (touchPref) setTouch(true);
 
 function toggleSound(){ muted = !muted; const b = $('bsnd'); b.innerHTML = muted ? 'SON<br>OFF' : 'SON<br>ON'; b.setAttribute('aria-pressed', String(!muted)); b.classList.toggle('on', !muted); }
 function toggleCrt(){ const on = $('views').classList.toggle('crt'); const b = $('bcrt'); b.innerHTML = on ? 'CRT<br>ON' : 'CRT<br>OFF'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on); }
