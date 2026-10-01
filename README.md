@@ -10,6 +10,8 @@ Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celula
 
 Se juega en **horizontal**: los tableros llenan la pantalla y las crucetas, semitransparentes, quedan encima de las esquinas inferiores (J1 a la izquierda, J2 a la derecha; contra el PC solo aparece la de J1). Si el celular está en vertical, el juego pide girarlo; en Android intenta además pasar a pantalla completa y fijar la orientación.
 
+**Pantalla completa:** botón **PANT. COMPLETA** arriba (Android y computador). En iPhone, Safari no lo permite en páginas: hay que agregar el juego a la pantalla de inicio (Compartir → Agregar a inicio) y abrirlo desde ahí, y se abre sin barras.
+
 La salida está en la fila de abajo del mapa: cerrada se ve como una puerta de acero y empieza a parpadear cuando se juntan las gemas necesarias.
 
 ## Modos

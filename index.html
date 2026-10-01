@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="es">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Boulder Dúo">
 <style>html,body{margin:0}</style>
 </head><body>
 <title>Boulder Dúo</title>
@@ -104,12 +106,12 @@ button:disabled{opacity:.4;cursor:default}
 /* Touch: one virtual stick per human player. Portrait stacks the views and puts the sticks underneath; landscape floats them at the sides. */
 .touchpads{display:none}
 .touch .touchpads{display:flex;justify-content:space-between;gap:12px;position:sticky;bottom:0;padding:6px 0 calc(6px + env(safe-area-inset-bottom));background:var(--bg);z-index:3}
-.stick{width:150px;height:150px;border-radius:50%;border:3px solid rgba(95,180,255,.55);background:radial-gradient(circle,rgba(27,26,31,.55) 0 30%,rgba(10,10,12,.35) 31%);position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
+.stick{width:150px;height:150px;border-radius:50%;border:3px solid rgba(95,180,255,.55);background:transparent;position:relative;touch-action:none;user-select:none;-webkit-user-select:none;flex:none}
 .stick.s2{border-color:rgba(255,138,76,.55);margin-left:auto}
-.stick span{position:absolute;font-family:var(--display);font-size:14px;color:var(--muted);pointer-events:none}
+.stick span{position:absolute;font-family:var(--display);font-size:14px;color:rgba(244,241,234,.75);text-shadow:0 0 3px #000,0 0 3px #000;pointer-events:none}
 .stick .u{top:10px;left:50%;transform:translateX(-50%)} .stick .d{bottom:10px;left:50%;transform:translateX(-50%)}
 .stick .l{left:12px;top:50%;transform:translateY(-50%)} .stick .r{right:12px;top:50%;transform:translateY(-50%)}
-.stick b{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:10px;font-weight:normal;color:var(--p1);pointer-events:none}
+.stick b{text-shadow:0 0 3px #000,0 0 3px #000;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:var(--display);font-size:10px;font-weight:normal;color:var(--p1);pointer-events:none}
 .stick.s2 b{color:var(--p2)}
 .stick span.on{color:var(--warn)}
 .touch button{touch-action:manipulation}
@@ -140,6 +142,7 @@ button:disabled{opacity:.4;cursor:default}
     <button class="tbtn pause" id="bpause" aria-label="Pausa">II</button>
     <h1>BOULDER <span>DÚO</span></h1>
     <button class="tbtn" id="bcrt" aria-pressed="false">CRT<br>OFF</button>
+    <button class="tbtn" id="bfull" aria-label="Pantalla completa">PANT.<br>COMPLETA</button>
     <button class="tbtn" id="btouch" aria-pressed="false">TÁCTIL<br>OFF</button>
     <button class="tbtn" id="bsnd" aria-pressed="true">SON<br>ON</button>
   </header>
@@ -1392,6 +1395,32 @@ function goLandscape(){
   if (document.fullscreenElement || !el.requestFullscreen || !matchMedia('(max-height:600px), (max-width:600px)').matches) return;
   el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape')).catch(() => {});
 }
+/* Fullscreen button: real fullscreen where the browser allows it (Android, computers); iPhone only allows it from the home screen. */
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+function toggleFull(){
+  const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (fsEl()) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  if (req) {
+    const r = req.call(el, { navigationUI: 'hide' });
+    if (r && r.then) r.then(() => screen.orientation && screen.orientation.lock && touchPref && screen.orientation.lock('landscape')).catch(() => {});
+    return;
+  }
+  if (state === 'play') togglePause();
+  if (state === 'menu') return iosFullHelp(menu);
+  if (state === 'pause') return iosFullHelp(togglePause);
+}
+function iosFullHelp(back){
+  showOverlay(`<div class="card"><h2>PANTALLA COMPLETA EN IPHONE</h2>
+    <p>Safari no deja poner una página en pantalla completa. Agrégala a la pantalla de inicio y ábrela desde ahí: se abre sin barras.</p>
+    <p>Toca <b>Compartir</b> (el cuadrado con la flecha) → <b>Agregar a inicio</b> → <b>Agregar</b>.</p>
+    <div class="row"><button id="bfok">ENTENDIDO</button></div></div>`);
+  $('bfok').onclick = back; onEnter = back;
+}
+function syncFull(){ const on = !!fsEl(); const b = $('bfull'); b.innerHTML = on ? 'SALIR<br>COMPLETA' : 'PANT.<br>COMPLETA'; b.classList.toggle('on', on); }
+$('bfull').onclick = toggleFull;
+$('bfull').hidden = !!standalone;
+document.addEventListener('fullscreenchange', syncFull); document.addEventListener('webkitfullscreenchange', syncFull);
 $('bportrait').onclick = () => document.body.classList.add('portrait-ok');
 $('btouch').onclick = () => setTouch(!document.body.classList.contains('touch'));
 if (touchPref) setTouch(true);
