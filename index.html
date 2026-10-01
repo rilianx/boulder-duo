@@ -156,7 +156,7 @@ button:disabled{opacity:.4;cursor:default}
         <span class="lv"><span class="cv" id="c0">CUEVA A</span> · VIDAS <span id="l0">3</span><span id="w0wrap" hidden> · RONDAS <span id="w0">0</span></span></span>
         <span class="sc"><small>Score</small><span id="s0">0</span></span>
       </div>
-      <canvas id="cv0" width="272" height="192"></canvas>
+      <canvas id="cv0" width="1088" height="768"></canvas>
     </div>
     <div class="view p2v">
       <div class="bar">
@@ -167,7 +167,7 @@ button:disabled{opacity:.4;cursor:default}
         <span class="lv"><span class="cv" id="c1">CUEVA A</span> · VIDAS <span id="l1">3</span><span id="w1wrap" hidden> · RONDAS <span id="w1">0</span></span></span>
         <span class="sc"><small>Score</small><span id="s1">0</span></span>
       </div>
-      <canvas id="cv1" width="272" height="192"></canvas>
+      <canvas id="cv1" width="1088" height="768"></canvas>
     </div>
     <div class="overlay" id="ov"></div>
   </div>
@@ -1316,7 +1316,10 @@ const OFF = [-W, 1, W, -1];            // up, right, down, left
 const DXY = [[0,-1],[1,0],[0,1],[-1,0]];
 
 const CVS = [0,1].map(k => document.getElementById('cv' + k));
-const CTX = CVS.map(c => { const g = c.getContext('2d'); g.imageSmoothingEnabled = false; return g; });
+/* The views draw at 4 device pixels per tile pixel (SS): the C64 tiles stay blocky, while the kids and the
+   gliding movement get the finer grid. All drawing code works in tile pixels through the transform. */
+const SS = 4;
+const CTX = CVS.map(c => { const g = c.getContext('2d'); g.setTransform(SS, 0, 0, SS, 0, 0); g.imageSmoothingEnabled = false; return g; });
 const ov = document.getElementById('ov');
 const $ = id => document.getElementById(id);
 /* ---------- sprites (C64 multicolor: 8 fat pixels x 16 rows per tile) ---------- */
@@ -1528,28 +1531,75 @@ const BOOM_T = [0,1,2,3].map(s => {
   return c;
 });
 
-/* Rockford: grey/white miner, the helmet carries the player colour */
-const PL_TOP = [
-  "........",
-  "..hhhh..",
-  ".hhhhhh.",
-  "..wkwk..",
-  "..wwww..",
-  "...ww...",
-  ".gggggg."];
-const PL_IDLE = PL_TOP.concat([
-  "w.gggg.w","w.gggg.w","..gggg..","..mmmm..","..m..m..","..m..m..","..m..m..",".kk..kk.","........"]);
-const PL_WALK = PL_TOP.concat([
-  ".wgggg.w","w.gggg..","..gggg..","..mmmm..",".m....m.",".m....m.","m......m","kk....kk","........"]);
-const PL_WALK2 = PL_TOP.concat([
-  "w.ggggw.","..gggg.w","..gggg..","..mmmm..","...mm...","...mm...","...mm...","..kkkk..","........"]);
-const PL_BLINK = PL_IDLE.map((r,i)=> i===3 ? "..wwww.." : r);
-function playerSprites(helmet){
-  const cl = {h:helmet, w:'#f2f2f2', g:'#b8b8b8', m:'#7a7a7a', k:'#2a2a2a'};
-  const both = m => [spr(m,cl,false), spr(m,cl,true)];
-  return { idle:both(PL_IDLE), walk:[both(PL_WALK), both(PL_WALK2)], blink:both(PL_BLINK) };
+/* The players: a boy (J1, blue) and a girl (J2, orange), round-faced and soft like a hand-drawn film, drawn at
+   64×64 and shown in one 16×16 tile. Original characters. step 0 stands, 1 and 2 are the two strides. */
+function kidSprite(girl, step, blink, flip){
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  if (flip) { g.translate(64, 0); g.scale(-1, 1); }
+  const OL = '#3b2619', SKIN = '#fbdcc2', HAND = '#f4c9a8';
+  g.lineJoin = 'round'; g.lineCap = 'round'; g.lineWidth = 2.2; g.strokeStyle = OL;
+  const paint = (fill, path) => { g.beginPath(); path(); g.fillStyle = fill; g.fill(); g.stroke(); };
+  const rr = (x, y, w, h, r) => { g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const bob = step ? -1 : 0;
+  // legs and shoes
+  const legs = step === 1 ? [22, 40] : step === 2 ? [28, 35] : [26, 36];
+  legs.forEach((lx, k) => {
+    const lift = step && k === (step === 1 ? 1 : 0) ? -2 : 0;
+    paint(SKIN, () => rr(lx - 3, 47 + lift, 6, 10, 2));
+    paint(girl ? '#c8352e' : '#5a3a26', () => g.ellipse(lx + 1, 58 + lift, 5, 3, 0, 0, Math.PI * 2));
+  });
+  g.save(); g.translate(0, bob);
+  // arms swing with the stride
+  const sw = step === 1 ? 3 : step === 2 ? -3 : 0;
+  paint(HAND, () => g.ellipse(18 - sw * .3, 44 + sw * .4, 3.2, 3.2, 0, 0, Math.PI * 2));
+  paint(HAND, () => g.ellipse(46 + sw * .3, 44 - sw * .4, 3.2, 3.2, 0, 0, Math.PI * 2));
+  if (girl) {
+    // dress, flared, with a white collar
+    paint('#e8693f', () => { g.moveTo(24, 33); g.lineTo(40, 33); g.quadraticCurveTo(44, 40, 49, 50); g.quadraticCurveTo(32, 54, 15, 50); g.quadraticCurveTo(20, 40, 24, 33); g.closePath(); });
+    paint('#e8693f', () => rr(16, 34, 7, 10, 3)); paint('#e8693f', () => rr(41, 34, 7, 10, 3));
+    g.strokeStyle = 'rgba(59,38,25,.35)'; g.beginPath(); g.moveTo(26, 42); g.lineTo(23, 50); g.moveTo(38, 42); g.lineTo(41, 50); g.stroke(); g.strokeStyle = OL;
+  } else {
+    // shirt, shorts with braces
+    paint('#5b9be0', () => rr(21, 33, 22, 14, 5));
+    paint('#5b9be0', () => rr(15, 34, 8, 10, 3)); paint('#5b9be0', () => rr(41, 34, 8, 10, 3));
+    paint('#6b4a2e', () => rr(22, 45, 20, 5, 2));
+    g.strokeStyle = '#6b4a2e'; g.lineWidth = 2; g.beginPath(); g.moveTo(26, 34); g.lineTo(27, 46); g.moveTo(38, 34); g.lineTo(37, 46); g.stroke(); g.lineWidth = 2.2; g.strokeStyle = OL;
+  }
+  paint('#ffffff', () => { g.moveTo(26, 33); g.lineTo(32, 38); g.lineTo(38, 33); g.closePath(); });
+  // back hair for the girl's bob
+  if (girl) paint('#8c4322', () => rr(14, 7, 36, 28, 13));
+  // head
+  paint(SKIN, () => g.arc(32, 20, 14, 0, Math.PI * 2));
+  // hair on top
+  if (girl) {
+    paint('#8c4322', () => { g.arc(32, 19, 15, Math.PI * 1.05, Math.PI * 1.95); g.lineTo(46, 15); g.lineTo(18, 15); g.closePath(); });
+    paint('#d6363a', () => rr(17, 8, 30, 3.5, 1.7));                 // hairband
+    paint('#d6363a', () => { g.moveTo(44, 9); g.lineTo(50, 5); g.lineTo(50, 13); g.closePath(); });
+  } else {
+    paint('#2f241d', () => {
+      g.arc(32, 20, 15.5, Math.PI * 1.02, Math.PI * 1.98);
+      [[46, 15], [42, 17], [39, 14], [35, 17], [31, 14], [27, 17], [23, 14], [19, 17]].forEach(([x, y]) => g.lineTo(x, y));
+      g.closePath();
+    });
+  }
+  // face looks to the right
+  const ex = [34, 43];
+  if (blink) { g.lineWidth = 2; ex.forEach(x => { g.beginPath(); g.arc(x, 21, 2.6, .15 * Math.PI, .85 * Math.PI); g.stroke(); }); g.lineWidth = 2.2; }
+  else ex.forEach(x => {
+    g.beginPath(); g.ellipse(x, 21, 2.5, 3.6, 0, 0, Math.PI * 2); g.fillStyle = '#24160f'; g.fill();
+    g.beginPath(); g.arc(x + .8, 19.6, 1, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill();
+  });
+  g.fillStyle = 'rgba(238,118,118,.55)';
+  ex.forEach(x => { g.beginPath(); g.ellipse(x - 1, 26.5, 2.8, 1.6, 0, 0, Math.PI * 2); g.fill(); });
+  g.lineWidth = 1.6; g.beginPath(); g.arc(39.5, 27.5, 2, .1 * Math.PI, .9 * Math.PI); g.stroke();
+  g.restore();
+  return c;
 }
-const PL_T = [playerSprites('#5fb4ff'), playerSprites('#ff8a4c')];
+function playerSprites(girl){
+  const both = (step, blink) => [kidSprite(girl, step, blink, false), kidSprite(girl, step, blink, true)];
+  return { idle: both(0, false), walk: [both(1, false), both(2, false)], blink: both(0, true) };
+}
+const PL_T = [playerSprites(false), playerSprites(true)];
 /* ---------- audio ---------- */
 let ac = null, muted = false;
 function audioOn(){
@@ -2572,7 +2622,7 @@ function renderOverview(g){
   g.save(); g.translate(0, oy); g.scale(sc, sc);
   for (let y=0; y<H; y++) for (let x=0; x<W; x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
-    if (s) g.drawImage(s, x*T, y*T);
+    if (s) g.drawImage(s, x*T, y*T, T, T);
   }
   const a = players[1];
   if (a && a.alive && AI.showWin) {
@@ -2589,7 +2639,7 @@ function renderView(k){
   g.fillStyle = '#000'; g.fillRect(0, 0, VW*T, VH*T);
   if (!grid) return;
   if (k === 0 && mode === 'train' && state !== 'menu') return renderOverview(g);
-  const ox = Math.round(c.x * T), oy = Math.round(c.y * T);
+  const ox = Math.round(c.x * T * SS) / SS, oy = Math.round(c.y * T * SS) / SS;
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   const glide = [];
@@ -2598,9 +2648,9 @@ function renderView(k){
     if (!s) continue;
     const from = src[i];
     if (from >= 0 && lerpT < 1) { const k = 1 - lerpT; glide.push([s, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
-    else g.drawImage(s, x*T - ox, y*T - oy);
+    else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
-  glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px), Math.round(py)));
+  glide.forEach(([s, px, py]) => g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T));
   const a = players[1];
   if (k === 1 && a && a.ai && a.alive && AI.showWin && state !== 'menu') {
     const [wx0, wy0, wx1, wy1] = aiWindow(a);
@@ -2828,7 +2878,7 @@ window.__sim = {
     level = n; genCave(n);
     const c = document.createElement('canvas'); c.width = W*T; c.height = H*T;
     const g = c.getContext('2d'), open = false;
-    for (let y=0; y<H; y++) for (let x=0; x<W; x++){ const i = y*W + x, s = tileSprite(grid[i], i, x, y, 0, open); if (s) g.drawImage(s, x*T, y*T); }
+    for (let y=0; y<H; y++) for (let x=0; x<W; x++){ const i = y*W + x, s = tileSprite(grid[i], i, x, y, 0, open); if (s) g.drawImage(s, x*T, y*T, T, T); }
     return c.toDataURL();
   },
   hash(){
