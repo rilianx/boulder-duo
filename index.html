@@ -99,6 +99,8 @@ kbd{font-family:var(--display);font-size:10px;border:2px solid var(--line);paddi
 .hp input{accent-color:var(--p2);min-width:0}
 button:disabled{opacity:.4;cursor:default}
 @media (max-width:760px){ .tcharts{grid-template-columns:1fr} }
+.hlbox{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:760px){ .hlbox{grid-template-columns:1fr} }
 .ai-chart small,.ai-q small{color:var(--muted);font-size:16px}
 .ai-q{display:flex;flex-direction:column;gap:3px;min-width:0}
 .qrow{display:grid;grid-template-columns:1.6em 1fr 3.4em;gap:6px;align-items:center;font-variant-numeric:tabular-nums}
@@ -212,6 +214,21 @@ button:disabled{opacity:.4;cursor:default}
       <div class="speeds" id="speeds">
         <button data-s="1" class="on">x1</button><button data-s="10">x10</button><button data-s="100">x100</button><button data-s="1000">MÁX</button><button id="bturbo">TURBO SIN PANTALLA</button>
       </div>
+    </div>
+    <div class="hlbox" id="hlbox" hidden>
+      <div class="ai-stats">
+        <i>Cueva</i><b id="hl-cave">—</b>
+        <i>Intentos</i><b id="hl-n">0</b>
+        <i>Salió (últ. 20)</i><b id="hl-x">0</b>
+        <i>Murió (últ. 20)</i><b id="hl-d">0</b>
+        <i>Gemas (últ. 20)</i><b id="hl-g">0</b>
+        <i>Mejor intento</i><b id="hl-best">0</b>
+        <i>Mejor plan</i><b id="hl-eps">—</b>
+        <i>Decisiones aprendidas</i><b id="hl-q">0</b>
+      </div>
+      <div class="ai-chart"><canvas id="hl-chart"></canvas><small>Gemas por intento (media móvil de 10)</small></div>
+      <div class="ai-q"><small>Lo que está haciendo</small><div class="ai-feat" id="hl-now">—</div>
+        <button id="hl-reset">OLVIDAR ESTA CUEVA</button></div>
     </div>
     <div class="ai-grid">
       <div class="ai-stats">
@@ -1586,12 +1603,12 @@ let caveSet = 'bd2';
 try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v]) caveSet = v; } catch (e) {}
 const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n - 1) % cs.length], lvl: Math.min(4, Math.floor((n - 1) / cs.length)) }; };
 function caveLabel(n){
-  if (mode === 'train') return 'NIVEL ' + n;
+  if (mode === 'train' && !hlTrain()) return 'NIVEL ' + n;
   const { cave, lvl } = caveOf(n), nm = cave.props.Name || '';
   const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
   return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : nm.toUpperCase()) + lv;
 }
-const caveTitle = n => { if (mode === 'train') return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
+const caveTitle = n => { if (mode === 'train' && !hlTrain()) return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
 
 
 /* Objects drawn at 64×64 (4× the tile) and shown in one tile, like the kids. */
@@ -2256,9 +2273,11 @@ function genCave(n){
 }
 
 function initLevel(n){
+  if (HL.cur && HL.cur.cave !== hlCave()) HL.cur = null;
+  if (HL.cur) hlEnd('t');
   level = n; dust = []; critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
-  const spawns = mode === 'train' || simHook ? genLevel(n) : genCave(n);
+  const spawns = (mode === 'train' && !hlTrain()) || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
     p.gems = 0; p.exited = false; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
@@ -2291,11 +2310,12 @@ const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === '
 function killPlayer(p){
   if (!p.alive) return;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
+  if (p.ai && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
   p.alive = false; p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
 
-let rockBlast = false;
+let rockBlast = false, hlDied = false;
 // friendly mode: a gem that falls on a kid's head is caught and counted
 function catchGem(p, i){
   const over = mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
@@ -2315,7 +2335,7 @@ function explode(cx, cy, toGem){
 }
 
 // rules of the original caves (not the random training levels, which must match the Python copy in rl/)
-const caveRules = () => mode !== 'train' && !simHook;
+const caveRules = () => (mode !== 'train' || hlTrain()) && !simHook;
 /* Friendly version (option): fireflies and butterflies don't hurt, nor do their explosions, nor gems falling on
    someone's head. Only a falling rock still squashes. */
 let friendlyOn = false;
@@ -2456,9 +2476,10 @@ function stepPlayer(p){
     if (p.ai) { p.aiR += 5; p.epGems++; }
   }
   else if (t === EXIT && exitOpenFor(p)) {
+    if (p.ai && aiKind === 'astar') hlEnd('x');
     grid[i] = E; p.alive = false; p.exited = true; p.x += dx; p.y += dy;
     p.score += timeLeft * 2; sfx.exit();
-    if (p.ai) { AI.exits++; aiTerminal(p, 60, 'x'); }
+    if (p.ai && aiKind !== 'astar') { AI.exits++; aiTerminal(p, 60, 'x'); }
     if (mode === 'versus' || mode === 'pc') roundWin(p);
   }
   else if (t === ROCK && dy === 0 && grid[j + OFF[d]] === E && caveRules()) {
@@ -2615,6 +2636,12 @@ const active = () => players.filter(p => !p.exited && (p.alive || p.respawn > 0)
 
 function checkEnd(){
   if (state !== 'play') return;
+  if (hlTrain()) {
+    // learning a cave: every life of the PC is one attempt at the same cave
+    const a = players[1];
+    if (a.exited || timeLeft <= 0 || hlDied) { if (!hlDied) hlEnd(a.exited ? 'x' : 't'); hlDied = false; a.score = 0; a.lives = 3; initLevel(level); }
+    return;
+  }
   if (mode === 'train') {
     const a = players[1];
     if (a.exited || timeLeft <= 0) { if (!a.exited) aiTruncate(a); a.score = 0; initLevel(1 + Math.floor(Math.random() * 12)); }
@@ -2748,10 +2775,15 @@ function startGame(m){
   players[1].ai = aiMode;
   if (mode === 'train') players[0].lives = 0;
   document.querySelector('.p2v .tag').textContent = aiMode ? 'PC' : 'J2';
-  $('aipanel').hidden = !aiMode;
+  $('aipanel').hidden = !aiMode || (mode === 'pc' && aiKind === 'astar');
   $('speeds').hidden = mode !== 'train';
+  const hl = hlTrain();
+  $('hlbox').hidden = !hl; document.querySelector('.ai-grid').hidden = hl; document.querySelector('#aipanel .hp').hidden = hl;
+  $('bturbo').hidden = hl; document.querySelector('#aipanel .ai-foot').hidden = hl;
+  document.querySelector('#aipanel h3').textContent = hl ? 'EL PC APRENDE LA CUEVA · ELIGE QUÉ HACER (RL) Y EL A* LO LLEVA' : 'CEREBRO DEL PC · Q(λ) SOBRE SU PANTALLA 17×12';
   setSpeed(1);
-  initLevel(mode === 'train' ? 1 : startN());
+  HL.cur = null; hlDied = false;
+  initLevel(mode === 'train' && !hlTrain() ? 1 : startN());
   drawAiPanel(true);
 }
 
@@ -3035,7 +3067,7 @@ const ASTAR_P = { c_dirt: 0.75, h_fall: 18, h_under: 1.3, h_down: 7.2, h_e1: 40.
 let aiKind = 'astar';
 const PUSH_COST = 8;
 try { const v = localStorage.getItem('boulder-duo-ai'); if (v === 'q' || v === 'astar') aiKind = v; } catch (e) {}
-function astarAct(p){
+function astarCosts(){
   const P = ASTAR_P, N = W * H, g = grid, f = fall, faller = t => t === ROCK || t === GEM;
   const edist = new Uint8Array(N).fill(9);
   for (let i = 0; i < N; i++) if (g[i] === FIRE || g[i] === BUTT) {
@@ -3053,45 +3085,161 @@ function astarAct(p){
     if (edist[j] <= 3) { c += he[edist[j]]; if (edist[j] <= 2) danger[j] = 1; }
     cost[j] = c;
   }
-  const start = p.y * W + p.x;
-  const dijkstra = goals => {
-    const best = new Float64Array(N).fill(Infinity), first = new Int8Array(N).fill(-1), heap = [[0, start]];
-    best[start] = 0;
-    const push = e => { heap.push(e); let k = heap.length - 1; while (k > 0) { const q = (k - 1) >> 1; if (heap[q][0] <= heap[k][0]) break; [heap[q], heap[k]] = [heap[k], heap[q]]; k = q; } };
-    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2*k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
-    while (heap.length){
-      const [c, i] = pop(); if (c > best[i]) continue;
-      if (goals.has(i) && i !== start) return [c, first[i]];
-      const above = faller(g[i - W]);
-      for (let d = 0; d < 4; d++){
-        const j = i + OFF[d]; let step;
-        if (goals.has(j) && g[j] === EXIT) step = 1;
-        else if (g[j] === ROCK && (d === 1 || d === 3) && g[j + OFF[d]] === E && !f[j]) step = PUSH_COST;   // push the rock aside (not in the Python version)
-        else { step = cost[j]; if (step === Infinity) continue; }
-        if (d === 2 && above) step += P.h_down;
-        const nc = c + step;
-        if (nc < best[j]) { best[j] = nc; first[j] = i === start ? d : first[i]; push([nc, j]); }
-      }
+  return { cost, danger };
+}
+/* Dijkstra from the PC. With goals: [cost, first step] to the cheapest goal, or null. Without: full maps. */
+function astarSearch(p, C, goals){
+  const P = ASTAR_P, N = W * H, g = grid, f = fall, faller = t => t === ROCK || t === GEM, cost = C.cost;
+  const start = p.y * W + p.x, best = new Float64Array(N).fill(Infinity), first = new Int8Array(N).fill(-1), heap = [[0, start]];
+  best[start] = 0;
+  const push = e => { heap.push(e); let k = heap.length - 1; while (k > 0) { const q = (k - 1) >> 1; if (heap[q][0] <= heap[k][0]) break; [heap[q], heap[k]] = [heap[k], heap[q]]; k = q; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let k = 0; for (;;) { const l = 2*k + 1, r = l + 1; let m = k; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === k) break; [heap[m], heap[k]] = [heap[k], heap[m]]; k = m; } } return top; };
+  while (heap.length){
+    const [c, i] = pop(); if (c > best[i]) continue;
+    if (goals && goals.has(i) && i !== start) return [c, first[i]];
+    const above = faller(g[i - W]);
+    for (let d = 0; d < 4; d++){
+      const j = i + OFF[d]; let step;
+      if (goals && goals.has(j) && g[j] === EXIT) step = 1;
+      else if (g[j] === ROCK && (d === 1 || d === 3) && g[j + OFF[d]] === E && !f[j]) { if (!goals) continue; step = PUSH_COST; }   // push the rock aside (not in the Python version)
+      else { step = cost[j]; if (step === Infinity) continue; }
+      if (d === 2 && above) step += P.h_down;
+      const nc = c + step;
+      if (nc < best[j]) { best[j] = nc; first[j] = i === start ? d : first[i]; push([nc, j]); }
     }
-    return null;
-  };
+  }
+  return goals ? null : { best, first };
+}
+function astarAct(p){
+  const N = W * H, g = grid, C = astarCosts(), P = ASTAR_P;
   const gems = new Set(); for (let i = 0; i < N; i++) if (g[i] === GEM) gems.add(i);
   let r;
   if (exitOpenFor(p)) {
     const ex = new Set(); for (let i = 0; i < N; i++) if (g[i] === EXIT) ex.add(i);
-    const rex = dijkstra(ex), rg = P.detour > 0 ? dijkstra(gems) : null;
+    const rex = astarSearch(p, C, ex), rg = P.detour > 0 ? astarSearch(p, C, gems) : null;
     r = rg && (!rex || rg[0] <= P.detour) ? rg : rex;
-  } else r = dijkstra(gems);
+  } else r = astarSearch(p, C, gems);
   if (r) return r[1];
-  if (danger[start]) {
-    const safe = new Set(); for (let j = 2 * W; j < N; j++) if (cost[j] < Infinity && !danger[j] && g[j] !== GEM) safe.add(j);
-    const rs = dijkstra(safe); if (rs) return rs[1];
+  const start = p.y * W + p.x;
+  if (C.danger[start]) {
+    const safe = new Set(); for (let j = 2 * W; j < N; j++) if (C.cost[j] < Infinity && !C.danger[j] && g[j] !== GEM) safe.add(j);
+    const rs = astarSearch(p, C, safe); if (rs) return rs[1];
   }
   return 4;
 }
+
+/* ---------- learning each cave: RL on top of the expert ----------
+   The PC decides "what to do next" among a handful of options, and the expert's A* takes it there safely:
+     g<cell>   go and take that gem          x        go to the open exit
+     p<cell><d> push that rock left/right     u<cell>  dig out from under that rock (it falls once the PC steps aside)
+     w        wait a moment
+   At first it always picks what the plain expert would (the cheapest gem, or the exit). While training it sometimes
+   tries another option; at the end of each life it scores every decision with what came after it (gems +5, exit +60,
+   death −40, −0.05 per tick) and keeps the average. The state is (decision number, gems so far), so in a fixed
+   cave this learns a plan: which order, which rocks to drop where. Tables are kept per cave in this browser. */
+const HL = { Q: new Map(), runs: {}, best: {}, cur: null, saveAt: 0 };
+try { const o = JSON.parse(localStorage.getItem('boulder-duo-hl') || 'null'); if (o) { HL.Q = new Map(o.q); HL.runs = o.runs || {}; HL.best = o.best || {}; } } catch (e) {}
+function hlSave(){ try { localStorage.setItem('boulder-duo-hl', JSON.stringify({ q: [...HL.Q], runs: HL.runs, best: HL.best })); } catch (e) {} }
+const hlCave = () => caveSet + ':' + ((level - 1) % CAVE_SETS[caveSet].caves.length) + ':' + caveOf(level).lvl;
+const hlTrain = () => mode === 'train' && aiKind === 'astar';
+function hlCandidates(p, C, M){
+  const g = grid, N = W * H, out = [];
+  const reach = i => M.best[i] < Infinity;
+  if (exitOpenFor(p)) for (let i = 0; i < N; i++) if (g[i] === EXIT) for (let d = 0; d < 4; d++) if (reach(i + OFF[d]) || i + OFF[d] === p.y*W + p.x) { out.push({ k: 'x', t: i, c: (M.best[i + OFF[d]] || 0) + 1 }); d = 4; i = N; }
+  const gem = []; for (let i = 0; i < N; i++) if (g[i] === GEM && reach(i)) gem.push({ k: 'g' + i, t: i, c: M.best[i] });
+  gem.sort((a, b) => a.c - b.c); out.push(...gem.slice(0, 6));
+  const extra = [];
+  for (let i = W; i < N - W; i++){
+    if (g[i] !== ROCK || fall[i]) continue;
+    for (const d of [1, 3]) { const side = i - OFF[d]; if (g[i + OFF[d]] === E && reach(side)) extra.push({ k: 'p' + i + (d === 1 ? 'r' : 'l'), t: side, rock: i, d, c: M.best[side] + 4 }); }
+    const b = i + W; if (g[b] === DIRT && reach(b)) extra.push({ k: 'u' + i, t: b, rock: i, c: M.best[b] + 2 });
+  }
+  extra.sort((a, b) => a.c - b.c); out.push(...extra.slice(0, 10));
+  out.push({ k: 'w', c: 0 });
+  return out;
+}
+function hlDefault(p, cands){
+  // what the plain expert would do: the exit if open (unless a gem is within `detour`), else the cheapest gem
+  const x = cands.find(o => o.k === 'x'), g = cands.filter(o => o.k[0] === 'g');
+  if (x) return g.length && g[0].c <= ASTAR_P.detour ? g[0] : x;
+  return g[0] || null;
+}
+function hlChoose(p){
+  const C = astarCosts(), M = astarSearch(p, C, null), cands = hlCandidates(p, C, M), e = HL.cur;
+  if (cands.length === 1) return { ...cands[0], t0: nowT, ticks: 0, phase: 0 };   // nothing to choose: just wait, not a decision
+  const s = hlCave() + '|' + e.n + '|' + p.gems, def = hlDefault(p, cands);
+  let pick = null;
+  const best = HL.best[hlCave()], i = e.n, follow = best && i < best.seq.length && (e.dev < 0 || i < e.dev);
+  if (follow) pick = cands.find(o => o.k === best.seq[i]) || null;      // replay the best attempt so far…
+  if (i === e.dev) {                                                      // …change one decision of it…
+    const others = cands.filter(o => !best || o.k !== best.seq[i]);
+    pick = others[Math.floor(Math.random() * others.length)] || null;
+  }
+  if (!pick) {                                                            // …and after that, the best known choice
+    let bv = -Infinity;
+    for (const o of cands) { const q = HL.Q.get(s + '|' + o.k); if (q && q[0] > bv) { bv = q[0]; pick = o; } }
+    const dq = def && HL.Q.get(s + '|' + def.k);
+    if (def && !dq) pick = def;                       // the expert's choice until it has been scored
+    if (!pick) pick = def || cands[cands.length - 1];
+  }
+  e.n++; e.dec.push({ key: s + '|' + pick.k, at: e.ret }); e.seq.push(pick.k);
+  return { ...pick, t0: nowT, ticks: 0, phase: 0 };
+}
+function hlStep(p){
+  // carries out the current option; returns a direction (0–3) or 4 to stay, or -1 when the option is over
+  const o = HL.cur.opt, me = p.y * W + p.x;
+  if (++o.ticks > 70) return -1;
+  if (o.k === 'w') return o.ticks > 6 ? -1 : (astarCosts().danger[me] ? astarAct(p) : 4);
+  if (o.k[0] === 'g' && grid[o.t] !== GEM) return -1;
+  if (o.k[0] === 'p') {
+    if (grid[o.rock] !== ROCK) return -1;
+    if (me === o.t) return o.d;                       // keep pushing
+  }
+  if (o.k[0] === 'u') {
+    if (o.phase === 1) {
+      // step aside, never down: the rock comes down into the cell just left
+      for (const d of [1, 3]) { const j = me + OFF[d]; if (grid[j] === E || grid[j] === DIRT || grid[j] === GEM) { o.phase = 2; return d; } }
+      return -1;
+    }
+    if (o.phase === 2) return -1;
+    if (me === o.t) { o.phase = 1; return hlStep(p); }
+    if (grid[o.rock] !== ROCK) return -1;
+  }
+  const r = astarSearch(p, astarCosts(), new Set([o.t]));
+  return r ? r[1] : -1;
+}
+function hlThink(p){
+  if (!HL.cur) {
+    // while training, each attempt changes one decision of the best attempt so far (at a random point,
+    // or one past its end to try something new after it); playing for real, it just replays the best
+    const b = HL.best[hlCave()], L = b ? b.seq.length : 0;
+    HL.cur = { cave: hlCave(), n: 0, dec: [], seq: [], ret: 0, gems: p.gems, opt: null, dev: hlTrain() ? Math.floor(Math.pow(Math.random(), 1.6) * (L + 1)) : -1 };   // early decisions changed more often
+  }
+  const e = HL.cur;
+  if (p.gems > e.gems) { e.ret += 5 * (p.gems - e.gems); e.gems = p.gems; }
+  e.ret -= .05;
+  let a = -1;
+  for (let k = 0; k < 3 && a < 0; k++) { if (!e.opt) e.opt = hlChoose(p); a = hlStep(p); if (a < 0) e.opt = null; }
+  if (a < 0) a = 4;
+  p.held = a < 4 ? [a] : [];
+}
+function hlEnd(how){
+  const e = HL.cur; HL.cur = null; if (!e) return;
+  if (how === 'x') e.ret += 60; else if (how === 'd') e.ret -= 40;
+  for (const d of e.dec) {
+    const G = e.ret - d.at, q = HL.Q.get(d.key) || [0, 0];
+    q[1]++; q[0] += (G - q[0]) / Math.min(q[1], 8); HL.Q.set(d.key, q);
+  }
+  const k = e.cave, st = HL.hist[k] || (HL.hist[k] = []);
+  if (!HL.best[k] || e.ret > HL.best[k].ret) HL.best[k] = { seq: e.seq, ret: e.ret, gems: e.gems, how };
+  st.push({ g: e.gems, x: how === 'x' ? 1 : 0, d: how === 'd' ? 1 : 0 }); if (st.length > 400) st.shift();
+  HL.runs[k] = (HL.runs[k] || 0) + 1;
+  if (performance.now() - HL.saveAt > 4000) { HL.saveAt = performance.now(); hlSave(); }
+}
+HL.hist = {};
 function aiThink(p){
   if (!p.alive) return;
-  if (aiKind === 'astar' && mode === 'pc') { const a = astarAct(p); p.held = a < 4 ? [a] : []; p.aiR = 0; return; }
+  if (aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { hlThink(p); p.aiR = 0; return; }
   const ob = aiObserve(p);
   if (p.pend) {
     let r = p.aiR - .05;
@@ -3214,9 +3362,25 @@ function hookHover(cv, redraw){
 }
 
 let aiPanelTick = 0;
+const OPT_TXT = o => !o ? '—' : o.k === 'x' ? 'va a la salida' : o.k === 'w' ? 'espera un momento' : o.k[0] === 'g' ? 'va por una gema' :
+  o.k[0] === 'p' ? 'empuja una roca hacia la ' + (o.d === 1 ? 'derecha' : 'izquierda') : 'cava bajo una roca para soltarla';
+function drawHl(){
+  const k = hlCave(), h = HL.hist[k] || [], last = h.slice(-20), n = HL.runs[k] || 0;
+  $('hl-cave').textContent = caveLabel(level); $('hl-n').textContent = n;
+  $('hl-x').textContent = last.filter(r => r.x).length + ' de ' + last.length;
+  $('hl-d').textContent = last.filter(r => r.d).length + ' de ' + last.length;
+  $('hl-g').textContent = (last.reduce((a, r) => a + r.g, 0) / Math.max(1, last.length)).toFixed(1);
+  $('hl-best').textContent = h.length ? Math.max(...h.map(r => r.g)) + ' gemas' + (h.some(r => r.x) ? ' · salió' : '') : '—';
+  const bb = HL.best[k]; $('hl-eps').textContent = bb ? bb.seq.length + ' decisiones · ' + bb.gems + ' gemas' + (bb.how === 'x' ? ' · sale' : bb.how === 'd' ? ' · muere' : '') : '—';
+  let q = 0; for (const key of HL.Q.keys()) if (key.startsWith(k + '|')) q++; $('hl-q').textContent = q;
+  const o = HL.cur && HL.cur.opt;
+  $('hl-now').textContent = 'Intento ' + (n + 1) + ', decisión ' + (HL.cur ? HL.cur.n : 0) + ': ' + OPT_TXT(o) + '.';
+  if (h.length) { const ma = h.map((_, i) => { const s = h.slice(Math.max(0, i - 9), i + 1); return s.reduce((a, r) => a + r.g, 0) / s.length; }); lineChart($('hl-chart'), h.map((_, i) => n - h.length + i + 1), ma, v => v.toFixed(1)); }
+}
 function drawAiPanel(force){
   if ($('aipanel').hidden) return;
   if (!force && (aiPanelTick++ % (turbo ? 20 : 8))) return;
+  if (hlTrain()) return drawHl();
   const avg = AI.hist.slice(-20), g = avg.length ? avg.reduce((a, b) => a + b, 0) / avg.length : 0;
   $('ai-ep').textContent = AI.episodes.toLocaleString('es'); $('ai-st').textContent = AI.Q.size.toLocaleString('es');
   $('ai-eps').textContent = epsNow().toFixed(3); $('ai-d').textContent = AI.deaths.toLocaleString('es');
@@ -3789,6 +3953,10 @@ setInterval(drawSaveStatus, 1000);
 document.addEventListener('visibilitychange', () => { if (document.hidden && AI.dirty) aiSave(); });
 hookHover($('ai-chart'), () => drawAiPanel(true));
 ['tc-g','tc-x','tc-d','tc-s'].forEach(id => hookHover($(id), () => drawTurbo(true)));
+$('hl-reset').onclick = () => {
+  const k = hlCave(); for (const key of [...HL.Q.keys()]) if (key.startsWith(k + '|')) HL.Q.delete(key);
+  delete HL.runs[k]; delete HL.hist[k]; delete HL.best[k]; HL.cur = null; hlSave(); if (hlTrain()) initLevel(level); drawHl();
+};
 $('ai-win').onchange = e => { AI.showWin = e.target.checked; };
 let resetArm = 0;
 $('ai-reset').onclick = () => {
@@ -3855,6 +4023,16 @@ window.__sim = {
       if (deaths >= 3) break;
     }
     const r = { exit: players[1].exited, deaths, gems: players[1].gems, need: needEach, t, timeLeft, stays, totalGems: grid.filter(v => v === GEM).length }; menu(); return r;
+  },
+  // tests: the PC trains on cave n for k attempts, returns gems/exit/death per attempt
+  hlRun(n, k){
+    if (turbo) setTurbo(false);
+    simHook = false; mode = 'train'; aiKind = 'astar'; players = [newPlayer(0), newPlayer(1)]; players[1].ai = true; players[0].lives = 0;
+    HL.cur = null; hlDied = false; initLevel(n); state = 'play';
+    const key = hlCave(), h0 = (HL.runs[key] || 0);
+    let guard = 0;
+    while ((HL.runs[key] || 0) < h0 + k && guard++ < 2e6) { nowT = simT = worldT += tickMs; tick(); }
+    const h = HL.hist[key].slice(-k); menu(); return h;
   },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
   butts(){ const c = document.createElement('canvas'); c.width = 8 * 96; c.height = 2 * 96; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); BUTT_T.forEach((f, k) => g.drawImage(f[0], (k % 8) * 96, (k / 8 | 0) * 96, 96, 96)); return c.toDataURL(); },

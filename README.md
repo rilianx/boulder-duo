@@ -54,7 +54,11 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 ## Extras
 
-- **PC: EXPERTO / APRENDIZ** (botón del menú, para «Contra PC»). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`): en cada tick busca la ruta más barata a la gema más conveniente, o a la salida cuando cumple su cuota, cobrando caro pasar bajo algo que cae o cerca de un enemigo; en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende jugando. Jugando solo las cuevas originales (sin rival): el experto sale en 14 de 41 cuevas y junta 332 gemas; el aprendiz no sale de ninguna y muere en casi todas.
+- **PC: EXPERTO / APRENDIZ** (botón del menú). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`); en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende paso a paso.
+- **El experto aprende cada cueva (RL de alto nivel).** Con EXPERTO activo, **ENTRENAR PC** pone al PC a intentar una y otra vez la cueva elegida en ELEGIR CUEVA. En cada decisión elige qué hacer —ir a una gema, ir a la salida, empujar una roca, cavar bajo una roca para soltarla, o esperar— y el A\* lo lleva hasta ahí sin morir. Cada intento repite el mejor plan encontrado hasta ahora y cambia una decisión; al final de cada vida puntúa las decisiones con lo que vino después (gemas +5, salida +60, muerte −40, −0,05 por tick). Lo aprendido se guarda por cueva en el navegador y lo usa en «Contra PC». El panel muestra intentos, salidas, muertes, gemas, el mejor plan y una curva por intento; con x10, x100 y MÁX entrena más rápido.
+  Con 150 intentos por cueva, jugando solo las 41 cuevas: antes de aprender sale en 12 y junta 229 gemas; después sale en 14 y junta 440 gemas. En algunas cuevas el plan aprendido arriesga más y muere.
+
+  ![El PC aprendiendo la cueva B](docs/aprende-cueva.png)
 
 - **AMIGABLE** (botón del menú): las luciérnagas y mariposas no hacen daño (ni sus explosiones) y los diamantes que caen en la cabeza se atrapan y se cuentan. Solo una roca que cae aplasta.
 
