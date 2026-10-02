@@ -155,3 +155,25 @@ Comparación con práctica nueva y la misma evaluación (15 semillas):
 Igual rendimiento con un agente más simple. Las 6 quitadas siguen en la rama `modular` antes del commit de esta simplificación, por si algún juego futuro las necesita.
 - **Direcciones y letalidad** se habían agregado por Ikaruga (juego no visto, a posteriori): en Ikaruga bajaban los plazos agotados, pero no las derrotas.
 - La prueba en juegos no vistos (`PRUEBA_NO_VISTOS.md`) se corrió con el código congelado anterior a todo esto.
+
+## Prueba: decisiones con probabilidades en vez de umbrales (rama `bayes`)
+
+Cada "sí/no" contado es una tasa con previo Beta(1, 1). Una plantilla concluye cuando P(tasa > nivel) ≥ C, con C = 0,8 (`MECANICAS_CONF`). Por ejemplo:
+- "bloquea" = P(chocar > 1/2) ≥ C;
+- "persigue" = P(acercarse > 0,7) ≥ C;
+- "se pierde si se extingue" = P(extinto al perder > 1/2) ≥ C y P(extinto a mitad de partida < 1/2) ≥ C.
+
+Esto reemplaza los mínimos de observaciones y los porcentajes de bloqueo, giro, movimiento relativo, usar, empujar y fin por conteo. Quedan dos constantes globales: el previo y C.
+
+Comparación con práctica nueva y la misma evaluación (15 semillas):
+
+| | Sok | Ali | But | Mis | Por | Cha | SZ | Fro | Zel | BD | Prom. |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| umbrales a mano | 100 | 90 | 100 | 50 | 27 | 17 | 0 | 95 | 84 | 57 | 62 |
+| probabilidades (C = 0,8) | 100 | 93 | 100 | 53 | 23 | 13 | 0 | 89 | 84 | 55 | 61 |
+
+Mismo rendimiento, dentro del ruido. El sistema queda descrito como un modelo bayesiano factorizado con una sola regla de decisión.
+
+Siguen fuera de esta regla:
+- los umbrales del rastreador de objetos: dirección principal ≥ 80 %, "al azar" si cambia de dirección > 25 %;
+- el "≥ 2 saltos" de teletransporte, que es una regla de existencia y no de proporción.
