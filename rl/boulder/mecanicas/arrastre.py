@@ -15,3 +15,7 @@ class Arrastre(Mecanica):
     def carriers(self):
         """Tipos de objeto que arrastran al avatar que está quieto encima (p. ej. un tronco en un río)."""
         return {t for t, (a, b) in self.K.carry.items() if a + b >= 5 and a > 0.5 * (a + b)}
+
+    def al_quieto(self, tipos, moved):
+        if tipos:
+            self.K.record_carry(tipos, moved)

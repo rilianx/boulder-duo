@@ -22,10 +22,16 @@ class Mecanica:
     nucleo = False          # las del núcleo no se apagan (sin ellas el agente no puede ni caminar)
     estado: dict = {}       # campo → (fábrica del valor inicial, forma)
     neutros: dict = {}      # consulta → valor cuando la mecánica está apagada
+    prioridad = 50          # orden en que reacciona a cada evento (menor primero)
 
     def __init__(self, K):
         self.K = K
         self.activa = True
+
+    # Eventos: el agente emite K.emitir("paso", ...), y cada mecánica activa que tenga al_paso(...) reacciona,
+    # en orden de prioridad. Eventos de hoy: paso (el avatar intentó moverse), quieto (esperó sobre algo),
+    # toque (entró o chocó con una casilla), objeto_movio / objeto_avance (lo ve el rastreador de objetos),
+    # empuje, sonda_usar, mitad (muestra a mitad de partida) y fin (terminó la partida).
 
     def metodos(self):
         """Métodos públicos que esta mecánica aporta al conocimiento."""
@@ -34,6 +40,18 @@ class Mecanica:
 
     def despues_de_cargar(self):
         """Ajustes tras cargar el estado (p. ej. claves que deben existir)."""
+
+
+def conteos(st):
+    """{tipo: cuántas casillas lo tienen} en el estado st (con 0 para los tipos ausentes)."""
+    c = {}
+    for m in st.masks:
+        while m:
+            b = m & -m; t = b.bit_length() - 1; m ^= b
+            c[t] = c.get(t, 0) + 1
+    for t in st.types:
+        c.setdefault(t, 0)
+    return c
 
 
 # ------------------------------------------------------------------ formas del estado: guardar y cargar

@@ -6,6 +6,7 @@ from . import Mecanica
 
 class MovimientoRelativo(Mecanica):
     nombre = "relativo"
+    prioridad = 20
     estado = {"rel": (dict, "I>I>v")}
     neutros = {"attractor": None}
 
@@ -22,3 +23,19 @@ class MovimientoRelativo(Mecanica):
                 if q >= 0.75 and (best is None or q > best[2]):
                     best = (u, sign, q)
         return best                                          # (objetivo, signo, fracción explicada)
+
+    def al_objeto_movio(self, st, t, px, py, x, y, tracker, **_):
+        """¿El movimiento acercó o alejó al objeto del avatar y de la instancia más cercana de cada tipo?"""
+        targets = {}
+        if tracker._apos is not None:
+            targets[-1] = [tracker._apos]
+        for u, c in tracker._type_cells(st).items():
+            if u != t:
+                targets[u] = c
+        for u, cells in targets.items():
+            d0 = min(abs(px - cx) + abs(py - cy) for cx, cy in cells)
+            d1 = min(abs(x - cx) + abs(y - cy) for cx, cy in cells)
+            if abs(d1 - d0) < 1e-6 or d0 == 0:
+                continue
+            r = self.K.rel.setdefault(t, {}).setdefault(u, [0, 0])
+            r[0 if d1 < d0 else 1] += 1

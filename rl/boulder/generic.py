@@ -179,8 +179,17 @@ class Knowledge:
                 setattr(self, campo, fab())
             for n, f in m.metodos().items():
                 setattr(self, n, f)
+        self._orden = sorted(self.mecs.values(), key=lambda m: m.prioridad)
         for n in apagadas:
             self.desactivar(n)
+
+    def emitir(self, evento, **datos):
+        """Avisa un evento a las mecánicas activas que reaccionan a él (al_<evento>), en orden de prioridad."""
+        for m in self._orden:
+            if m.activa:
+                h = getattr(m, "al_" + evento, None)
+                if h is not None:
+                    h(**datos)
 
     @property
     def turn_cost(self):
@@ -323,7 +332,7 @@ class GenericAgent:
     def end(self, won=None):
         if self.touch is not None and self.learn and won is not None:
             types, _, res, atype, _ = self.touch
-            self.know.record_terminal_touch(types, atype, res, won == 1)
+            self.know.emitir("fin", st=None, gano=won, tocado=(types, atype, res), ctx={})
         self.reset()
 
     def _value(self, t, st, avatars):
@@ -342,23 +351,17 @@ class GenericAgent:
         if self.last is not None and self.learn:
             pos0, d, mask, same_dir = self.last
             moved = st.pos == pos0 + offs[d]
-            if abs(st.pos % W - pos0 % W) + abs(st.pos // W - pos0 // W) > 2:
-                K.record_jump(mask, st.masks[st.pos])      # teletransporte: se movió, y lejos
+            jump = abs(st.pos % W - pos0 % W) + abs(st.pos // W - pos0 // W) > 2
+            if jump:                                  # teletransporte: se movió, y lejos
                 moved = True
-            # los avatares orientados giran sin moverse al cambiar de dirección: eso no es un bloqueo
-            if same_dir and not any(mask >> t & 1 and K.is_blocking(t) for t in range(63)):
-                K.record_dir(d, moved)
-            if (moved or same_dir) and K.dir_ok(d):        # si esa dirección no mueve, no es culpa de la casilla
-                K.record_move(mask, moved)
-            if not moved and same_dir:                # chocar también es probar: agota la curiosidad
-                bumped = [t for t in range(63) if mask >> t & 1 and t not in K.avatar_types and t not in K.floor]
-                K.record_nonterminal(bumped, st.atype, st.total_res())
+            K.emitir("paso", st=st, pos0=pos0, d=d, mask=mask, same=same_dir, res=None, free=None,
+                     moved=moved, salto=jump, fuente="explorador")
         # efectos del toque anterior (la partida siguió: no fue terminal)
         if self.touch is not None and self.learn:
             types, sc0, res0, at0, cell = self.touch
-            if st.pos == cell:                        # solo si de verdad entró (no si solo giró)
-                K.record_touch(types, st.score - sc0, st.total_res() - res0, st.atype != at0)
-                K.record_nonterminal(types, at0, res0)
+            K.emitir("toque", st=st, types=types, alltypes=None, entro=st.pos == cell, cell=cell,
+                     dscore=st.score - sc0, dres=st.total_res() - res0, datype=st.atype != at0,
+                     at0=at0, res0=res0, fuente="explorador")
         self.touch = None
         pos = st.pos
         self.visits[pos] = self.visits.get(pos, 0) + 1

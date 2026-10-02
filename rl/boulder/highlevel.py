@@ -334,35 +334,8 @@ class Commander:
             return
         pos0, act, objs, masks0, sc0, turned = self._mv
         self._mv = None
-        W = st.W
-        off = (-W, 1, W, -1)[act]
-        c, dest = pos0 + off, pos0 + 2 * off
-        dx, dy = (0, 1, 0, -1)[act], (-1, 0, 1, 0)[act]
-        x2, y2 = pos0 % W + 2 * dx, pos0 // W + 2 * dy
-        if not (0 <= x2 < W and 0 <= y2 < st.H):
-            return
-        K = self.know
-        for oid, (t, cell) in objs.items():
-            if cell != c:
-                continue
-            p = K.push.setdefault(t, [0, 0])
-            r = K.push_into.setdefault(t, {}).setdefault(masks0[dest] & ~self._abits(), [0, 0, 0, 0.0])
-            if st.pos == c:
-                o = st.objects.get(oid)
-                if o is None:
-                    # desapareció: si ya se lo vio correrse es "lo empujé y cayó" (la caja en el hoyo); si no,
-                    # es que se consume al tocarlo (la miel), y eso no es empujar
-                    if K.pushable(t):
-                        p[0] += 1; r[0] += 1; r[2] += 1; r[3] += st.score - sc0
-                elif int(round(o[2])) * W + int(round(o[1])) == dest:
-                    p[0] += 1; r[0] += 1; r[3] += st.score - sc0
-                else:
-                    p[1] += 1
-            elif not turned:
-                if K.pushable(t):
-                    r[1] += 1                                     # empujable, pero ahí se traba
-                else:
-                    p[1] += 1
+        self.know.emitir("empuje", st=st, pos0=pos0, act=act, objs=objs, masks0=masks0, sc0=sc0,
+                         turned=turned, abits=self._abits())
 
     def _plan_step(self, st):
         if st.pos != self._plan_expect:
@@ -517,38 +490,17 @@ class Commander:
         if self.touch is None or not self.learn:
             return
         types, sc0, res0, at0, cell, alltypes = self.touch
-        K = self.know
-        if st.pos == cell:
-            if types:
-                K.record_touch(types, st.score - sc0, st.total_res() - res0, st.atype != at0)
-                K.record_nonterminal(types, at0, res0)
-            for t in alltypes:                               # ¿desapareció al pisarlo? (también el fondo)
-                c = K.consumed.setdefault(t, [0, 0])
-                c[0 if not st.masks[cell] >> t & 1 else 1] += 1
-        elif types:
-            K.record_nonterminal(types, at0, res0)          # chocó: tocarlo tampoco terminó nada
+        self.know.emitir("toque", st=st, types=types, alltypes=alltypes, entro=st.pos == cell, cell=cell,
+                         dscore=st.score - sc0, dres=st.total_res() - res0, datype=st.atype != at0,
+                         at0=at0, res0=res0, fuente="cmd")
         self.touch = None
 
     # ------------------------------------------------------------------ usar
-    FWD = {0: ((0, -1), (1, 0)), 1: ((1, 0), (0, 1)), 2: ((0, 1), (-1, 0)), 3: ((-1, 0), (0, -1))}
-
     def _keys(self, dx, dy, facing, atype=None):
-        ks = [f"a|{dx}|{dy}"]
-        if facing is not None:
-            (fx, fy), (rx, ry) = self.FWD[facing]
-            ks.append(f"f|{dx * rx + dy * ry}|{dx * fx + dy * fy}")
-        if atype is not None:                             # además, según el tipo de avatar (una nave blanca
-            ks += [f"t{atype}|{k}" for k in ks]           # no mata aliens negros)
-        return ks
+        return self.know.claves_usar(dx, dy, facing, atype)
 
     def _lift(self, t, dx, dy, facing, atype):
-        """Efecto de usar sobre t: el específico del tipo de avatar si hay datos, si no el general."""
-        K, best = self.know, 0.0
-        for k in self._keys(dx, dy, facing):
-            sk = f"t{atype}|{k}"
-            u = K.use_kill.get(t, {}).get(sk)
-            best = max(best, K.use_lift(t, sk) if u and u[1] >= 3 else K.use_lift(t, k))
-        return best
+        return self.know.efecto_usar(t, dx, dy, facing, atype)
 
     def _probe(self, st, used):
         snap = {oid: (t, x, y) for oid, (t, x, y) in st.objects.items() if t not in self.know.avatar_types
@@ -562,22 +514,8 @@ class Commander:
             tick, used, ax, ay, facing, snap, sc0, at = pr
             if st.tick - tick < self.P["use_lag"]:
                 keep.append(pr); continue
-            table = K.use_kill if used else K.use_base
-            killed = []
-            for oid, (t, x, y) in snap.items():
-                gone = oid not in st.objects
-                for key in self._keys(int(round(x - ax)), int(round(y - ay)), facing, at):
-                    r = table.setdefault(t, {}).setdefault(key, [0, 0])
-                    r[0] += gone; r[1] += 1
-                if gone:
-                    killed.append((oid, t, self._lift(t, int(round(x - ax)), int(round(y - ay)), facing, at)))
-            if used and killed:
-                # puntaje del tick exacto en que desapareció cada uno (no de toda la ventana: ahí caen también
-                # los −1 de lo que llegó a una ciudad), y solo de los que estaban donde usar sí afecta
-                for oid, t, key_lift in killed:
-                    if key_lift < 0.5 or oid not in self._vanish_ds:
-                        continue
-                    v = K.use_score.setdefault(t, [0.0, 0]); v[0] += self._vanish_ds[oid]; v[1] += 1
+            K.emitir("sonda_usar", st=st, used=used, ax=ax, ay=ay, facing=facing, snap=snap, atype=at,
+                     vanish_ds=self._vanish_ds)
         self._probes = keep
 
     def _danger_near(self, st, R, thr=0.3):
@@ -622,22 +560,11 @@ class Commander:
                 ev += lift * v
         return ev
 
-    @staticmethod
-    def _counts(st):
-        c = {}
-        for m in st.masks:
-            while m:
-                b = m & -m; t = b.bit_length() - 1; m ^= b
-                c[t] = c.get(t, 0) + 1
-        for t in st.types:
-            c.setdefault(t, 0)
-        return c
-
     def __call__(self, st, br):
         self.know.observe_types(st)
         self._last_st = st
         if self.learn and st.tick % 50 == 25:              # muestras de mitad de partida (para el fin por conteo)
-            self.know.record_counts("mid", self._counts(st))
+            self.know.emitir("mitad", st=st)
         self._learn_touch(st)
         if self.P["push"]:
             self._learn_push(st)
@@ -746,19 +673,9 @@ class Commander:
         return any(m >> t & 1 and self.va._value(t, st, avatars) > 0 for t in targets)
 
     def end(self, won):
-        K, last = self.know, getattr(self, "_last_st", None)
-        by_time = False
-        if last is not None and self.learn and won is not None:
-            tick = last.tick + 1
-            r = K.end_ticks.setdefault(tick, [0, 0]); r[0] += 1; r[1] += int(won == 1)
-            T = K.time_limit()
-            by_time = won == 1 and T is not None and abs(tick - T) <= 2
-            if not by_time:                                # ganar por tiempo no dice nada de qué quedaba
-                K.record_counts("win" if won == 1 else "loss", self._counts(last))
-        if self.touch is not None and self.learn and won is not None and not by_time:
-            types, _, res, atype, _, _ = self.touch
-            if types:
-                self.know.record_terminal_touch(types, atype, res, won == 1)   # ganó o perdió al tocarlo
+        if self.learn and won is not None:                 # cómo terminó: tiempo, conteos, último toque
+            tocado = None if self.touch is None else (self.touch[0], self.touch[3], self.touch[2])
+            self.know.emitir("fin", st=getattr(self, "_last_st", None), gano=won, tocado=tocado, ctx={})
         self.touch = None
         self.goal = None
         self.plan, self._mv, self._pos_last = None, None, None

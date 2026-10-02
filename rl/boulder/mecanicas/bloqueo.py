@@ -5,6 +5,7 @@ from . import Mecanica
 
 class Bloqueo(Mecanica):
     nombre = "bloqueo"
+    prioridad = 30
     nucleo = True
     # transitabilidad según cuántos recursos de ese mismo tipo lleva el avatar: tipo → cantidad → [pasó, no]
     estado = {"passed": (dict, "I>v"), "blocked": (dict, "I>v"), "by_res": (dict, "I>I>v")}
@@ -54,3 +55,8 @@ class Bloqueo(Mecanica):
     def blocked_cells(self, st):
         bm = self.K.blocking_bits(getattr(st, "res", None))
         return [(m & bm) != 0 for m in st.masks]
+
+    def al_paso(self, d, mask, same, res, moved, fuente, **_):
+        K = self.K
+        if (moved or same) and K.dir_ok(d):           # si esa dirección no mueve, no es culpa de la casilla
+            K.record_move(mask, moved, res if fuente == "nav" else None)

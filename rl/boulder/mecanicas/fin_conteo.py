@@ -1,10 +1,11 @@
 """Fin por conteo: cuántos objetos de cada tipo quedaban al ganar, al perder y a mitad de partida. Un tipo
 casi siempre extinto al ganar (o al perder) y no a mitad de partida es la condición de victoria (o derrota)."""
-from . import Mecanica
+from . import Mecanica, conteos
 
 
 class FinConteo(Mecanica):
     nombre = "fin_conteo"
+    prioridad = 20
     # ends: {"win"|"loss"|"mid": {tipo: [veces con ≤ 1, total]}}
     estado = {"ends": (lambda: {"win": {}, "loss": {}, "mid": {}}, "S>I>v")}
     neutros = {"extinct_win": False, "extinct_loss": False}
@@ -35,3 +36,10 @@ class FinConteo(Mecanica):
         fl, nl = self._frac("loss", t); fm, nm = self._frac("mid", t); fw, nw = self._frac("win", t)
         # contraste: mucho más seguido extinto al perder que a mitad de partida (y no al ganar)
         return nl >= 3 and nm >= 5 and fl >= 0.6 and fl - fm >= 0.25 and (fw is None or fw <= 0.3)
+
+    def al_mitad(self, st):
+        self.K.record_counts("mid", conteos(st))
+
+    def al_fin(self, st, gano, ctx, **_):
+        if st is not None and gano is not None and not ctx.get("por_tiempo"):
+            self.K.record_counts("win" if gano == 1 else "loss", conteos(st))

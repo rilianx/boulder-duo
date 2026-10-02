@@ -103,25 +103,19 @@ class Navigator:
             W_ = st.W
             jump = abs(st.pos % W_ - pos0 % W_) + abs(st.pos // W_ - pos0 // W_) > 2
             if jump:                                     # teletransporte: lo que había en la casilla lleva lejos
-                if self.learn:
-                    self.know.record_jump(mask, st.masks[st.pos])
                 moved = True
             if log is not None:
                 expect = free and (same or not self.know.turn_cost)
                 types = [t for t in range(63) if mask >> t & 1 and t not in self.know.avatar_types]
                 log.add("move", types, expect != moved)
-            if self.learn:
-                if free and (same or not self.know.turn_cost) and not jump:
-                    self.know.record_dir(d, moved)
-                if (moved or same) and self.know.dir_ok(d):   # si esa dirección no mueve, no es la casilla
-                    self.know.record_move(mask, moved, res)
-                if not same and free:
-                    self.know.record_turn(moved)
+            if self.learn:                               # cada mecánica decide qué contar (boulder/mecanicas)
+                self.know.emitir("paso", st=st, pos0=pos0, d=d, mask=mask, same=same, res=res, free=free,
+                                 moved=moved, salto=jump, fuente="nav")
         if getattr(self, "_waited", None) is not None and (self.learn or log is not None):
             p0, otypes = self._waited
             moved = abs(st.fx - p0[0]) + abs(st.fy - p0[1]) > 0.01
-            if otypes and self.learn:
-                self.know.record_carry(otypes, moved)
+            if self.learn:
+                self.know.emitir("quieto", tipos=otypes, moved=moved)
             if log is not None:
                 log.add("drift", otypes, bool(otypes & self.know.carriers()) != moved)
         r = self.plan(st, goal)

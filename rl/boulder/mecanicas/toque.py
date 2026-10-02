@@ -5,6 +5,7 @@ from . import Mecanica
 
 class EfectoToque(Mecanica):
     nombre = "toque"
+    prioridad = 45
     nucleo = True
     # eff: tipo → [n, Σ Δpuntaje, Σ Δrecursos, cambios de avatar, muertes];
     # term: tipo → {"tipo de avatar|recursos": [toques, victorias]}
@@ -56,3 +57,24 @@ class EfectoToque(Mecanica):
         n = e[0]
         # la muerte al tocar depende sobre todo del entorno (eso lo ve el predictor): previo fuerte hacia 0
         return e[1] / n, e[2] / n, e[3] / n, e[4] / (n + 10), n
+
+    def al_paso(self, st, mask, same, moved, fuente, **_):
+        K = self.K
+        if fuente == "explorador" and not moved and same:   # chocar también es probar: agota la curiosidad
+            bumped = [t for t in range(63) if mask >> t & 1 and t not in K.avatar_types and t not in K.floor]
+            K.record_nonterminal(bumped, st.atype, st.total_res())
+
+    def al_toque(self, types, entro, dscore, dres, datype, at0, res0, fuente, **_):
+        K = self.K
+        if entro:                                      # solo si de verdad entró (no si solo giró)
+            if types:
+                K.record_touch(types, dscore, dres, datype)
+                K.record_nonterminal(types, at0, res0)
+        elif fuente == "cmd" and types:
+            K.record_nonterminal(types, at0, res0)     # chocó: tocarlo tampoco terminó nada
+
+    def al_fin(self, gano, tocado, ctx, **_):
+        if tocado is not None and gano is not None and not ctx.get("por_tiempo"):
+            types, atype, res = tocado
+            if types:
+                self.K.record_terminal_touch(types, atype, res, gano == 1)   # ganó o perdió al tocarlo

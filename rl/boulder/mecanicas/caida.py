@@ -12,3 +12,7 @@ class Caida(Mecanica):
         """P(un objeto de tipo t avanza hacia una casilla con esta máscara), aprendido; sin datos: 0."""
         r = self.K.fall.get(t, {}).get(mask)
         return r[0] / (r[0] + r[1]) if r and r[0] + r[1] >= 3 else 0.0
+
+    def al_objeto_avance(self, t, key, moved):
+        r = self.K.fall.setdefault(t, {}).setdefault(key, [0, 0])
+        r[0 if moved else 1] += 1

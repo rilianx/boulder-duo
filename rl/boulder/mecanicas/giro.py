@@ -4,6 +4,7 @@ from . import Mecanica
 
 class Giro(Mecanica):
     nombre = "giro"
+    prioridad = 40
     estado = {"turns": (lambda: [0, 0], "v")}          # [se movió, solo giró]
     neutros = {"turn_cost_value": 0}
 
@@ -15,3 +16,7 @@ class Giro(Mecanica):
         """1 si el avatar gasta un tick en girar antes de moverse en otra dirección (aprendido)."""
         n = sum(self.K.turns)
         return int(n >= 20 and self.K.turns[1] > 0.5 * n)
+
+    def al_paso(self, same, free, moved, fuente, **_):
+        if fuente == "nav" and not same and free:
+            self.K.record_turn(moved)

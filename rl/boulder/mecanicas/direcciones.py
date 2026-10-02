@@ -5,6 +5,7 @@ from . import Mecanica
 
 class Direcciones(Mecanica):
     nombre = "direcciones"
+    prioridad = 20
     estado = {"dir_moves": (lambda: [[0, 0], [0, 0], [0, 0], [0, 0]], "lists")}
     neutros = {"dir_ok": True}
 
@@ -15,3 +16,11 @@ class Direcciones(Mecanica):
         """¿Moverse en la dirección d mueve al avatar? False si se intentó bastante y casi nunca funcionó."""
         m, n = self.K.dir_moves[d]
         return not (n >= 15 and m <= 0.05 * n)
+
+    def al_paso(self, st, d, mask, same, free, moved, salto, fuente, **_):
+        K = self.K
+        if fuente == "nav":
+            if free and (same or not K.turn_cost) and not salto:
+                K.record_dir(d, moved)
+        elif same and not any(mask >> t & 1 and K.is_blocking(t) for t in range(63)):
+            K.record_dir(d, moved)                     # el explorador: girar sin moverse no cuenta

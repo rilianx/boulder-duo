@@ -5,6 +5,7 @@ from . import Mecanica
 
 class Teletransporte(Mecanica):
     nombre = "teletransporte"
+    prioridad = 10
     estado = {"teleport": (dict, "I>I>v")}             # tipo de entrada → {tipo en la llegada: veces}
     neutros = {"teleport_exit": None}
 
@@ -24,3 +25,7 @@ class Teletransporte(Mecanica):
         if not d or sum(d.values()) < 2:
             return None
         return max(d.items(), key=lambda kv: kv[1])[0]
+
+    def al_paso(self, st, mask, salto, **_):
+        if salto:                                      # entró y apareció lejos
+            self.K.record_jump(mask, st.masks[st.pos])
