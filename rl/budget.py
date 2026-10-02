@@ -48,7 +48,7 @@ def run(a, out):
     d.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(a.seed)
     lv = train_levels(a.game)
-    K = Knowledge()
+    K = Knowledge(apagadas=[x for x in a.sin.split(",") if x])   # ablación: mecánicas apagadas
     X, Y = [], []
     T = [None]
     arms = {w: [0.0, 0] for w in a.w_arms}               # w_risk → [suma de puntajes, partidas]
@@ -198,6 +198,7 @@ def main():
     p.add_argument("--seeds", type=int, default=15)
     p.add_argument("--procs", type=int, default=4, help="procesos para evaluar (entrenar es siempre 1)")
     p.add_argument("--hl", default="{}")
+    p.add_argument("--sin", default="", help="mecánicas apagadas (ablación), p. ej. usar,empujar")
     p.add_argument("--retrain", action="store_true", help="entrenar de nuevo aunque ya esté hecho")
     a = p.parse_args()
     out = ROOT / "runs" / "presupuesto" / (a.out or f"b{int(a.budget)}")
@@ -206,7 +207,7 @@ def main():
         run(a, out)
     if a.eval:
         subprocess.run([sys.executable, str(ROOT / "play_hl.py"), a.game, "--seeds", str(a.seeds),
-                        "--procs", str(a.procs), "--hl", a.hl], check=True, env=os.environ.copy())
+                        "--procs", str(a.procs), "--hl", a.hl, "--sin", a.sin], check=True, env=os.environ.copy())
 
 
 if __name__ == "__main__":

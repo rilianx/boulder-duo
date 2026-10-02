@@ -240,7 +240,9 @@ class Knowledge:
     def merge_delta(self, new, old):
         """Suma lo que `new` aprendió desde que era `old` (p. ej. un proceso de práctica que partió de old)."""
         from .mecanicas import restar, sumar
-        for _, campo, _, _ in self._campos():
+        for m, campo, _, _ in self._campos():
+            if m.nombre in new.apagadas:                # apagada en ese proceso: no aprendió nada (ni resta)
+                continue
             setattr(self, campo, sumar(getattr(self, campo), restar(getattr(new, campo), getattr(old, campo))))
 
 

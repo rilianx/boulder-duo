@@ -34,6 +34,11 @@ class Commander:
         self._vanish_ds = {}
         # empujar (cajas de Sokoban): se aprende qué se corre al entrar y qué pasa al empujarlo contra cada cosa
         self.P = {"push": True, "push_new": 0.5, "push_states": 4000, "push_lam": 0.01, **self.P}
+        # una mecánica apagada (ablación) apaga también su acción: no se usa ni se empuja al azar
+        if "usar" in know.apagadas:
+            self.P["use"] = False
+        if "empujar" in know.apagadas:
+            self.P["push"] = False
         know.avoid_push = self.P["push"]
         self.plan, self._plan_expect, self._mv = None, None, None
         self.rng = random.Random(self.P.get("seed", 0))

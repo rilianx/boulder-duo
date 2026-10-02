@@ -27,7 +27,8 @@ def _play(job):
     torch.set_num_threads(1)
     d = RUNS / NP.get("model_dir", game)
     kf = RUNS / game / "knowledge_hl.json"            # conocimiento tras la práctica del alto nivel, si existe
-    K = Knowledge.from_json(json.loads((kf if kf.exists() and not HP.get("practice") else d / "knowledge.json").read_text()))
+    K = Knowledge.from_json(json.loads((kf if kf.exists() and not HP.get("practice") else d / "knowledge.json").read_text()),
+                            apagadas=HP.get("sin", ()))       # ablación: mecánicas apagadas por nombre
     vf = RUNS / game / "values.json"
     from boulder.generic import DEFAULT_W
     V = json.loads(vf.read_text()) if vf.exists() else dict(DEFAULT_W)   # sin CEM: pesos por defecto
@@ -54,7 +55,7 @@ def practice(a):
     f = RUNS / a.game / "nav_objects.json"
     NP = {**({"w_risk": 20.0, "alpha": 1.0} if not f.exists() else json.loads(f.read_text())), "patience": 0,
           **json.loads(a.nav)}
-    HP = {**json.loads(a.hl), "practice": True}
+    HP = {**{**json.loads(a.hl), **({"sin": [x for x in a.sin.split(",") if x]} if a.sin else {})}, "practice": True}
     lv = train_levels(a.game)
     per = max(a.practice // a.procs, 1)
     if len(lv) < a.practice:                          # pocos niveles de entrenamiento: se repiten con otras semillas
@@ -67,7 +68,7 @@ def practice(a):
     with ProcessPoolExecutor(a.procs) as ex:
         for _, out, kj in ex.map(_play, jobs):
             wins += sum(r[0] == 1 for r in out); n += len(out)
-            k = Knowledge.from_json(kj)
+            k = Knowledge.from_json(kj, apagadas=HP.get("sin", ()))
             base.merge_delta(k, K0)                        # sumar solo lo nuevo de cada proceso (todas las mecánicas)
     (RUNS / a.game / "knowledge_hl.json").write_text(json.dumps(base.to_json()))
     won = {t: {k: v for k, v in dd.items() if v[1]} for t, dd in base.term.items()}
@@ -82,6 +83,7 @@ def main():
     p.add_argument("--procs", type=int, default=4)
     p.add_argument("--nav", default="{}", help="parámetros extra del navegador (JSON)")
     p.add_argument("--hl", default="{}", help="parámetros del alto nivel (JSON)")
+    p.add_argument("--sin", default="", help="mecánicas apagadas (ablación), p. ej. usar,empujar")
     p.add_argument("--practice", type=int, default=0,
                    help="jugar N partidas en niveles generados aprendiendo qué hace ganar; guarda knowledge_hl.json")
     a = p.parse_args()
@@ -90,7 +92,7 @@ def main():
     f = RUNS / a.game / "nav_objects.json"
     NP = {**({"w_risk": 20.0, "alpha": 1.0} if not f.exists() else json.loads(f.read_text())), "patience": 0,
           **json.loads(a.nav)}
-    HP = json.loads(a.hl)
+    HP = {**json.loads(a.hl), **({"sin": [x for x in a.sin.split(",") if x]} if a.sin else {})}
     seeds = list(range(100, 100 + a.seeds))
     with ProcessPoolExecutor(a.procs) as ex:
         from nav_bench import test_levels
