@@ -121,3 +121,28 @@ En los 10 juegos de desarrollo: Sokoban, Aliens, Butterflies, Missilecommand, Po
   - **Direcciones y letalidad** se agregaron por Ikaruga, que no está entre estos 10.
   - **Arrastre, caída y consumo** pesan en otro momento: apagadas solo al jugar, el resto de lo aprendido (el riesgo, por ejemplo) ya compensa. Apagarlas también durante la práctica mediría mejor su aporte. Esa es la ablación pendiente.
 - **La configuración completa da 65 % de promedio en esta corrida.** Missilecommand dio 83 % (antes 60 %) y Aliens 100 %. Esa variación entre corridas es justamente el ruido que hay que reportar.
+
+### Ablación también durante la práctica
+
+Para las 6 plantillas sin efecto al apagarlas solo al jugar, se las apagó también en la práctica de 40 partidas: desde `knowledge.json`, con la mecánica apagada, y después se evaluó igual. Para comparar en las mismas condiciones, la configuración completa también se practicó de nuevo con el código actual.
+
+| Apagada (práctica y juego) | Sok | Ali | But | Mis | Por | Cha | SZ | Fro | Zel | BD | Promedio | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| — (completa, practicada de nuevo) | 100 | 97 | 100 | 50 | 23 | 10 | 0 | 92 | 85 | 56 | 61 |  |
+| direcciones | 100 | 97 | 100 | 57 | 27 | 7 | 0 | 92 | 85 | 56 | 62 | +1 |
+| arrastre | 100 | 100 | 100 | 50 | 27 | 10 | 0 | 93 | 83 | 56 | 62 | +1 |
+| letalidad | 100 | 93 | 100 | 53 | 27 | 13 | 0 | 92 | 85 | 56 | 62 | +1 |
+| consumo | 100 | 93 | 100 | 53 | 27 | 7 | 0 | 99 | 84 | 56 | 62 | +1 |
+| caida | 100 | 93 | 100 | 50 | 27 | 13 | 0 | 96 | 84 | 55 | 62 | +0 |
+| fin_tiempo | 100 | 97 | 100 | 50 | 23 | 20 | 0 | 100 | 84 | 55 | 63 | +2 |
+
+**Lectura:**
+- **Ninguna de las 6 cambia el resultado en estos 10 juegos**, ni siquiera apagada desde la práctica.
+- Ahí lo cubren otras partes del agente:
+  - el riesgo aprendido ya sabe que el agua con tronco es segura (arrastre);
+  - el cubo ya predice las rocas que caen (caída);
+  - la exploración encuentra lo que se consume (consumo).
+- **Direcciones y letalidad** se agregaron por Ikaruga, que no está en este conjunto.
+- **Fin por tiempo** solo actúa en Survivezombies, que nadie gana.
+- **Para el artículo:** de las 12 plantillas que se pueden apagar, 3 son decisivas en su familia (usar, empujar, teletransporte), 3 tienen efectos chicos (relativo, giro, fin por conteo) y 6 son redundantes en los juegos de desarrollo. Las 6 redundantes hay que justificarlas con juegos donde importen, o declarar que no aportan.
+- **El ruido entre corridas es grande en Missilecommand:** la configuración completa dio 83 % en la tabla anterior y 50 % aquí. El nivel 3 alterna entre ganarse a veces y casi nunca.
