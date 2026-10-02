@@ -55,7 +55,9 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 ## Extras
 
 - **Cueva M\*** (en Boulder Dash 1, después de la M): una variante de «Apocalypse» con un nido en el medio de la hilera de mariposas: cada vez que se libera una casilla a su lado, sale una mariposa nueva (hasta 8 más que las de la hilera original). Cada mariposa aplastada con una roca da diamantes.
-- **Estrellas coleccionables:** cada cueva esconde una estrella con su letra en el lugar más lejano de la entrada. Recogerla no es necesario para salir, pero queda guardada y se ve en ELEGIR CUEVA (★ y «Estrellas: n de 21»).
+- **Estrellas coleccionables:** cada cueva tiene una estrella con su letra. Si la cueva tiene enemigos, el más lejano de la entrada es el «jefe»: lleva una coronita dorada y al hacerlo explotar (con una roca, o al tocar a alguien) suelta la estrella. Si no hay enemigos, la estrella está escondida en un lugar difícil: lejos, bajo una roca (al tomarla la roca cae) y rodeada de muros. No hace falta para salir, pero queda guardada y se ve en ELEGIR CUEVA (★ y «Estrellas: n de 21»).
+
+  ![Jefe con corona](docs/jefe.png) ![Estrella](docs/estrella.png)
 - **Diamantes que vuelan** al contador al recogerlos, y anillos dorados cuando se abre la salida.
 - **Cueva viva:** hongos que brillan en el suelo, raíces colgando del techo y gotas que caen y salpican (solo dibujo).
 - **OSCURIDAD** (botón del menú): la cueva queda a oscuras y solo se ve lo que alumbra la linterna de los niños, las luciérnagas, los diamantes, los hongos, la salida abierta y las explosiones.
