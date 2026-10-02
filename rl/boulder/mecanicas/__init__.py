@@ -29,13 +29,13 @@ class Mecanica:
         self.activa = True
 
     # Eventos: el agente emite K.emitir("paso", ...), y cada mecánica activa que tenga al_paso(...) reacciona,
-    # en orden de prioridad. Eventos de hoy: paso (el avatar intentó moverse), quieto (esperó sobre algo),
-    # toque (entró o chocó con una casilla), objeto_movio / objeto_avance (lo ve el rastreador de objetos),
+    # en orden de prioridad. Eventos de hoy: paso (el avatar intentó moverse), toque (entró o chocó con una
+    # casilla), objeto_movio (lo ve el rastreador de objetos),
     # empuje, sonda_usar, mitad (muestra a mitad de partida) y fin (terminó la partida).
 
     # Opción del alto nivel (opcional): una mecánica con orden_opcion define opcion(cmd, st, info, vals,
     # targets) → (casilla, tiempo) o None. Cuando no hay nada valioso que tocar, el alto nivel les pregunta en
-    # orden (apuntar para usar, portal, abrir camino, sobrevivir) y toma la primera que propone algo.
+    # orden (apuntar para usar, portal, abrir camino) y toma la primera que propone algo.
     orden_opcion = None
 
     def metodos(self):
@@ -122,20 +122,14 @@ def restar(b, o):
 
 from .tipos import Tipos                    # noqa: E402
 from .bloqueo import Bloqueo                # noqa: E402
-from .direcciones import Direcciones        # noqa: E402
 from .giro import Giro                      # noqa: E402
-from .arrastre import Arrastre              # noqa: E402
 from .teletransporte import Teletransporte  # noqa: E402
 from .toque import EfectoToque              # noqa: E402
-from .letalidad import Letalidad            # noqa: E402
-from .consumo import Consumo                # noqa: E402
 from .movimiento import DireccionObjetos    # noqa: E402
-from .caida import Caida                    # noqa: E402
 from .relativo import MovimientoRelativo    # noqa: E402
 from .usar import Usar                      # noqa: E402
 from .empujar import Empujar                # noqa: E402
 from .fin_conteo import FinConteo           # noqa: E402
-from .fin_tiempo import FinTiempo           # noqa: E402
 
-REGISTRO = [Tipos, Bloqueo, Direcciones, Giro, Arrastre, Teletransporte, EfectoToque, Letalidad, Consumo,
-            DireccionObjetos, Caida, MovimientoRelativo, Usar, Empujar, FinConteo, FinTiempo]
+REGISTRO = [Tipos, Bloqueo, Giro, Teletransporte, EfectoToque, DireccionObjetos, MovimientoRelativo, Usar,
+            Empujar, FinConteo]

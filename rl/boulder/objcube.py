@@ -54,16 +54,6 @@ class ObjectTracker:
                     else:
                         dd = self.dirs.setdefault(t, {})
                         dd[d] = dd.get(d, 0) + 1
-            # cuándo avanza en su dirección: según qué había adelante en el tick anterior
-            if h and self.know is not None and getattr(st, "prev", None) is not None and st.tick - h[-1][0] == 1:
-                d = self.main_dir(t)
-                if d is not None:
-                    cx, cy = int(round(h[-1][1])), int(round(h[-1][2]))
-                    ax_, ay_ = cx + d[0], cy + d[1]
-                    if 0 <= ax_ < st.W and 0 <= ay_ < st.H:
-                        key = st.prev[ay_ * st.W + ax_]
-                        moved = abs(x - h[-1][1]) + abs(y - h[-1][2]) > 0.01
-                        self.know.emitir("objeto_avance", t=t, key=key, moved=moved)
             if h and free is not None and st.tick - h[-1][0] == 1:
                 cx, cy = int(round(h[-1][1])), int(round(h[-1][2]))
                 nfree = sum(1 for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0))
@@ -165,9 +155,6 @@ class ObjectTracker:
 
 class ObjectCubeNavigator(CubeNavigator):
     def __init__(self, know, risk, P, horizon=20, danger=None, **kw):
-        if P.get("lethal_floor", True):
-            from .cube import KnownRisk
-            risk = KnownRisk(risk, know)
         super().__init__(know, risk, P, horizon=horizon, reps=1, danger=danger, **kw)
         self.track = ObjectTracker()
         self.track.dirs = know.move_dirs            # hacia dónde se mueve cada tipo: persiste entre partidas
@@ -178,9 +165,6 @@ class ObjectCubeNavigator(CubeNavigator):
         self.track.update(st, [not b for b in self.know.blocked_cells(st)])
         self._st = st
         return super().step(st, goal, None)      # sin puente: nada de consultar el modelo del juego
-
-    def _carried_to(self, k, c):
-        return self._carry[k].get(c, c) if k < len(self._carry) else c
 
     def _adjust_risk(self, R):
         """Modelo de objetos (P["objmodel"]): cada objeto que se mueve al azar es una distribución sobre
@@ -231,20 +215,6 @@ class ObjectCubeNavigator(CubeNavigator):
 
     def _cube(self, st):
         W, H, N = st.W, st.H, len(st.masks)
-        # arrastre: casilla de un objeto que arrastra en el tick k → su casilla en k+1 (None si sale del mapa)
-        carriers = self.know.carriers()
-        self._carry = [dict() for _ in range(self.Hz + 1)]
-        for oid, (t, x, y) in st.objects.items():
-            if t not in carriers:
-                continue
-            vx, vy = self.track.velocity(oid)
-            for k in range(self.Hz + 1):
-                a = (x + vx * k, y + vy * k); b = (x + vx * (k + 1), y + vy * (k + 1))
-                ca = int(round(a[1])) * W + int(round(a[0]))
-                if not (0 <= round(a[0]) < W and 0 <= round(a[1]) < H):
-                    break
-                inb = 0 <= round(b[0]) < W and 0 <= round(b[1]) < H
-                self._carry[k][ca] = int(round(b[1])) * W + int(round(b[0])) if inb else None
         obj_types = {t for t, _, _ in st.objects.values()}
         clear = ~sum(1 << t for t in obj_types) if obj_types else ~0
         static = [m & clear for m in st.masks]

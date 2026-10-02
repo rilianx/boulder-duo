@@ -199,14 +199,9 @@ def learn_knowledge(game, procs, orders=200):
                 m = base.by_res.setdefault(t, {}).setdefault(n, [0, 0])
                 m[0] += v[0] - old[0]; m[1] += v[1] - old[1]
         base.turns = [base.turns[0] + k.turns[0] - K0.turns[0], base.turns[1] + k.turns[1] - K0.turns[1]]
-        for t, v in k.carry.items():
-            old = K0.carry.get(t, [0, 0])
-            m = base.carry.setdefault(t, [0, 0])
-            m[0] += v[0] - old[0]; m[1] += v[1] - old[1]
     f.write_text(json.dumps(base.to_json()))
     print(f"{game}: giro cuesta un tick = {base.turn_cost} "
           f"(giros {base.turns}); transitabilidad por recursos:", flush=True)
-    print(f"   arrastran: {sorted(base.carriers())} ({base.carry})", flush=True)
     for t, d in base.by_res.items():
         print(f"   tipo {t}: " + ", ".join(f"{n}:{v}" for n, v in sorted(d.items())), flush=True)
 

@@ -106,7 +106,7 @@ def run(a, out):
             return (frozenset(k for k, v in seen.items() if v >= 3),
                     frozenset(t for t, e in K.eff.items() if e[0] >= 3),frozenset(t for t, e in K.eff.items() if e[0] >= 3),
                     frozenset(t for t in set(K.passed) | set(K.blocked) if K.is_blocking(t)),
-                    frozenset(K.teleport), frozenset(K.carriers()), frozenset(t for t in K.push if K.pushable(t)),
+                    frozenset(K.teleport), frozenset(t for t in K.push if K.pushable(t)),
                     frozenset(K.move_dirs), frozenset(K.avatar_types))
         signature.n = 0
         t_exp = t0 + a.explore * a.budget

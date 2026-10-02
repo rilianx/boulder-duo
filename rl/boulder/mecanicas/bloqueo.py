@@ -58,5 +58,5 @@ class Bloqueo(Mecanica):
 
     def al_paso(self, d, mask, same, res, moved, fuente, **_):
         K = self.K
-        if (moved or same) and K.dir_ok(d):           # si esa dirección no mueve, no es culpa de la casilla
+        if moved or same:
             K.record_move(mask, moved, res if fuente == "nav" else None)

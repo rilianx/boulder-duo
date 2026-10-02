@@ -111,13 +111,6 @@ class Navigator:
             if self.learn:                               # cada mecánica decide qué contar (boulder/mecanicas)
                 self.know.emitir("paso", st=st, pos0=pos0, d=d, mask=mask, same=same, res=res, free=free,
                                  moved=moved, salto=jump, fuente="nav")
-        if getattr(self, "_waited", None) is not None and (self.learn or log is not None):
-            p0, otypes = self._waited
-            moved = abs(st.fx - p0[0]) + abs(st.fy - p0[1]) > 0.01
-            if self.learn:
-                self.know.emitir("quieto", tipos=otypes, moved=moved)
-            if log is not None:
-                log.add("drift", otypes, bool(otypes & self.know.carriers()) != moved)
         r = self.plan(st, goal)
         act = r[1] if r is not None and r[1] >= 0 else 4
         thr = self.P.get("shield", 0.0)
@@ -138,13 +131,6 @@ class Navigator:
             self.last_dir = act
         else:
             self.last = None
-        # quieto: ¿qué objetos comparten la casilla del avatar? (para aprender si lo arrastran)
-        if act == 4:
-            ax, ay = st.pos % st.W, st.pos // st.W
-            self._waited = ((st.fx, st.fy), {t for t, x, y in getattr(st, "objects", {}).values()
-                                     if round(x) == ax and round(y) == ay})
-        else:
-            self._waited = None
         return act, r is not None
 
 
