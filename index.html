@@ -2296,6 +2296,13 @@ function killPlayer(p){
 }
 
 let rockBlast = false;
+// friendly mode: a gem that falls on a kid's head is caught and counted
+function catchGem(p, i){
+  const over = mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
+  p.gems++; p.score += over ? gemExtra : gemVal; flyGem(p, i); sfx.gem();
+  if (p.ai) { p.aiR += 5; p.epGems++; }
+  grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
+}
 function explode(cx, cy, toGem){
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
@@ -2481,7 +2488,8 @@ function fallObj(i, x, y){
     // (otherwise a kid digging down would always stay one step ahead of a rock that falls faster than they walk)
     if (k < steps) {
       const nb = grid[cur + W], cx = cur % W, cy = cur / W | 0;
-      if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0 && !(friendly() && grid[cur] === GEM)) { rockBlast = true; explode(cx, cy + 1, false); rockBlast = false; }
+      if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; explode(cx, cy + 1, false); rockBlast = false; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy + 1, nb === BUTT);
     }
     return;
@@ -2502,7 +2510,8 @@ function fallObj(i, x, y){
   }
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
-      if (players[bt-P1].immune <= 0 && !(friendly() && grid[i] === GEM)) { rockBlast = true; explode(x, y+1, false); rockBlast = false; return; }
+      if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
+      if (players[bt-P1].immune <= 0) { rockBlast = true; explode(x, y+1, false); rockBlast = false; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(x, y+1, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)

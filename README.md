@@ -54,7 +54,7 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 ## Extras
 
-- **AMIGABLE** (botón del menú): las luciérnagas y mariposas no hacen daño (ni sus explosiones) y los diamantes que caen en la cabeza tampoco. Solo una roca que cae aplasta.
+- **AMIGABLE** (botón del menú): las luciérnagas y mariposas no hacen daño (ni sus explosiones) y los diamantes que caen en la cabeza se atrapan y se cuentan. Solo una roca que cae aplasta.
 
 - **Intermedios de bonus:** si en un intermedio se acaba el tiempo o mueren, no se pierden vidas y se sigue a la cueva siguiente.
 
