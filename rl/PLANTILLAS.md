@@ -81,3 +81,43 @@ No hace falta tocar el navegador ni el alto nivel. Guardar, cargar y fusionar lo
 | 75 % | movimiento relativo |
 | 80 % | dirección principal de un objeto; fin por conteo al ganar |
 | "Chocó > 2 × pasó + 1" | bloqueo |
+
+## Ablaciones (cuánto aporta cada plantilla)
+
+En los 10 juegos de desarrollo: Sokoban, Aliens, Butterflies, Missilecommand, Portals, Chase, Survivezombies, Frogs, Zelda y Boulder Dash.
+- Se apaga una mecánica al **jugar** (`--sin`), con el conocimiento de la práctica completa.
+- Se usan 15 semillas: 30 partidas por juego, 75 en Frogs, Zelda y Boulder Dash.
+- Margen aproximado: ±15 puntos con 30 partidas.
+- En negrita, los cambios de 20 puntos o más.
+
+| Apagada | Sok | Ali | But | Mis | Por | Cha | SZ | Fro | Zel | BD | Promedio | Δ |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| — (completa) | 100 | 100 | 100 | 83 | 27 | 13 | 0 | 91 | 84 | 55 | 65 |  |
+| direcciones | 100 | 90 | 100 | 83 | 27 | 13 | 0 | 99 | 84 | 56 | 65 | -0 |
+| giro | 100 | 100 | 100 | 70 | 27 | 10 | 0 | 97 | 75 | 51 | 63 | -2 |
+| arrastre | 100 | 100 | 100 | 83 | 27 | 10 | 0 | 99 | 84 | 56 | 66 | +1 |
+| teletransporte | 100 | 100 | 100 | 83 | **0** | 13 | 0 | 88 | 81 | 55 | 62 | -3 |
+| letalidad | 100 | 100 | 100 | 83 | 27 | 13 | 0 | 89 | 83 | 55 | 65 | -0 |
+| consumo | 100 | 100 | 100 | 83 | 27 | 10 | 0 | 95 | 85 | 56 | 66 | +0 |
+| caida | 100 | 100 | 100 | 83 | 27 | 10 | 0 | 96 | 83 | 57 | 66 | +0 |
+| relativo | 100 | 100 | 100 | 67 | 23 | 3 | 0 | 96 | 85 | 55 | 63 | -2 |
+| usar | 100 | **0** | 100 | **50** | 27 | 10 | 0 | 93 | 87 | 57 | 52 | -13 |
+| empujar | **0** | 100 | 100 | 83 | 27 | 13 | 0 | 87 | 84 | 57 | 55 | -10 |
+| fin_conteo | 100 | 100 | 100 | 67 | 23 | 13 | 0 | 88 | 84 | 56 | 63 | -2 |
+| fin_tiempo | 100 | 100 | 100 | 83 | 27 | 13 | 0 | 95 | 83 | 56 | 66 | +0 |
+
+**Lectura:**
+- **Tres plantillas deciden juegos enteros:**
+  - **usar:** Aliens de 100 a 0 %, Missilecommand de 83 a 50 %;
+  - **empujar:** Sokoban de 100 a 0 %;
+  - **teletransporte:** Portals de 27 a 0 %.
+
+  Cada una es necesaria en su familia de juegos y no interfiere en las demás.
+- **Efectos chicos, dentro del margen:**
+  - **relativo** en Chase (13 → 3 %) y Missilecommand;
+  - **giro** en Zelda (84 → 75 %);
+  - **fin_conteo** en Missilecommand.
+- **Sin efecto medible en estos juegos:** direcciones, arrastre, letalidad, consumo, caída y fin_tiempo. Hay que leerlo con cuidado:
+  - **Direcciones y letalidad** se agregaron por Ikaruga, que no está entre estos 10.
+  - **Arrastre, caída y consumo** pesan en otro momento: apagadas solo al jugar, el resto de lo aprendido (el riesgo, por ejemplo) ya compensa. Apagarlas también durante la práctica mediría mejor su aporte. Esa es la ablación pendiente.
+- **La configuración completa da 65 % de promedio en esta corrida.** Missilecommand dio 83 % (antes 60 %) y Aliens 100 %. Esa variación entre corridas es justamente el ruido que hay que reportar.
