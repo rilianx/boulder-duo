@@ -54,6 +54,8 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 ## Extras
 
+- **PC: EXPERTO / APRENDIZ** (botón del menú, para «Contra PC»). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`): en cada tick busca la ruta más barata a la gema más conveniente, o a la salida cuando cumple su cuota, cobrando caro pasar bajo algo que cae o cerca de un enemigo; en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende jugando. Jugando solo las cuevas originales (sin rival): el experto sale en 14 de 41 cuevas y junta 332 gemas; el aprendiz no sale de ninguna y muere en casi todas.
+
 - **AMIGABLE** (botón del menú): las luciérnagas y mariposas no hacen daño (ni sus explosiones) y los diamantes que caen en la cabeza se atrapan y se cuentan. Solo una roca que cae aplasta.
 
 - **Intermedios de bonus:** si en un intermedio se acaba el tiempo o mueren, no se pierden vidas y se sigue a la cueva siguiente.

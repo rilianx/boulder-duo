@@ -3031,7 +3031,7 @@ function decayTraces(p, greedy){
 /* The expert PC (rl/boulder/policy.py ported): Dijkstra from the PC to the cheapest gem — or to the exit once its
    quota is met — over step costs that add a price for each kind of danger, recomputed every tick. The prices were
    tuned with CEM in the Python copy of the game (rl/tune_astar.py). */
-const ASTAR_P = { c_dirt: 1.0, h_fall: 25, h_under: 0, h_down: 25, h_e1: 25, h_e2: 25, h_e3: 0, detour: 0 };
+const ASTAR_P = { c_dirt: 0.75, h_fall: 18, h_under: 1.3, h_down: 7.2, h_e1: 40.4, h_e2: 20.8, h_e3: 0.36, detour: 10.1 };   // CEM, rl/tune_astar.py
 let aiKind = 'astar';
 const PUSH_COST = 8;
 try { const v = localStorage.getItem('boulder-duo-ai'); if (v === 'q' || v === 'astar') aiKind = v; } catch (e) {}
