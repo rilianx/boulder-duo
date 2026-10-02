@@ -54,8 +54,10 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 ## Extras
 
+- **Intermedios de bonus:** si en un intermedio se acaba el tiempo o mueren, no se pierden vidas y se sigue a la cueva siguiente.
+
 - **Cueva M\*** (en Boulder Dash 1, después de la M): una variante de «Apocalypse» con un nido en el medio de la hilera de mariposas: cada vez que se libera una casilla a su lado, sale una mariposa nueva (hasta 8 más que las de la hilera original). Cada mariposa aplastada con una roca da diamantes.
-- **Estrellas coleccionables:** cada cueva tiene una estrella con su letra. Si la cueva tiene enemigos, el más lejano de la entrada es el «jefe»: lleva una coronita dorada y al hacerlo explotar (con una roca, o al tocar a alguien) suelta la estrella. Si no hay enemigos, la estrella está escondida en un lugar difícil: lejos, bajo una roca (al tomarla la roca cae) y rodeada de muros. No hace falta para salir, pero queda guardada y se ve en ELEGIR CUEVA (★ y «Estrellas: n de 21»).
+- **Estrellas coleccionables:** cada cueva tiene una estrella con su letra. Si la cueva tiene enemigos, el más lejano de la entrada es el «jefe»: lleva una coronita dorada y al hacerlo explotar (con una roca, o al tocar a alguien) suelta la estrella. Si no hay enemigos, la estrella está escondida en un lugar difícil: lejos, bajo una roca (al tomarla la roca cae) y rodeada de muros. Si el jefe es una mariposa, la estrella cuenta además como el diamante que reemplazó, para que siempre alcancen los diamantes. No hace falta para salir, pero queda guardada y se ve en ELEGIR CUEVA (★ y «Estrellas: n de 21»).
 
   ![Jefe con corona](docs/jefe.png) ![Estrella](docs/estrella.png)
 - **Diamantes que vuelan** al contador al recogerlos, y anillos dorados cuando se abre la salida.

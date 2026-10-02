@@ -2046,7 +2046,7 @@ const glideK = i => src[i] >= 0 ? Math.max(0, 1 - (simT - srcAt[i]) / tickMs) : 
 let vari = new Uint8Array(W*H);
 let fallN = new Uint8Array(W*H), rot = new Float32Array(W*H), landAt = new Float64Array(W*H).fill(-1e9);   // drawing only
 let fallT = new Uint8Array(W*H);
-let boss = new Uint8Array(W*H), starPending = -1;   // the enemy that carries the star, and where it will appear
+let boss = new Uint8Array(W*H), starPending = -1, starIsGem = false;   // a star dropped by a butterfly also counts as the gem it took the place of   // the enemy that carries the star, and where it will appear
 let exitOpenAt = -1e9, buttCount = 0, buttBase = 0, nestPuff = [], starFlash = null;
 let untouched = new Uint8Array(W*H);   // rocks that have not moved yet this cave (critters live under them)
 let dust = [], shakeAt = -1e9, hardHits = 0;   // hard landings: dust clouds and a short shake (drawing only)   // real gravity: ticks a thing has been falling
@@ -2162,7 +2162,7 @@ const starKey = n => caveSet + ':' + ((n - 1) % CAVE_SETS[caveSet].caves.length)
    without enemies the star is put somewhere hard to get: far away, under a rock (taking it lets the rock fall) and
    hemmed in by walls. */
 function placeStar(inbox, cw, ch){
-  starIdx = -1; boss.fill(0); starPending = -1;
+  starIdx = -1; boss.fill(0); starPending = -1; starIsGem = false;
   const e0 = inbox[1]*W + inbox[0], d2 = j => Math.abs(j % W - inbox[0]) + Math.abs((j / W | 0) - inbox[1]);
   let bi = -1, bd = -1;
   for (let j = 0; j < W*H; j++) if ((grid[j] === FIRE || grid[j] === BUTT) && d2(j) > bd) { bd = d2(j); bi = j; }
@@ -2286,8 +2286,11 @@ function move(i, j){
   grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; vari[j] = vari[i];
 }
 
+// intermissions are a bonus: dying there costs no life, and running out of time just moves on to the next cave
+const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === 'true';
 function killPlayer(p){
   if (!p.alive) return;
+  if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
   p.alive = false; p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
@@ -2431,6 +2434,7 @@ function stepPlayer(p){
   if (t === E || t === DIRT) { go(); p.push = 0; if (t === DIRT) { sfx.step(); p.dig = d; dugAt[j] = nowT; } }
   else if (t === STAR) {
     go(); p.push = 0; sfx.open(); starFlash = { at: nowT, x: p.x, y: p.y };
+    if (starIsGem) { starIsGem = false; p.gems++; p.score += gemVal; if (p.ai) { p.aiR += 5; p.epGems++; } }
     const k = starKey(level); if (!starsGot[k]) { starsGot[k] = 1; try { localStorage.setItem('boulder-duo-stars', JSON.stringify(starsGot)); } catch (e) {} }
   }
   else if (t === GEM) {
@@ -2554,7 +2558,7 @@ function tick(){
     const t = grid[i];
     if (t === ROCK || t === GEM) fallObj(i, x, y);
     else if (t === FIRE || t === BUTT) enemy(i, x, y, t);
-    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = i === starPending ? STAR : dir[i] ? GEM : E; if (i === starPending) { starPending = -1; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; } dir[i] = 0; fall[i] = 0; } }
+    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = i === starPending ? STAR : dir[i] ? GEM : E; if (i === starPending) { starPending = -1; starIsGem = !!dir[i]; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; } dir[i] = 0; fall[i] = 0; } }
     else if (t === AMOEBA) amoebaCell(i);
     else if (t === NEST) {
       // a butterfly comes out every few seconds while it has fewer than 8 of its own about
@@ -2601,7 +2605,9 @@ function checkEnd(){
     if (a.exited || timeLeft <= 0) { if (!a.exited) aiTruncate(a); a.score = 0; initLevel(1 + Math.floor(Math.random() * 12)); }
     return;
   }
+  if (isBonus() && (timeLeft <= 0 || active() === 0) && !players.some(p => p.exited)) return bonusOver(timeLeft <= 0 ? 'Se acabó el tiempo.' : 'No alcanzaron a salir.');
   if (timeLeft <= 0) {
+    if (isBonus() && mode === 'coop') return levelWon();
     if (mode === 'pc') aiTruncate(players[1]);
     if (mode !== 'coop') return roundDraw('Se acabó el tiempo.');
     if (players.some(p => p.exited)) return levelWon();
@@ -2738,6 +2744,14 @@ function levelWon(){
     <div class="row"><button id="bnext">${caveLabel(level + 1)}</button></div>
     ${solo ? '' : '<p>Un jugador sin vidas vuelve con 1 en la cueva siguiente.</p>'}</div>`);
   const go = () => { players.forEach(p => { if (p.lives <= 0 && !(solo && p.id === 1)) p.lives = 1; }); initLevel(level + 1); };
+  $('bnext').onclick = go; onEnter = go;
+}
+function bonusOver(msg){
+  state = 'between';
+  players.forEach(p => { if (p.lives <= 0 && !(solo && p.id === 1)) p.lives = 1; });
+  showOverlay(`<div class="card"><h2>${caveLabel(level)}</h2><p>${msg} Era un intermedio de bonus: no se pierden vidas.</p>
+    <div class="row"><button id="bnext">${caveLabel(level + 1)}</button></div></div>`);
+  const go = () => initLevel(level + 1);
   $('bnext').onclick = go; onEnter = go;
 }
 function levelLost(msg){
