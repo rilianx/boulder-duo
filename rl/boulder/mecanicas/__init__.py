@@ -15,6 +15,42 @@ declarado. Agregar una plantilla = escribir un archivo con su clase y sumarla a 
 from __future__ import annotations
 
 import copy
+import math
+import os
+
+# ------------------------------------------------------------------ decisiones con probabilidades
+# Cada "sí/no" que cuenta una plantilla (pasó/chocó, se corrió/no, extinto/no...) es una tasa con previo
+# Beta(1, 1) ("no sé"). Una plantilla concluye algo cuando la probabilidad de que la tasa supere un nivel es
+# al menos CONF. Reemplaza los umbrales fijados a mano (mínimos de observaciones y porcentajes).
+PRIOR = (1.0, 1.0)
+CONF = float(os.environ.get("MECANICAS_CONF", 0.8))
+
+
+def p_mayor(k, m, u=0.5):
+    """P(tasa > u) con k éxitos y m fracasos, previo Beta(PRIOR)."""
+    a, b = k + PRIOR[0], m + PRIOR[1]
+    if a + b > 200 or a != int(a) or b != int(b):      # muchos datos: aproximación normal
+        mu = a / (a + b); sd = math.sqrt(a * b / ((a + b) ** 2 * (a + b + 1)))
+        return 0.5 * math.erfc((u - mu) / (sd * math.sqrt(2)))
+    a, b = int(a), int(b)
+    n = a + b - 1                                      # P(Beta(a,b) > u) = P(Binomial(n, u) ≤ a − 1)
+    if u <= 0:
+        return 1.0
+    if u >= 1:
+        return 0.0
+    lu, l1 = math.log(u), math.log(1 - u)
+    return min(1.0, sum(math.exp(math.lgamma(n + 1) - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * lu + (n - i) * l1)
+                        for i in range(a)))
+
+
+def seguro(k, m, u=0.5):
+    """¿Se puede concluir, con confianza CONF, que la tasa de éxito supera u?"""
+    return p_mayor(k, m, u) >= CONF
+
+
+def media(k, m):
+    """Tasa estimada (media a posteriori) con k éxitos y m fracasos."""
+    return (k + PRIOR[0]) / (k + m + PRIOR[0] + PRIOR[1])
 
 
 class Mecanica:

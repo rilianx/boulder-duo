@@ -2,7 +2,7 @@
 [avanzó, se trabó, desapareció, Σ Δpuntaje] (la caja en el hoyo). Lo registra y lo usa el alto nivel
 (planificador de empujes)."""
 import math
-from . import Mecanica
+from . import CONF, Mecanica, media, p_mayor, seguro
 
 
 class Empujar(Mecanica):
@@ -13,15 +13,16 @@ class Empujar(Mecanica):
 
     def pushable(self, t):
         """¿El avatar corre al tipo t al entrar en su casilla? (una caja de Sokoban)"""
-        c = self.K.push.get(t)
-        return bool(c) and c[0] >= 2 and c[0] > 0.5 * (c[0] + c[1])
+        c = self.K.push.get(t, [0, 0])
+        return seguro(c[0], c[1])
 
     def push_candidate(self, t):
         """¿Vale la pena planear empujes con t? Si ya se sabe empujable, o si alguna vez se pudo pisar su casilla
         y todavía se probó poco empujarlo (curiosidad)."""
         K = self.K
         c = K.push.get(t, [0, 0])
-        return K.pushable(t) or (c[0] + c[1] < 4 and K.passed.get(t, 0) > 0)
+        incierto = 1 - CONF < p_mayor(c[0], c[1]) < CONF    # todavía no se sabe si se empuja
+        return K.pushable(t) or (incierto and K.passed.get(t, 0) > 0)
 
     def push_ok(self, t, mask):
         """¿Se puede empujar un t hacia una casilla con esta máscara? Sin datos: si no hay nada que bloquee ni
@@ -37,7 +38,7 @@ class Empujar(Mecanica):
         r = self.K.push_into.get(t, {}).get(mask)
         if not r or r[0] == 0:
             return 0.0, 0
-        return (r[3] / r[0] if r[2] > 0.5 * r[0] else 0.0), r[0]
+        return (r[3] / r[0] if media(r[2], r[0] - r[2]) > 0.5 else 0.0), r[0]
 
     def al_empuje(self, st, pos0, act, objs, masks0, sc0, turned, abits):
         """Tras un paso: ¿el objeto que había en la casilla a la que entró el avatar se corrió en esa dirección,

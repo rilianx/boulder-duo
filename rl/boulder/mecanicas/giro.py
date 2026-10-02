@@ -1,5 +1,5 @@
 """Giro: al cambiar de dirección, ¿se movió o solo giró? Si casi siempre solo gira, girar cuesta un tick."""
-from . import Mecanica
+from . import Mecanica, seguro
 
 
 class Giro(Mecanica):
@@ -14,8 +14,7 @@ class Giro(Mecanica):
 
     def turn_cost_value(self):
         """1 si el avatar gasta un tick en girar antes de moverse en otra dirección (aprendido)."""
-        n = sum(self.K.turns)
-        return int(n >= 20 and self.K.turns[1] > 0.5 * n)
+        return int(seguro(self.K.turns[1], self.K.turns[0]))
 
     def al_paso(self, same, free, moved, fuente, **_):
         if fuente == "nav" and not same and free:

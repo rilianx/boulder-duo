@@ -1,6 +1,6 @@
 """Fin por conteo: cuántos objetos de cada tipo quedaban al ganar, al perder y a mitad de partida. Un tipo
 casi siempre extinto al ganar (o al perder) y no a mitad de partida es la condición de victoria (o derrota)."""
-from . import Mecanica, conteos
+from . import Mecanica, conteos, seguro
 
 
 class FinConteo(Mecanica):
@@ -20,22 +20,22 @@ class FinConteo(Mecanica):
         for t, n in counts.items():
             r = d.setdefault(t, [0, 0]); r[0] += int(n <= 1); r[1] += 1
 
-    def _frac(self, kind, t):
-        r = self.K.ends.get(kind, {}).get(t)
-        return (r[0] / r[1], r[1]) if r and r[1] else (None, 0)
+    def _km(self, kind, t):
+        r = self.K.ends.get(kind, {}).get(t, [0, 0])
+        return r[0], r[1] - r[0]                        # (veces extinto, veces no)
 
     def extinct_win(self, t):
-        """¿Se gana cuando no queda ningún t? (al ganar casi siempre quedaban 0–1, a mitad de partida no)"""
-        fw, nw = self._frac("win", t); fm, nm = self._frac("mid", t)
-        return nw >= 3 and nm >= 5 and fw >= 0.8 and fw - fm >= 0.5
+        """¿Se gana cuando no queda ningún t? (al ganar casi seguro extinto; a mitad de partida casi seguro no)"""
+        kw, mw = self._km("win", t); km, mm = self._km("mid", t)
+        return seguro(kw, mw) and seguro(mm, km)
 
     def extinct_loss(self, t):
         """¿Se pierde cuando no queda ningún t? (las ciudades de Missilecommand)"""
         if t in self.K.avatar_types:
             return False
-        fl, nl = self._frac("loss", t); fm, nm = self._frac("mid", t); fw, nw = self._frac("win", t)
-        # contraste: mucho más seguido extinto al perder que a mitad de partida (y no al ganar)
-        return nl >= 3 and nm >= 5 and fl >= 0.6 and fl - fm >= 0.25 and (fw is None or fw <= 0.3)
+        kl, ml = self._km("loss", t); km, mm = self._km("mid", t); kw, mw = self._km("win", t)
+        # al perder casi seguro extinto, a mitad de partida casi seguro no, y al ganar no
+        return seguro(kl, ml) and seguro(mm, km) and not seguro(kw, mw)
 
     def al_mitad(self, st):
         self.K.record_counts("mid", conteos(st))

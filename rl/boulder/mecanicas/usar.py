@@ -2,7 +2,7 @@
 ("a|dx|dy"), según hacia dónde mira ("f|dx|dy") y por tipo de avatar ("t<tipo>|..."); y cuánto puntaje da cada
 tipo eliminado (medido en el tick exacto). Lo registra el alto nivel (sondas de usar / no usar)."""
 import math
-from . import Mecanica
+from . import PRIOR, Mecanica, media
 
 
 class Usar(Mecanica):
@@ -14,17 +14,16 @@ class Usar(Mecanica):
     def use_lift(self, t, key):
         """Cuánto más probable es que un objeto de tipo t en esa posición relativa desaparezca si se usa (vs. no)."""
         K = self.K
-        u = K.use_kill.get(t, {}).get(key); b = K.use_base.get(t, {}).get(key)
-        if not u or u[1] < 3:
+        u = K.use_kill.get(t, {}).get(key, [0, 0]); b = K.use_base.get(t, {}).get(key, [0, 0])
+        if not u[1]:
             return 0.0
-        pu = u[0] / u[1]
-        pb = b[0] / b[1] if b and b[1] >= 3 else 0.0
-        return max(0.0, pu - pb)
+        # tasas estimadas de desaparecer usando y sin usar (con pocos datos tienden a 1/2 y la diferencia a 0)
+        return max(0.0, media(u[0], u[1] - u[0]) - media(b[0], b[1] - b[0]))
 
     def use_value(self, t):
         """Puntaje medio que da cada objeto de tipo t eliminado al usar (0,5 de curiosidad si hay pocos datos)."""
-        v = self.K.use_score.get(t)
-        return v[0] / v[1] if v and v[1] >= 3 else 0.5
+        v = self.K.use_score.get(t, [0.0, 0])
+        return (v[0] + 0.5 * sum(PRIOR)) / (v[1] + sum(PRIOR))       # previo: 0,5 (curiosidad)
 
     FWD = {0: ((0, -1), (1, 0)), 1: ((1, 0), (0, 1)), 2: ((0, 1), (-1, 0)), 3: ((-1, 0), (0, -1))}
 

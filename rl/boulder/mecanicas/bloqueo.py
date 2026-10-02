@@ -1,6 +1,6 @@
 """Núcleo — bloqueo: al intentar entrar a una casilla, ¿se movió? Por tipo [pasó, chocó], y también según
 cuántos recursos de ese tipo lleva el avatar. Bloquea si chocó más del doble de lo que pasó."""
-from . import Mecanica
+from . import Mecanica, seguro
 
 
 class Bloqueo(Mecanica):
@@ -40,9 +40,12 @@ class Bloqueo(Mecanica):
             n = res.get(t)
             if n is not None:
                 pb = K.by_res.get(t, {}).get(n)
-                if pb is not None and pb[0] + pb[1] >= 3:
-                    return pb[1] > 2 * pb[0] + 1
-        return K.blocked.get(t, 0) > 2 * K.passed.get(t, 0) + 1
+                if pb is not None:
+                    if seguro(pb[1], pb[0]):           # con esa cantidad, casi seguro bloquea…
+                        return True
+                    if seguro(pb[0], pb[1]):           # …o casi seguro se pasa
+                        return False
+        return seguro(K.blocked.get(t, 0), K.passed.get(t, 0))
 
     def blocking_bits(self, res=None):
         K = self.K
