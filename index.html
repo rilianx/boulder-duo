@@ -2295,11 +2295,12 @@ function killPlayer(p){
   p.alive = false; p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
 
+let rockBlast = false;
 function explode(cx, cy, toGem){
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
     if (t === STEEL || t === EXIT || t === NEST || t === STAR) continue;
-    if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0) continue; killPlayer(p); }
+    if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); }
     if (boss[j]) { boss[j] = 0; starPending = j; }
     grid[j] = BOOM; aux[j] = 0; dir[j] = toGem ? 1 : 0; fall[j] = 0; moved[j] = 1; src[j] = -1;
   }
@@ -2308,6 +2309,11 @@ function explode(cx, cy, toGem){
 
 // rules of the original caves (not the random training levels, which must match the Python copy in rl/)
 const caveRules = () => mode !== 'train' && !simHook;
+/* Friendly version (option): fireflies and butterflies don't hurt, nor do their explosions, nor gems falling on
+   someone's head. Only a falling rock still squashes. */
+let friendlyOn = false;
+try { friendlyOn = localStorage.getItem('boulder-duo-friendly') === '1'; } catch (e) {}
+const friendly = () => friendlyOn && caveRules();
 const ownClock = p => caveRules() && !p.ai && speed === 1;
 /* Little lives under the rocks (drawing only). Pushing a rock for the first time sometimes disturbs something:
    a mole that scurries along the tunnel and digs itself a hole in the floor, two soot puffballs that hop off and
@@ -2475,7 +2481,7 @@ function fallObj(i, x, y){
     // (otherwise a kid digging down would always stay one step ahead of a rock that falls faster than they walk)
     if (k < steps) {
       const nb = grid[cur + W], cx = cur % W, cy = cur / W | 0;
-      if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) explode(cx, cy + 1, false);
+      if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0 && !(friendly() && grid[cur] === GEM)) { rockBlast = true; explode(cx, cy + 1, false); rockBlast = false; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy + 1, nb === BUTT);
     }
     return;
@@ -2496,7 +2502,7 @@ function fallObj(i, x, y){
   }
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
-      if (players[bt-P1].immune <= 0) { explode(x, y+1, false); return; }
+      if (players[bt-P1].immune <= 0 && !(friendly() && grid[i] === GEM)) { rockBlast = true; explode(x, y+1, false); rockBlast = false; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(x, y+1, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
@@ -2519,7 +2525,7 @@ function fallObj(i, x, y){
 function enemy(i, x, y, t){
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0) { explode(x, y, t === BUTT); return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { explode(x, y, t === BUTT); return; }
     if (n === AMOEBA) { explode(x, y, t === BUTT); return; }
   }
   const d = dir[i];
@@ -2649,6 +2655,7 @@ function menu(){
     <div class="row sets">
       <button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
+      <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
     </div>
     <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
@@ -2663,6 +2670,7 @@ function menu(){
   $('btrain').onclick = () => startGame('train');
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
+  $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
