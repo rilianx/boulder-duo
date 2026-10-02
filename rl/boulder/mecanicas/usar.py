@@ -1,11 +1,13 @@
 """Usar (disparar, espada): qué desaparece cerca del avatar al usar y al no usar, por posición relativa
 ("a|dx|dy"), según hacia dónde mira ("f|dx|dy") y por tipo de avatar ("t<tipo>|..."); y cuánto puntaje da cada
 tipo eliminado (medido en el tick exacto). Lo registra el alto nivel (sondas de usar / no usar)."""
+import math
 from . import Mecanica
 
 
 class Usar(Mecanica):
     nombre = "usar"
+    orden_opcion = 10          # apuntar: ir adonde usar rinde más
     estado = {"use_kill": (dict, "I>S>v"), "use_base": (dict, "I>S>v"), "use_score": (dict, "I>v")}
     neutros = {"use_lift": 0.0, "use_value": 0.0}
 
@@ -63,3 +65,22 @@ class Usar(Mecanica):
                 if key_lift < 0.5 or oid not in vanish_ds:
                     continue
                 v = K.use_score.setdefault(t, [0.0, 0]); v[0] += vanish_ds[oid]; v[1] += 1
+
+    # ------------------------------------------------------------------ opción del alto nivel
+    def opcion(self, cmd, st, info, vals, targets):
+        """Sin nada que tocar: ponerse donde usar rinde más (p. ej. debajo de los aliens), con los objetos
+        extrapolados a donde estarán al llegar."""
+        if not cmd.P["use"]:
+            return None
+        bestu, cu = cmd.P["use_thr"], None
+        blocked = cmd.know.blocked_cells(st)
+        near = sorted((t, j) for j, (t, H) in info.items() if j != st.pos and not blocked[j])[:60]
+        for t, j in near:
+            H = info[j][1]
+            x, y = j % st.W, j // st.W
+            ev = max(cmd._use_ev(st, x, y, f, dt=t) for f in (None, 0, 1, 2, 3)) * math.exp(-H) - cmd.P["lam"] * t
+            if ev > bestu:
+                bestu, cu = ev, (j, t)
+        if cu is not None:
+            cmd.stats["aim"] = cmd.stats.get("aim", 0) + 1
+        return cu

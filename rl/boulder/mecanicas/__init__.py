@@ -33,10 +33,15 @@ class Mecanica:
     # toque (entró o chocó con una casilla), objeto_movio / objeto_avance (lo ve el rastreador de objetos),
     # empuje, sonda_usar, mitad (muestra a mitad de partida) y fin (terminó la partida).
 
+    # Opción del alto nivel (opcional): una mecánica con orden_opcion define opcion(cmd, st, info, vals,
+    # targets) → (casilla, tiempo) o None. Cuando no hay nada valioso que tocar, el alto nivel les pregunta en
+    # orden (apuntar para usar, portal, abrir camino, sobrevivir) y toma la primera que propone algo.
+    orden_opcion = None
+
     def metodos(self):
         """Métodos públicos que esta mecánica aporta al conocimiento."""
         return {n: getattr(self, n) for n, v in type(self).__dict__.items()
-                if callable(v) and not n.startswith("__")}
+                if callable(v) and not n.startswith("__") and not n.startswith("al_") and n != "opcion"}
 
     def despues_de_cargar(self):
         """Ajustes tras cargar el estado (p. ej. claves que deben existir)."""

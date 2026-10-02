@@ -1,13 +1,15 @@
 """Empujar: ¿el objeto se corrió al entrar el avatar a su casilla? Y al empujarlo hacia cada contenido:
 [avanzó, se trabó, desapareció, Σ Δpuntaje] (la caja en el hoyo). Lo registra y lo usa el alto nivel
 (planificador de empujes)."""
+import math
 from . import Mecanica
 
 
 class Empujar(Mecanica):
     nombre = "empujar"
     estado = {"push": (dict, "I>v"), "push_into": (dict, "I>I>v")}
-    neutros = {"pushable": False, "push_candidate": False, "push_ok": False, "push_value": (0.0, 0)}
+    neutros = {"pushable": False, "push_candidate": False, "push_ok": False, "push_value": (0.0, 0),
+               "plan_empujes": None}
 
     def pushable(self, t):
         """¿El avatar corre al tipo t al entrar en su casilla? (una caja de Sokoban)"""
@@ -68,3 +70,125 @@ class Empujar(Mecanica):
                     r[1] += 1                                     # empujable, pero ahí se traba
                 else:
                     p[1] += 1
+
+    # ------------------------------------------------------------------ opción del alto nivel
+    def plan_empujes(self, cmd, st):
+        """Planificador de empujes con lo aprendido: para cada objeto empujable cercano, búsqueda en anchura
+        sobre (casilla del objeto, zona del avatar) hasta empujarlo a una casilla donde empujarlo rinde (o que
+        aún no se probó: curiosidad). Devuelve (valor, [(acción, casilla esperada del avatar)]) o None."""
+        K, W, H, N = cmd.know, st.W, st.H, len(st.masks)
+        p = cmd.nav.risk.grid(st.masks)
+        boxes = {}
+        for oid, (t, x, y) in st.objects.items():
+            # solo objetos quietos (lo que se mueve solo no es una caja) y en casillas sin riesgo
+            if st.types.get(t, ("", -1))[1] != 6 or not K.push_candidate(t) or cmd.nav.track.random_type(t):
+                continue
+            vx, vy = cmd.nav.track.velocity(oid)
+            b = int(round(y)) * W + int(round(x))
+            if len(cmd.nav.track.hist.get(oid, [])) >= 3 and abs(vx) + abs(vy) < 0.01 and abs(x - round(x)) < 0.05 and abs(y - round(y)) < 0.05 and float(p[b]) < 0.2:
+                boxes[b] = t
+        if not boxes:
+            return None
+        blocked = K.blocked_cells(st)
+        wall = [blocked[j] or float(p[j]) > 0.3 for j in range(N)]
+        for b in boxes:
+            wall[b] = True
+
+        def nbrs(i):
+            x, y = i % W, i // W
+            for d, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
+                if 0 <= x + dx < W and 0 <= y + dy < H:
+                    yield d, i + dy * W + dx
+
+        def flood(walls, s):
+            lab, k = {}, 0
+            for s0 in ([s] if s is not None else range(N)):
+                if walls[s0] or s0 in lab:
+                    continue
+                lab[s0] = k; fr = [s0]
+                while fr:
+                    i = fr.pop()
+                    for _, j in nbrs(i):
+                        if not walls[j] and j not in lab:
+                            lab[j] = k; fr.append(j)
+                k += 1
+            return lab
+
+        def path(walls, a, g):
+            prev, fr = {a: None}, [a]
+            while fr and g not in prev:
+                nx = []
+                for i in fr:
+                    for d, j in nbrs(i):
+                        if not walls[j] and j not in prev:
+                            prev[j] = (i, d); nx.append(j)
+                fr = nx
+            if g not in prev:
+                return None
+            acts = []
+            while prev[g] is not None:
+                i, d = prev[g]; acts.append((d, g)); g = i
+            return acts[::-1]
+
+        reach = flood(wall, st.pos)
+        ab = ~cmd._abits()
+        lam, best = cmd.P["lam"], None
+        for b0, t in boxes.items():
+            if not any(j in reach for _, j in nbrs(b0)):
+                continue
+            walls2 = list(wall); walls2[b0] = False
+            comps = {}
+
+            def comp(b):
+                if b not in comps:
+                    w = list(walls2); w[b] = True
+                    comps[b] = flood(w, None)
+                return comps[b]
+            s0 = (b0, comp(b0).get(st.pos))
+            par, fr, n = {s0: None}, [s0], 0
+            while fr and n < cmd.P["push_states"]:
+                nx = []
+                for (b, lab) in fr:
+                    n += 1
+                    cb = comp(b)
+                    for d, dest in nbrs(b):
+                        bx, by = b % W - (d == 1) + (d == 3), b // W - (d == 2) + (d == 0)
+                        if not (0 <= bx < W and 0 <= by < H):
+                            continue
+                        behind = by * W + bx
+                        m = st.masks[dest] & ab
+                        if walls2[behind] or cb.get(behind) != lab or not K.push_ok(t, m):
+                            continue
+                        v, tries = K.push_value(t, m)
+                        cur = cmd.P["push_new"] / (1 + tries) if v <= 0 and tries < 2 else 0.0
+                        steps = 0
+                        s, chain = (b, lab), [(behind, d)]
+                        while par[s] is not None:
+                            s, bh, dd = par[s]; chain.append((bh, dd)); steps += 1
+                        # se elige por valor con un costo leve por empuje (un plan largo al hoyo sirve); el
+                        # valor devuelto usa el costo de siempre (lam por paso) para compararlo con otras metas
+                        key = max(v, cur) - cmd.P["push_lam"] * (steps + 1)
+                        if (v > 0 or cur > 0) and (best is None or key > best[3]):
+                            best = (max(v, cur) - lam * 3 * (steps + 1), b0, chain[::-1], key)
+                        if v > 0:                           # desaparece ahí: no se sigue empujando
+                            continue
+                        if walls2[dest]:
+                            continue
+                        ns = (dest, comp(dest).get(b))
+                        if ns not in par:
+                            par[ns] = ((b, lab), behind, d); nx.append(ns)
+                fr = nx
+        if best is None or best[3] <= 0:
+            return None
+        val, b0, chain, _ = best
+        walls2 = list(wall); walls2[b0] = False
+        a, b, acts = st.pos, b0, []
+        for behind, d in chain:
+            w = list(walls2); w[b] = True
+            seg = path(w, a, behind) if a != behind else []
+            if seg is None:
+                return None
+            acts += seg
+            off = (-W, 1, W, -1)[d]
+            acts.append((d, b)); a, b = b, b + off
+        return val, acts

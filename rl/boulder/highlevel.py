@@ -177,26 +177,11 @@ class Commander:
                 best, (j) = ranked[0][0], ranked[0][1]
                 choice = (j, info[j][0])
         self._best_score = best if choice is not None else None
-        if choice is None and self.P["use"]:
-            # sin nada que tocar: ponerse donde usar rinde más (p. ej. debajo de los aliens)
-            bestu, cu = self.P["use_thr"], None
-            blocked = K.blocked_cells(st)
-            near = sorted((t, j) for j, (t, H) in info.items() if j != st.pos and not blocked[j])[:60]
-            for t, j in near:
-                H = info[j][1]
-                x, y = j % st.W, j // st.W
-                ev = max(self._use_ev(st, x, y, f, dt=t) for f in (None, 0, 1, 2, 3)) * math.exp(-H) - self.P["lam"] * t
-                if ev > bestu:
-                    bestu, cu = ev, (j, t)
-            if cu is not None:
-                self.stats["aim"] = self.stats.get("aim", 0) + 1
-                choice = cu
-        if choice is None:
-            choice = self.portal_hop(st, info, vals, targets)
-        if choice is None and self.P.get("unlock", True):
-            choice = self.unlock(st, info, vals, targets)
-        if choice is None and self.P.get("survive", True) and K.time_limit() is not None:
-            choice = self.safest(st, info)
+        # opciones que proponen las mecánicas activas (apuntar, portal, abrir camino, sobrevivir), en orden
+        for m in self._opciones():
+            if choice is not None:
+                break
+            choice = m.opcion(self, st, info, vals, targets)
         if choice is None:                         # explorar
             blocked = K.blocked_cells(st)
             cand = [(self.visits.get(j, 0) * 5 + t, j, t) for j, (t, H) in info.items()
@@ -207,124 +192,9 @@ class Commander:
                 self.stats["explore"] += 1
         return choice
 
-    # ------------------------------------------------------------------ sobrevivir
-    def safest(self, st, info):
-        """Se gana por llegar vivo a cierto tick: sin nada mejor que hacer, ir a la casilla alcanzable donde el
-        riesgo previsto (cubo del navegador, próximos ticks) más el de llegar es menor."""
-        R = getattr(self.nav, "_R", None)
-        if not R:
-            return None
-        K = self.know
-        blocked = K.blocked_cells(st)
-        best, choice = math.inf, None
-        Hk = min(len(R), 10)
-        for j, (t, H) in info.items():
-            if blocked[j] or t > Hk:
-                continue
-            haz = H + sum(-math.log(max(1e-4, 1 - float(R[k][j]))) for k in range(min(t, Hk - 1), Hk))
-            sc = haz + 0.01 * t
-            if sc < best:
-                best, choice = sc, (j, max(t, 1))
-        if choice is not None:
-            self.stats["survive"] = self.stats.get("survive", 0) + 1
-            if choice[0] == st.pos:
-                return None
-        return choice
-
-    # ------------------------------------------------------------------ teletransportes
-    def portal_hop(self, st, info, vals, targets):
-        """Lo valioso no se alcanza caminando, pero sí desde la salida de un teletransporte aprendido: la orden
-        es entrar al teletransporte (al aparecer del otro lado viene la orden siguiente)."""
-        K, W, N = self.know, st.W, len(st.masks)
-        blocked = K.blocked_cells(st)
-        want = {j for j in range(N) if j not in info and not blocked[j]
-                and any(st.masks[j] >> t & 1 and vals.get(t, 0) >= 1.0 for t in targets)}
-        if not want:
-            return None
-        best, choice = math.inf, None
-        for p, (t_p, H) in info.items():
-            for t in range(63):
-                if not st.masks[p] >> t & 1:
-                    continue
-                e = K.teleport_exit(t)
-                if e is None:
-                    continue
-                for q in range(N):                         # salidas de ese tipo: ¿desde ahí se llega a lo valioso?
-                    if not st.masks[q] >> e & 1:
-                        continue
-                    seen, fr, dq = {q}, [q], None
-                    steps = 0
-                    while fr and dq is None and steps < N:
-                        nx = []
-                        for i in fr:
-                            if i in want:
-                                dq = steps; break
-                            x, y = i % W, i // W
-                            for dx, dy in ((0, -1), (1, 0), (0, 1), (-1, 0)):
-                                xx, yy = x + dx, y + dy
-                                k = yy * W + xx
-                                if 0 <= xx < W and 0 <= yy < st.H and k not in seen and (not blocked[k] or k in want):
-                                    seen.add(k); nx.append(k)
-                        fr = nx; steps += 1
-                    if dq is not None and t_p + dq < best and self.tabu.get(p, -1) <= st.tick:
-                        best, choice = t_p + dq, (p, t_p)
-        if choice is not None:
-            self.stats["portal"] = self.stats.get("portal", 0) + 1
-        return choice
-
-    # ------------------------------------------------------------------ abrir camino
-    def unlock(self, st, info, vals, targets):
-        """Encerrado: hay destinos con valor fuera de alcance. Se busca un camino a ellos permitiendo cruzar,
-        caro, casillas tapadas por objetos que se mueven (categoría VGDL móvil); el primero de esos objetos en
-        el camino es el obstáculo. Se aprende hacia dónde se mueve su tipo (una roca: hacia abajo) y la orden
-        es ir a la casilla a la que se movería, cavándola: queda libre y el obstáculo se mueve solo."""
-        K, W, N = self.know, st.W, len(st.masks)
-        blocked = K.blocked_cells(st)
-        # destinos que valen la pena (no un resto de curiosidad) y que se pueden pisar (no un muro)
-        want = {j for j in range(N) if j not in info and not blocked[j] and self.tabu.get(j, -1) <= st.tick
-                and any(st.masks[j] >> t & 1 and vals.get(t, 0) >= 1.0 for t in targets)}
-        if not want:
-            return None
-        movable = [t for t, (name, cat) in st.types.items() if cat == 6 and K.is_blocking(t, st.res)]
-        mov = [any(m >> t & 1 for t in movable) for m in st.masks]
-        offs = (-W, 1, W, -1)
-        # distancia de cada casilla a lo deseado, cruzando lo libre (1) y lo tapado por móviles (10)
-        dist = {j: 0 for j in want}
-        pq = [(0, j) for j in want]
-        while pq:
-            c, i = heapq.heappop(pq)
-            if c > dist[i]:
-                continue
-            x, y = i % W, i // W
-            for d in range(4):
-                xx, yy = x + (d == 1) - (d == 3), y + (d == 2) - (d == 0)
-                if not (0 <= xx < W and 0 <= yy < st.H):
-                    continue
-                j = i + offs[d]
-                if blocked[j] and not mov[j]:
-                    continue
-                nc = c + (10 if mov[j] else 1)
-                if nc < dist.get(j, math.inf):
-                    dist[j] = nc
-                    heapq.heappush(pq, (nc, j))
-        # candidatos: móviles que dejarían más cerca de lo deseado, con su casilla de liberación alcanzable
-        best, choice = math.inf, None
-        for o in range(N):
-            if not mov[o] or o not in dist:
-                continue
-            t = next(t for t in movable if st.masks[o] >> t & 1)
-            d = self.nav.track.main_dir(t)
-            if d is None:
-                continue
-            r = o + d[1] * W + d[0]
-            if not (0 <= r < N) or r not in info or blocked[r] or r == st.pos or self.tabu.get(r, -1) > st.tick:
-                continue
-            sc = dist[o] + info[r][0]
-            if sc < best:
-                best, choice = sc, (r, info[r][0])
-        if choice is not None:
-            self.stats["unlock"] = self.stats.get("unlock", 0) + 1
-        return choice
+    def _opciones(self):
+        return sorted((m for m in self.know.mecs.values() if m.activa and getattr(m, "orden_opcion", None) is not None),
+                      key=lambda m: m.orden_opcion)
 
     # ------------------------------------------------------------------ empujar
     def _learn_push(self, st):
@@ -361,127 +231,6 @@ class Commander:
                 if abs(x - st.fx) + abs(y - st.fy) <= 1.5}
         turned = self.know.turn_cost and self.nav.last_dir is not None and self.nav.last_dir != act
         self._mv = (st.pos, act, objs, st.masks, st.score, turned)
-
-    def push_plan(self, st):
-        """Planificador de empujes con lo aprendido: para cada objeto empujable cercano, búsqueda en anchura
-        sobre (casilla del objeto, zona del avatar) hasta empujarlo a una casilla donde empujarlo rinde (o que
-        aún no se probó: curiosidad). Devuelve (valor, [(acción, casilla esperada del avatar)]) o None."""
-        K, W, H, N = self.know, st.W, st.H, len(st.masks)
-        p = self.nav.risk.grid(st.masks)
-        boxes = {}
-        for oid, (t, x, y) in st.objects.items():
-            # solo objetos quietos (lo que se mueve solo no es una caja) y en casillas sin riesgo
-            if st.types.get(t, ("", -1))[1] != 6 or not K.push_candidate(t) or self.nav.track.random_type(t):
-                continue
-            vx, vy = self.nav.track.velocity(oid)
-            b = int(round(y)) * W + int(round(x))
-            if len(self.nav.track.hist.get(oid, [])) >= 3 and abs(vx) + abs(vy) < 0.01 and abs(x - round(x)) < 0.05 and abs(y - round(y)) < 0.05 and float(p[b]) < 0.2:
-                boxes[b] = t
-        if not boxes:
-            return None
-        blocked = K.blocked_cells(st)
-        wall = [blocked[j] or float(p[j]) > 0.3 for j in range(N)]
-        for b in boxes:
-            wall[b] = True
-
-        def nbrs(i):
-            x, y = i % W, i // W
-            for d, (dx, dy) in enumerate(((0, -1), (1, 0), (0, 1), (-1, 0))):
-                if 0 <= x + dx < W and 0 <= y + dy < H:
-                    yield d, i + dy * W + dx
-
-        def flood(walls, s):
-            lab, k = {}, 0
-            for s0 in ([s] if s is not None else range(N)):
-                if walls[s0] or s0 in lab:
-                    continue
-                lab[s0] = k; fr = [s0]
-                while fr:
-                    i = fr.pop()
-                    for _, j in nbrs(i):
-                        if not walls[j] and j not in lab:
-                            lab[j] = k; fr.append(j)
-                k += 1
-            return lab
-
-        def path(walls, a, g):
-            prev, fr = {a: None}, [a]
-            while fr and g not in prev:
-                nx = []
-                for i in fr:
-                    for d, j in nbrs(i):
-                        if not walls[j] and j not in prev:
-                            prev[j] = (i, d); nx.append(j)
-                fr = nx
-            if g not in prev:
-                return None
-            acts = []
-            while prev[g] is not None:
-                i, d = prev[g]; acts.append((d, g)); g = i
-            return acts[::-1]
-
-        reach = flood(wall, st.pos)
-        ab = ~self._abits()
-        lam, best = self.P["lam"], None
-        for b0, t in boxes.items():
-            if not any(j in reach for _, j in nbrs(b0)):
-                continue
-            walls2 = list(wall); walls2[b0] = False
-            comps = {}
-
-            def comp(b):
-                if b not in comps:
-                    w = list(walls2); w[b] = True
-                    comps[b] = flood(w, None)
-                return comps[b]
-            s0 = (b0, comp(b0).get(st.pos))
-            par, fr, n = {s0: None}, [s0], 0
-            while fr and n < self.P["push_states"]:
-                nx = []
-                for (b, lab) in fr:
-                    n += 1
-                    cb = comp(b)
-                    for d, dest in nbrs(b):
-                        bx, by = b % W - (d == 1) + (d == 3), b // W - (d == 2) + (d == 0)
-                        if not (0 <= bx < W and 0 <= by < H):
-                            continue
-                        behind = by * W + bx
-                        m = st.masks[dest] & ab
-                        if walls2[behind] or cb.get(behind) != lab or not K.push_ok(t, m):
-                            continue
-                        v, tries = K.push_value(t, m)
-                        cur = self.P["push_new"] / (1 + tries) if v <= 0 and tries < 2 else 0.0
-                        steps = 0
-                        s, chain = (b, lab), [(behind, d)]
-                        while par[s] is not None:
-                            s, bh, dd = par[s]; chain.append((bh, dd)); steps += 1
-                        # se elige por valor con un costo leve por empuje (un plan largo al hoyo sirve); el
-                        # valor devuelto usa el costo de siempre (lam por paso) para compararlo con otras metas
-                        key = max(v, cur) - self.P["push_lam"] * (steps + 1)
-                        if (v > 0 or cur > 0) and (best is None or key > best[3]):
-                            best = (max(v, cur) - lam * 3 * (steps + 1), b0, chain[::-1], key)
-                        if v > 0:                           # desaparece ahí: no se sigue empujando
-                            continue
-                        if walls2[dest]:
-                            continue
-                        ns = (dest, comp(dest).get(b))
-                        if ns not in par:
-                            par[ns] = ((b, lab), behind, d); nx.append(ns)
-                fr = nx
-        if best is None or best[3] <= 0:
-            return None
-        val, b0, chain, _ = best
-        walls2 = list(wall); walls2[b0] = False
-        a, b, acts = st.pos, b0, []
-        for behind, d in chain:
-            w = list(walls2); w[b] = True
-            seg = path(w, a, behind) if a != behind else []
-            if seg is None:
-                return None
-            acts += seg
-            off = (-W, 1, W, -1)[d]
-            acts.append((d, b)); a, b = b, b + off
-        return val, acts
 
     # ------------------------------------------------------------------ política del puente
     def _learn_touch(self, st):
@@ -627,7 +376,7 @@ class Commander:
         if self.goal is None:
             c = self.choose(st)
             if self.P["push"]:
-                pp = self.push_plan(st)
+                pp = self.know.plan_empujes(self, st)
                 if pp is not None and (c is None or self._best_score is None or pp[0] > self._best_score):
                     self.stats["push"] = self.stats.get("push", 0) + 1
                     self.plan, self._plan_expect = pp[1], st.pos
