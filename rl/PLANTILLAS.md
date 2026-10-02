@@ -177,3 +177,14 @@ Mismo rendimiento, dentro del ruido. El sistema queda descrito como un modelo ba
 Siguen fuera de esta regla:
 - los umbrales del rastreador de objetos: dirección principal ≥ 80 %, "al azar" si cambia de dirección > 25 %;
 - el "≥ 2 saltos" de teletransporte, que es una regla de existencia y no de proporción.
+
+**Sensibilidad al nivel de confianza C** (práctica nueva y evaluación con 15 semillas para cada valor):
+
+| | Sok | Ali | But | Mis | Por | Cha | SZ | Fro | Zel | BD | Prom. |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| umbrales a mano | 100 | 90 | 100 | 50 | 27 | 17 | 0 | 95 | 84 | 57 | 62 |
+| C = 0,7 | 100 | 77 | 100 | 53 | 27 | 10 | 0 | 93 | 84 | 55 | 60 |
+| C = 0,8 | 100 | 93 | 100 | 53 | 23 | 13 | 0 | 89 | 84 | 55 | 61 |
+| C = 0,9 | 100 | 90 | 100 | 70 | 27 | 10 | 0 | 95 | 83 | 56 | 63 |
+
+El resultado no depende finamente de C: entre 0,7 y 0,9 el promedio va de 60 a 63 %, y las diferencias por juego están dentro del ruido (±15 puntos con 30 partidas). Se deja C = 0,8, el valor central elegido antes de ver estos resultados.
