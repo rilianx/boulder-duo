@@ -1,0 +1,17 @@
+"""Giro: al cambiar de dirección, ¿se movió o solo giró? Si casi siempre solo gira, girar cuesta un tick."""
+from . import Mecanica
+
+
+class Giro(Mecanica):
+    nombre = "giro"
+    estado = {"turns": (lambda: [0, 0], "v")}          # [se movió, solo giró]
+    neutros = {"turn_cost_value": 0}
+
+    def record_turn(self, moved):
+        """Intento de moverse cambiando de dirección hacia una casilla pisable: ¿se movió o solo giró?"""
+        self.K.turns[0 if moved else 1] += 1
+
+    def turn_cost_value(self):
+        """1 si el avatar gasta un tick en girar antes de moverse en otra dirección (aprendido)."""
+        n = sum(self.K.turns)
+        return int(n >= 20 and self.K.turns[1] > 0.5 * n)

@@ -68,71 +68,7 @@ def practice(a):
         for _, out, kj in ex.map(_play, jobs):
             wins += sum(r[0] == 1 for r in out); n += len(out)
             k = Knowledge.from_json(kj)
-            for t, e in k.eff.items():                     # sumar solo lo nuevo de cada proceso
-                o = K0.eff.get(t, [0, 0.0, 0.0, 0, 0]); m = base._e(t)
-                for i in range(5):
-                    m[i] += e[i] - o[i]
-            for t, dd in k.move_dirs.items():
-                for dd_k, cnt in dd.items():
-                    o = K0.move_dirs.get(t, {}).get(dd_k, 0)
-                    m = base.move_dirs.setdefault(t, {})
-                    m[dd_k] = m.get(dd_k, 0) + cnt - o
-            for t, dd in k.fall.items():
-                for mk, v in dd.items():
-                    o = K0.fall.get(t, {}).get(mk, [0, 0])
-                    m = base.fall.setdefault(t, {}).setdefault(mk, [0, 0])
-                    m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for name in ("use_kill", "use_base"):
-                for t, dd in getattr(k, name).items():
-                    for key, v in dd.items():
-                        o = getattr(K0, name).get(t, {}).get(key, [0, 0])
-                        m = getattr(base, name).setdefault(t, {}).setdefault(key, [0, 0])
-                        m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, v in k.use_score.items():
-                o = K0.use_score.get(t, [0.0, 0])
-                m = base.use_score.setdefault(t, [0.0, 0])
-                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, dd in k.teleport.items():
-                for e, cnt in dd.items():
-                    o = K0.teleport.get(t, {}).get(e, 0)
-                    m = base.teleport.setdefault(t, {})
-                    m[e] = m.get(e, 0) + cnt - o
-            for dd_i in range(4):
-                for q in range(2):
-                    base.dir_moves[dd_i][q] += k.dir_moves[dd_i][q] - K0.dir_moves[dd_i][q]
-            for kind, dd in k.ends.items():
-                for t, v in dd.items():
-                    o = K0.ends.get(kind, {}).get(t, [0, 0])
-                    m = base.ends.setdefault(kind, {}).setdefault(t, [0, 0])
-                    m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, v in k.end_ticks.items():
-                o = K0.end_ticks.get(t, [0, 0])
-                m = base.end_ticks.setdefault(t, [0, 0])
-                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, dd in k.rel.items():
-                for u, v in dd.items():
-                    o = K0.rel.get(t, {}).get(u, [0, 0])
-                    m = base.rel.setdefault(t, {}).setdefault(u, [0, 0])
-                    m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, v in k.push.items():
-                o = K0.push.get(t, [0, 0])
-                m = base.push.setdefault(t, [0, 0])
-                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, dd in k.push_into.items():
-                for mk, v in dd.items():
-                    o = K0.push_into.get(t, {}).get(mk, [0, 0, 0, 0.0])
-                    m = base.push_into.setdefault(t, {}).setdefault(mk, [0, 0, 0, 0.0])
-                    for i in range(4):
-                        m[i] += v[i] - o[i]
-            for t, v in k.consumed.items():
-                o = K0.consumed.get(t, [0, 0])
-                m = base.consumed.setdefault(t, [0, 0])
-                m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
-            for t, dd in k.term.items():
-                for key, v in dd.items():
-                    o = K0.term.get(t, {}).get(key, [0, 0])
-                    m = base.term.setdefault(t, {}).setdefault(key, [0, 0])
-                    m[0] += v[0] - o[0]; m[1] += v[1] - o[1]
+            base.merge_delta(k, K0)                        # sumar solo lo nuevo de cada proceso (todas las mecánicas)
     (RUNS / a.game / "knowledge_hl.json").write_text(json.dumps(base.to_json()))
     won = {t: {k: v for k, v in dd.items() if v[1]} for t, dd in base.term.items()}
     print(f"{a.game} práctica: {n} partidas, {wins} ganadas; toques que ganaron: {dict((t, w) for t, w in won.items() if w)}",

@@ -27,6 +27,8 @@ from generic_train import random_weights
 
 GAMES = ["sokoban", "portals", "frogs", "aliens", "chase", "missilecommand", "survivezombies", "zelda",
          "boulderdash", "butterflies"]
+# sin límite de tiempo por acción: si no, una decisión lenta se vuelve "nada" según la carga de la máquina
+os.environ.setdefault("GVGAI_CLASSES", str(Path(__file__).parent / "gvgai" / "vendor" / "classes_notime"))
 RUNS = Path(os.environ.get("GVGAI_RUNS", Path(__file__).parent / "runs" / "mecanicas"))
 TICKS = 250
 
@@ -80,6 +82,8 @@ def run_game(game):
         nav = ObjectCubeNavigator(K, risk, {"w_risk": 20.0, "alpha": 1.0, "patience": 0, "budget_ms": 1e7}, danger=D)
         cmd = Commander(K, dict(DEFAULT_W), nav, {"practice": True, **hl})
         acts = play(game, lv, seed, cmd, TICKS)
+        if os.environ.get("GOLDEN_DUMP"):
+            Path(os.environ["GOLDEN_DUMP"] + f"_{game}_{g}.json").write_text(json.dumps([str(x) for x in acts]))
         out[f"agent{g}"] = {"acts": hashlib.sha1(json.dumps(acts).encode()).hexdigest(), "n": len(acts),
                             "stats": cmd.stats}
     out["agent_know"] = canon(K.to_json())
