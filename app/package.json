@@ -1,0 +1,17 @@
+{
+  "name": "boulder-duo-app",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Boulder Dúo como app de Android (Capacitor), con juego de a dos por Bluetooth",
+  "scripts": {
+    "copy": "node -e \"require('fs').copyFileSync('../index.html','www/index.html')\"",
+    "sync": "npm run copy && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}
