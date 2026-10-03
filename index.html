@@ -123,6 +123,17 @@ button:disabled{opacity:.4;cursor:default}
 .touch .legend{display:none}
 .overlay{overflow:auto}
 .rotate{display:none}
+/* Full screen (or opened from the home screen): no top bar, just one round button in the middle to pause */
+.bmid{display:none}
+.fs header{display:none}
+.fs .bmid{display:flex;align-items:center;justify-content:center;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;
+  width:44px;height:44px;padding:0;border-radius:50%;background:rgba(233,138,28,.85);border:2px solid #b25f08;color:#fff;font-size:12px;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+.fs[data-state="pause"] .bmid,.fs[data-state="between"] .bmid{display:none}
+.fs[data-state="menu"] .bmid{font-size:16px}
+.fs.solomode .bmid,.fs[data-state="menu"] .bmid{position:fixed;top:6px;transform:translateX(-50%);width:36px;height:36px}
+@media (orientation:portrait){ .fs.touch .views.duo{width:min(100%, calc((100dvh - 24px) / 1.47))} }
+@media (orientation:landscape) and (max-height:600px){ .fs.touch .views{width:min(100%, calc((100dvh - 14px) * 2.75))} .fs.touch .views.solo{width:min(100%, calc((100dvh - 14px) * 1.36))} }
+.fs .wrap{padding-block:4px;min-height:100dvh;justify-content:center;box-sizing:border-box}
 @media (orientation:portrait){
   .touch .views{width:min(100%, calc((100dvh - 110px) / 1.45));margin-inline:auto}
   .touch .views.solo{width:100%}
@@ -179,6 +190,7 @@ button:disabled{opacity:.4;cursor:default}
       <canvas id="cv1" width="1088" height="768"></canvas>
     </div>
     <div class="overlay" id="ov"></div>
+    <button id="bmid" class="bmid" aria-label="Pausa">II</button>
   </div>
 
   <div class="rotate" role="dialog" aria-label="Gira el celular">
@@ -2768,6 +2780,7 @@ let solo = false;
 function startGame(m){
   audioOn();
   const duo = m === 'coop' || m === 'versus';
+  document.body.classList.toggle('solomode', !duo);
   document.body.classList.toggle('needland', !duo);
   $('views').classList.toggle('duo', duo);
   if (touchPref && !duo) goLandscape();
@@ -2846,8 +2859,12 @@ function nextRound(){ players.forEach(p => p.lives = 3); initLevel(level + 1); }
 function togglePause(){
   if (state === 'play') {
     state = 'pause';
-    showOverlay(`<div class="card"><h2>PAUSA</h2><div class="row"><button id="bres">CONTINUAR</button><button id="bq">SALIR AL MENÚ</button></div></div>`);
+    const fsb = document.body.classList.contains('fs') && !standalone;
+    showOverlay(`<div class="card"><h2>PAUSA</h2><div class="row"><button id="bres">CONTINUAR</button><button id="bq">SALIR AL MENÚ</button></div>
+      <div class="row sets"><button id="bpsnd" class="${muted ? '' : 'on'}">SONIDO: ${muted ? 'NO' : 'SÍ'}</button>${fsb ? '<button id="bpfs">SALIR DE PANTALLA COMPLETA</button>' : ''}</div></div>`);
     $('bres').onclick = togglePause; $('bq').onclick = menu; onEnter = togglePause;
+    $('bpsnd').onclick = () => { audioOn(); toggleSound(); state = 'play'; togglePause(); };
+    if (fsb) $('bpfs').onclick = () => { toggleFull(); state = 'play'; togglePause(); };
   } else if (state === 'pause') { state = 'play'; hideOverlay(); }
 }
 
@@ -3842,7 +3859,15 @@ function drawExitHint(g, k, ox, oy){
   }
   g.restore();
 }
-function render(){ rpsUpdate(); updateCams(); renderView(0); renderView(1); }
+let shownState = '';
+function render(){
+  if (state !== shownState) {
+    // the middle button pauses while playing; on the menu it moves to the top and leaves full screen
+    shownState = state; document.body.dataset.state = state;
+    $('bmid').textContent = state === 'menu' ? '⤢' : 'II';
+    $('bmid').setAttribute('aria-label', state === 'menu' ? 'Salir de pantalla completa' : 'Pausa');
+  }
+  rpsUpdate(); updateCams(); renderView(0); renderView(1); }
 
 let last = performance.now(), acc = 0;
 function loop(now){
@@ -3964,10 +3989,13 @@ function iosFullHelp(back){
     <div class="row"><button id="bfok">ENTENDIDO</button></div></div>`);
   $('bfok').onclick = back; onEnter = back;
 }
-function syncFull(){ const on = !!fsEl(); const b = $('bfull'); b.innerHTML = on ? 'SALIR<br>COMPLETA' : 'PANT.<br>COMPLETA'; b.classList.toggle('on', on); }
+function syncFull(){ const on = !!fsEl(); document.body.classList.toggle('fs', on || !!standalone); const b = $('bfull'); b.innerHTML = on ? 'SALIR<br>COMPLETA' : 'PANT.<br>COMPLETA'; b.classList.toggle('on', on); }
 $('bfull').onclick = toggleFull;
+// the middle button: pause while playing; on the menu (no top bar there) it leaves full screen
+$('bmid').onclick = () => { if (state === 'play' || state === 'pause') togglePause(); else if (fsEl()) toggleFull(); };
 $('bfull').hidden = !!standalone;
 document.addEventListener('fullscreenchange', syncFull); document.addEventListener('webkitfullscreenchange', syncFull);
+syncFull();
 $('bportrait').onclick = () => document.body.classList.add('portrait-ok');
 $('btouch').onclick = () => setTouch(!document.body.classList.contains('touch'));
 if (touchPref) setTouch(true);

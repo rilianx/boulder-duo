@@ -12,7 +12,7 @@ Solo o contra el PC se juega en **horizontal** (si el celular está en vertical,
 
 ![De a dos en la mesa](docs/mesa.png)
 
-**Pantalla completa:** botón **PANT. COMPLETA** arriba (Android y computador). En iPhone, Safari no lo permite en páginas: hay que agregar el juego a la pantalla de inicio (Compartir → Agregar a inicio) y abrirlo desde ahí, y se abre sin barras.
+**Pantalla completa:** botón **PANT. COMPLETA** arriba (Android y computador). En iPhone, Safari no lo permite en páginas: hay que agregar el juego a la pantalla de inicio (Compartir → Agregar a inicio) y abrirlo desde ahí, y se abre sin barras. En pantalla completa (o abierto desde el ícono de inicio) desaparece la barra de arriba y queda un solo botón redondo al medio, entre los tableros, para pausar; la pausa tiene CONTINUAR, SALIR AL MENÚ, SONIDO y SALIR DE PANTALLA COMPLETA.
 
 La salida está escondida en la fila de abajo del mapa y aparece al juntar las gemas necesarias: suena una fanfarria, sale el aviso «¡SALIDA ABIERTA!» y, si no está en pantalla, una flecha en el borde del tablero apunta hacia ella.
 
