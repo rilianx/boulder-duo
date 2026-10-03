@@ -41,3 +41,31 @@ Niveles 3–4, 15 semillas, 30 partidas por celda. Las referencias corrieron de 
   Ahí el simulador de las referencias encuentra la secuencia por búsqueda.
 - **En 4 juegos nadie gana:** grow, pacman, run y themole.
 - **La diferencia contra los 10 juegos de desarrollo** (61 % contra 57 % y 56 %) mide cuánto del resultado anterior venía de haber diseñado las plantillas mirando esos juegos.
+
+## Después de la prueba: efectos causales y el límite de tiempo (no registrado de antemano)
+
+Doorkoban se miró para diseñar estos cambios, así que este resultado **ya no es una prueba en juegos no vistos**: sirve para ver cuánto cambia, no como afirmación de generalización. Para eso hará falta un sorteo nuevo.
+
+Cambios:
+- plantilla `efectos`: qué desaparece cuando desaparece otra cosa, con medios y fines hacia atrás;
+- `budget.py`: perder en un tick final ya visto antes es el límite de tiempo, no una muerte.
+
+Mismo protocolo: 5 minutos, niveles 3–4, 15 semillas.
+
+| Juego | Antes | Con efectos causales y el arreglo del tiempo | Muertes etiquetadas (antes → ahora) |
+|---|---|---|---|
+| doorkoban | 0 % | **100 %** | (51 → 0 en la prueba de desarrollo) |
+| flower | 100 % | 100 % | |
+| grow | 0 % | 0 % | |
+| ikaruga | 3 % | 0 % | |
+| pacman | 0 % | 0 % | |
+| racebet2 | 0 % | **50 %** (nivel 3: 15/15, nivel 4: 0/15) | 321 → 141 |
+| run | 3 % | 0 % | |
+| themole | 0 % | 0 % | |
+| whackamole | 50 % | 70 % | 379 → 286 |
+| zenpuzzle | 0 % | 0 % | |
+| **Promedio** | **16 %** | **32 %** | |
+
+Referencias: YOLOBOT 44 %, OLETS 32 %.
+
+En racebet2 y whackamole la mejora viene sobre todo de no aprender muertes falsas. Racebet2 se pierde por tiempo, igual que doorkoban. Racebet2 no se miró al diseñar los cambios.
