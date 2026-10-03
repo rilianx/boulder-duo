@@ -33,3 +33,7 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 - un baseline con A\*.
 
 Ver [`rl/README.md`](rl/README.md).
+
+## Puntero Dúo (piloto)
+
+[`puntero-duo/index.html`](puntero-duo/index.html) es un juego hermano, todavía en borrador, sobre listas enlazadas. Tiene estética de cuaderno dibujado a mano. Cada jugador es un puntero (`p` y `q`): toma flechas de los nodos y las engancha en otro nodo. El vacío solo se cruza saltando por una flecha (`p = p.next`), y para volver se usa una pila de pasos. Además, un recolector de basura borra cualquier nodo que se quede 5 segundos sin que nada lo apunte. Trae 6 niveles: buscar, insertar, borrar, push en una pila, cola con head y tail, e invertir una lista.

@@ -1,0 +1,924 @@
+<title>Puntero Dúo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
+<style>
+/* Cuaderno cuadriculado: tablero a la izquierda, hoja de apuntes a la derecha. Un solo look (papel), a propósito. */
+:root{
+  color-scheme: light;
+  --paper:#fbf8ef;        /* hoja */
+  --paper-2:#f3eedf;      /* hoja de apuntes */
+  --grid:#c9dbeb;         /* cuadrícula azul */
+  --graphite:#2e2c2a;     /* lápiz */
+  --soft:#6f6a62;         /* lápiz suave */
+  --margin:#e0726a;       /* margen rojo del cuaderno */
+  --p1:#2350b8;           /* tinta azul (p) */
+  --p1-fill:#c9dbff;
+  --p2:#cf531a;           /* tinta naranja (q) */
+  --p2-fill:#ffd6bf;
+  --note:#ffe27a;         /* post-it */
+  --ok:#2f8a4c;
+  --bad:#c23a32;
+  --display:"Caveat","Comic Sans MS",cursive;
+  --body:"Patrick Hand","Comic Sans MS",system-ui,sans-serif;
+  --code:"Cutive Mono","Courier New",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--body);font-size:18px;line-height:1.3;
+  padding-inline:16px;padding-block:10px;overflow-x:hidden}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:2px solid var(--margin);padding-bottom:6px}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(30px,4vw,44px);margin:0;line-height:1;flex:1;min-width:0;text-wrap:balance}
+h1 .p{color:var(--p1)} h1 .q{color:var(--p2)}
+h1 small{font-family:var(--body);font-weight:400;font-size:16px;color:var(--soft);margin-left:8px}
+.btn{font-family:var(--body);font-size:17px;color:var(--graphite);background:transparent;border:2px solid var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;padding:4px 12px;cursor:pointer}
+.btn:hover{background:var(--note)}
+.btn:focus-visible{outline:3px dashed var(--p1);outline-offset:2px}
+.btn[aria-pressed="false"]{color:var(--soft);border-style:dashed}
+.lvsel{display:flex;align-items:center;gap:6px;font-size:17px}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+.board{position:relative;width:100%;max-width:calc((100vh - 120px) * 18 / 11);margin:0 auto}
+canvas#cv{display:block;width:100%;height:auto;border:2px solid var(--graphite);
+  border-radius:6px 14px 8px 12px / 12px 6px 14px 8px;background:var(--paper);touch-action:none}
+
+.notes{background:var(--paper-2);border-left:2px solid var(--margin);padding:10px 12px 12px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 27px,var(--grid) 27px 28px)}
+.notes h2{font-family:var(--display);font-size:30px;margin:0;line-height:1;text-wrap:balance}
+.notes h3{font-family:var(--display);font-size:22px;margin:0;color:var(--soft);letter-spacing:.02em}
+.notes p{margin:0}
+.intro{font-size:17px}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:3px 4px;font-size:18px;min-height:30px}
+.chip{display:inline-block;min-width:28px;text-align:center;padding:0 6px;border:1.6px solid var(--graphite);background:#fffdf6;
+  border-radius:5px 9px 6px 8px / 8px 5px 9px 6px}
+.chip.lab{background:var(--note);border-color:#b99a2a}
+.chip.hid{color:var(--soft)}
+.ar{color:var(--soft)}
+.nul{font-family:var(--code);font-size:15px;color:var(--soft)}
+.warn{color:var(--bad)}
+.stats{display:flex;gap:18px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.stats b{font-family:var(--display);font-size:26px;font-weight:700}
+.code{font-family:var(--code);font-size:14.5px;line-height:1.45;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
+  padding:6px 8px;height:220px;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.code .c0{color:var(--p1)} .code .c1{color:var(--p2)} .code .gc{color:var(--bad)} .code .cm{color:var(--soft)}
+.stacks{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stk{display:flex;flex-direction:column-reverse;gap:2px;min-height:40px;font-size:15px}
+.stk .lbl{font-size:15px;color:var(--soft)}
+.stk .it{border:1.4px solid currentColor;border-radius:3px 7px 4px 6px;padding:0 6px;background:#fffdf6;width:max-content;max-width:100%}
+.keys{font-size:15px;color:var(--soft);display:grid;grid-template-columns:auto 1fr;gap:2px 8px}
+kbd{font-family:var(--code);font-size:13px;border:1.4px solid var(--soft);border-radius:4px;padding:0 4px;background:#fffdf6;color:var(--graphite)}
+
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.78);padding:16px}
+.card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:18px 22px;max-width:520px;
+  display:flex;flex-direction:column;gap:10px;box-shadow:5px 6px 0 rgba(46,44,42,.18);transform:rotate(-.6deg)}
+.card h2{font-family:var(--display);font-size:clamp(32px,5vw,46px);margin:0;line-height:1;text-wrap:balance}
+.card p{margin:0}
+.card .row{display:flex;gap:10px;flex-wrap:wrap}
+.card .big{font-size:20px;padding:6px 16px}
+.card .keys{color:var(--graphite)}
+.stars{font-size:38px;letter-spacing:4px;color:#d9a400;line-height:1}
+
+.pad{display:none;gap:14px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.pad .dp{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,52px);gap:4px}
+.pad .acts{display:grid;grid-template-columns:repeat(2,auto);gap:6px}
+.pad button{font-family:var(--body);font-size:16px;border:2px solid var(--graphite);background:#fffdf6;border-radius:10px;color:var(--graphite);touch-action:none}
+.pad .acts button{padding:8px 10px}
+@media (pointer:coarse){ .pad{display:flex} }
+
+@media (max-width:900px){
+  .main{grid-template-columns:1fr}
+  .board{max-width:100%}
+}
+@media (prefers-reduced-motion:reduce){ .card{transform:none} }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Puntero <span class="p">D</span><span class="q">ú</span>o <small>piloto · listas enlazadas</small></h1>
+    <div class="lvsel">
+      <button class="btn" id="bprev" aria-label="Nivel anterior">‹</button>
+      <span id="lvnum">Nivel 1/6</span>
+      <button class="btn" id="bnext" aria-label="Nivel siguiente">›</button>
+    </div>
+    <button class="btn" id="breset">Reiniciar</button>
+    <button class="btn" id="bsnd" aria-pressed="true">Sonido</button>
+  </header>
+
+  <div class="main">
+    <div>
+      <div class="board">
+        <canvas id="cv" width="1008" height="616" aria-label="Tablero del juego"></canvas>
+        <div class="overlay" id="ov"></div>
+      </div>
+      <div class="pad" id="pad" aria-label="Controles táctiles del jugador p">
+        <div class="dp">
+          <span></span><button data-k="KeyW">▲</button><span></span>
+          <button data-k="KeyA">◀</button><span></span><button data-k="KeyD">▶</button>
+          <span></span><button data-k="KeyS">▼</button><span></span>
+        </div>
+        <div class="acts">
+          <button data-k="KeyF">Flecha</button><button data-k="KeyE">Avanzar</button>
+          <button data-k="KeyR">Fijar tmp</button><button data-k="KeyQ">Retroceder</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="notes">
+      <h2 id="lvname">—</h2>
+      <p class="intro" id="lvintro"></p>
+      <div><h3>Objetivo</h3><div class="chain" id="goal"></div></div>
+      <div><h3>Ahora</h3><div class="chain" id="now"></div></div>
+      <div class="stats">
+        <span><b id="sops">0</b> asignaciones</span>
+        <span><b id="sjumps">0</b> saltos</span>
+      </div>
+      <div><h3>Lo que hiciste, en código</h3><div class="code" id="log" aria-live="polite"></div></div>
+      <div class="stacks">
+        <div><h3 style="color:var(--p1)">pila de p</h3><div class="stk" id="stk0" style="color:var(--p1)"></div></div>
+        <div><h3 style="color:var(--p2)">pila de q</h3><div class="stk" id="stk1" style="color:var(--p2)"></div></div>
+      </div>
+      <div class="keys">
+        <span style="color:var(--p1)">p</span><span><kbd>WASD</kbd> mover · <kbd>F</kbd> flecha · <kbd>E</kbd> avanzar · <kbd>Q</kbd> retroceder · <kbd>R</kbd> tmp</span>
+        <span style="color:var(--p2)">q</span><span><kbd>Flechas</kbd> mover · <kbd>K</kbd> flecha · <kbd>O</kbd> avanzar · <kbd>U</kbd> retroceder · <kbd>L</kbd> aux</span>
+        <span>·</span><span><kbd>⌫</kbd> reiniciar · <kbd>N</kbd> siguiente · <kbd>M</kbd> sonido</span>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ───────────────────────── configuración ─────────────────────────
+const COLS = 18, ROWS = 11, CS = 56, W = COLS * CS, H = ROWS * CS;
+const GC_TIME = 5;            // segundos que un nodo huérfano sobrevive antes del recolector
+const NW = 46, NH = 32;       // caja de un nodo
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Mapas: '.' papel, '#' vacío, A/B inicio de p/q, H head, T tail, minúsculas = nodos.
+const LEVELS = [
+  { name: 'Buscar el 7', metric: 'jumps', optimal: 3, hidden: true, gc: false,
+    intro: 'Busca el nodo con el 7. Los valores están ocultos hasta que pisas el nodo. El vacío solo se cruza siguiendo una flecha (avanzar: p = p.next). Si llegas a un callejón sin salida, retrocede: cada salto queda guardado en tu pila.',
+    goal: { type: 'reach', val: 7 },
+    map: [
+      '...###############',
+      '...#####...##c####',
+      '.A.#####b..#######',
+      '...#####..x#######',
+      '...###############',
+      '.H.##a############',
+      '...###############',
+      '...###############',
+      '.B.##########y####',
+      '...###############',
+      '...###############'],
+    nodes: { a: 4, b: 1, c: 9, x: 5, y: 7 },
+    links: { H: 'a', a: 'b', b: 'c', x: 'y' } },
+
+  { name: 'Insertar el 2', metric: 'ops', optimal: 2,
+    intro: 'Mete el 2 entre el 1 y el 3. Párate en un nodo y toma su flecha (F); suéltala sobre otro nodo para engancharla. Cuidado: un nodo al que nadie apunta se lo lleva el recolector de basura en 5 segundos.',
+    goal: { type: 'list', head: [1, 2, 3] },
+    map: [
+      '..................',
+      '.A................',
+      '..................',
+      '..................',
+      '..................',
+      '.H...a.....c......',
+      '..................',
+      '..................',
+      '.B......b.........',
+      '..............###.',
+      '.............####.'],
+    nodes: { a: 1, c: 3, b: 2 },
+    links: { H: 'a', a: 'c' } },
+
+  { name: 'Borrar el 13', metric: 'ops', optimal: 1,
+    intro: 'El 13 es un bicho y hay que sacarlo de la lista. Haz que el 2 apunte al 4 y el 13 quedará sin nadie que lo apunte. El recolector hace el resto.',
+    goal: { type: 'list', head: [1, 2, 4] },
+    map: [
+      '..................',
+      '.A................',
+      '..................',
+      '...####...####....',
+      '..................',
+      '.H.a..b...z...d...',
+      '..................',
+      '...####...####....',
+      '..................',
+      '.B................',
+      '..................'],
+    nodes: { a: 1, b: 2, z: { v: 13, bug: true }, d: 4 },
+    links: { H: 'a', a: 'b', b: 'z', z: 'd' } },
+
+  { name: 'Pila: push', metric: 'ops', optimal: 4,
+    intro: 'Una pila es una lista que crece por head. Haz push(8) y después push(9): el nodo nuevo apunta al de arriba y head pasa a apuntar al nuevo. El orden de esas dos asignaciones importa.',
+    goal: { type: 'list', head: [9, 8, 5, 2] },
+    map: [
+      '..................',
+      '.A......H.........',
+      '..................',
+      '..................',
+      '........a.........',
+      '...e..........f...',
+      '..................',
+      '........b.........',
+      '..................',
+      '.B................',
+      '..................'],
+    nodes: { a: 5, b: 2, e: 8, f: 9 },
+    links: { H: 'a', a: 'b' } },
+
+  { name: 'Cola: atender y llegar', metric: 'ops', optimal: 3,
+    intro: 'Una cola tiene dos punteros: head (el primero en salir) y tail (el último en llegar). Atiende al 1 (dequeue) y pon al 4 al final (enqueue).',
+    goal: { type: 'list', head: [2, 3, 4], tail: 4 },
+    map: [
+      '..................',
+      '.A................',
+      '..................',
+      '.H................',
+      '..................',
+      '....a..b..c.......',
+      '..................',
+      '.T............##..',
+      '.............#d...',
+      '.B............##..',
+      '..................'],
+    nodes: { a: 1, b: 2, c: 3, d: 4 },
+    links: { H: 'a', T: 'c', a: 'b', b: 'c' } },
+
+  { name: 'Invertir la lista', metric: 'ops', optimal: 4,
+    intro: 'Deja la lista al revés: head → 3 → 2 → 1. Mientras das vuelta las flechas, algún nodo quedará sin referencia. Fija tu variable temporal (R para tmp, L para aux) sobre él para que el recolector no lo borre.',
+    goal: { type: 'list', head: [3, 2, 1] },
+    map: [
+      '..................',
+      '.A................',
+      '..................',
+      '....###....###....',
+      '..................',
+      '.H...a...b...c....',
+      '..................',
+      '....###....###....',
+      '..................',
+      '.B................',
+      '..................'],
+    nodes: { a: 1, b: 2, c: 3 },
+    links: { H: 'a', a: 'b', b: 'c' } },
+];
+
+const PCOL = [
+  { ink: '#2350b8', fill: '#c9dbff', name: 'p', tmp: 'tmp' },
+  { ink: '#cf531a', fill: '#ffd6bf', name: 'q', tmp: 'aux' },
+];
+
+// ───────────────────────── utilidades ─────────────────────────
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = W * DPR; cv.height = H * DPR;
+  paperLayer = null;
+}
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return ((n >>> 0) % 10000) / 5000 - 1; }
+let boil = 0;  // cambia unas 5 veces por segundo: la línea "hierve" como en animación a mano
+const J = (seed, amp) => hash(seed * 7919 + boil * 104729) * amp;
+const cx = c => c * CS + CS / 2;
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// ───────────────────────── trazos a mano ─────────────────────────
+function rLine(x1, y1, x2, y2, seed, amp = 1.3, passes = 2) {
+  for (let p = 0; p < passes; p++) {
+    const s = seed * 13 + p * 5;
+    const mx = (x1 + x2) / 2 + J(s, amp * 1.5), my = (y1 + y2) / 2 + J(s + 1, amp * 1.5);
+    ctx.beginPath();
+    ctx.moveTo(x1 + J(s + 2, amp), y1 + J(s + 3, amp));
+    ctx.quadraticCurveTo(mx, my, x2 + J(s + 4, amp), y2 + J(s + 5, amp));
+    ctx.stroke();
+  }
+}
+function rRect(x, y, w, h, seed, amp) {
+  rLine(x, y, x + w, y, seed, amp); rLine(x + w, y, x + w, y + h, seed + 1, amp);
+  rLine(x + w, y + h, x, y + h, seed + 2, amp); rLine(x, y + h, x, y, seed + 3, amp);
+}
+function rCircle(x, y, r, seed, fill) {
+  const n = 22;
+  ctx.beginPath();
+  for (let i = 0; i <= n + 2; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.3;
+    const rr = r + J(seed + i, r * 0.07);
+    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+  }
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  ctx.stroke();
+}
+function bend(x1, y1, x2, y2, k = 0.2) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1;
+  return { x: mx - dy * k, y: my + dx * k };
+}
+function qPoint(a, c, b, t) {
+  const u = 1 - t;
+  return { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y };
+}
+function rArrow(a, b, seed, color, width, head = true) {
+  const c = bend(a.x, a.y, b.x, b.y);
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (let p = 0; p < 2; p++) {
+    ctx.beginPath();
+    ctx.moveTo(a.x + J(seed + p, 1), a.y + J(seed + p + 9, 1));
+    ctx.quadraticCurveTo(c.x + J(seed + p + 3, 3), c.y + J(seed + p + 4, 3), b.x, b.y);
+    ctx.stroke();
+  }
+  if (!head) return;
+  const t = qPoint(a, c, b, 0.9), ang = Math.atan2(b.y - t.y, b.x - t.x), L = 12;
+  rLine(b.x, b.y, b.x - Math.cos(ang - 0.45) * L, b.y - Math.sin(ang - 0.45) * L, seed + 20, 0.8, 1);
+  rLine(b.x, b.y, b.x - Math.cos(ang + 0.45) * L, b.y - Math.sin(ang + 0.45) * L, seed + 21, 0.8, 1);
+}
+// punto donde una flecha entra a la caja de un nodo
+function clipToBox(from, ent) {
+  const c = { x: cx(ent.x), y: cx(ent.y) };
+  const ctrl = bend(from.x, from.y, c.x, c.y);
+  let dx = c.x - ctrl.x, dy = c.y - ctrl.y;
+  const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  const hw = (ent.kind === 'node' ? NW : 52) / 2 + 2, hh = NH / 2 + 2;
+  const t = Math.min(Math.abs(dx) > 1e-6 ? hw / Math.abs(dx) : 1e9, Math.abs(dy) > 1e-6 ? hh / Math.abs(dy) : 1e9);
+  return { x: c.x - dx * t, y: c.y - dy * t };
+}
+function dotOf(ent) {
+  return ent.kind === 'node' ? { x: cx(ent.x) + NW / 2 - 8, y: cx(ent.y) } : { x: cx(ent.x) + 18, y: cx(ent.y) + 2 };
+}
+
+// ───────────────────────── sonido ─────────────────────────
+let AC = null, soundOn = true;
+function beep(f, d = 0.08, type = 'triangle', v = 0.06, slide = 0) {
+  if (!soundOn) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
+  } catch (e) {}
+}
+function scratch(d = 0.12, v = 0.05) {
+  if (!soundOn) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const n = Math.floor(AC.sampleRate * d), buf = AC.createBuffer(1, n, AC.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+    f.type = 'bandpass'; f.frequency.value = 2400; g.gain.value = v;
+    s.buffer = buf; s.connect(f).connect(g).connect(AC.destination); s.start();
+  } catch (e) {}
+}
+const SFX = {
+  grab: () => beep(520, 0.07, 'triangle', 0.06, 1.4),
+  hook: () => { scratch(0.09); beep(660, 0.09, 'triangle', 0.05, 1.2); },
+  nul:  () => beep(300, 0.12, 'square', 0.03, 0.6),
+  jump: () => beep(380, 0.25, 'sine', 0.06, 2.2),
+  back: () => beep(700, 0.22, 'sine', 0.05, 0.5),
+  bump: () => beep(140, 0.08, 'square', 0.03),
+  pin:  () => beep(880, 0.05, 'triangle', 0.05),
+  gc:   () => scratch(0.35, 0.09),
+  win:  () => { [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.06), i * 110)); },
+  lose: () => { [392, 330, 262].forEach((f, i) => setTimeout(() => beep(f, 0.2, 'sawtooth', 0.03), i * 140)); },
+};
+
+// ───────────────────────── estado ─────────────────────────
+let mode = 0;            // 1 o 2 jugadores; 0 = menú
+let LV = 0, S = null;
+function nodeName(n) {
+  if (!n) return 'null';
+  if (n.kind === 'label') return n.name;
+  return (S.hidden && !n.revealed) ? 'n?' : 'n' + n.v;
+}
+
+function loadLevel(i) {
+  LV = (i + LEVELS.length) % LEVELS.length;
+  const L = LEVELS[LV];
+  S = { grid: [], ents: [], byCh: {}, players: [], hidden: !!L.hidden, ops: 0, jumps: 0, log: [],
+        state: 'play', parts: [], msg: null, failMsg: '', t: 0, level: L };
+  for (let r = 0; r < ROWS; r++) {
+    S.grid.push([]);
+    for (let c = 0; c < COLS; c++) {
+      const ch = L.map[r][c] || '#';
+      S.grid[r].push(ch === '#' ? 1 : 0);
+      let e = null;
+      if (ch === 'H' || ch === 'T') e = { kind: 'label', name: ch === 'H' ? 'head' : 'tail', x: c, y: r, next: null, id: S.ents.length + 1 };
+      else if (/[a-z]/.test(ch)) {
+        const d = L.nodes[ch], v = typeof d === 'object' ? d.v : d;
+        e = { kind: 'node', v, bug: typeof d === 'object' && d.bug, x: c, y: r, next: null, orphan: 0, revealed: !L.hidden, id: S.ents.length + 1 };
+      } else if (ch === 'A' || ch === 'B') {
+        const k = ch === 'A' ? 0 : 1;
+        if (k === 0 || mode === 2) S.players[k] = makePlayer(k, c, r);
+      }
+      if (e) { S.ents.push(e); S.byCh[ch] = e; }
+    }
+  }
+  for (const [from, to] of Object.entries(L.links)) S.byCh[from].next = S.byCh[to];
+  S.players = S.players.filter(Boolean);
+  // Un nodo que nada apunta al empezar es uno recién creado: lo sostiene la variable `nuevo`
+  // hasta que alguna flecha lo apunte.
+  const pointed = new Set(S.ents.map(e => e.next));
+  for (const e of S.ents) if (e.kind === 'node' && !pointed.has(e) && L.gc !== false) e.fresh = true;
+  S.required = L.goal.type === 'reach' ? [L.goal.val] : L.goal.head.slice();
+  voidLayers = null;
+  addLog('// ' + L.name, 'cm');
+  for (const e of S.ents) if (e.fresh) addLog(`nuevo${e.v} = new Nodo(${e.v});`, 'cm');
+  renderPanel();
+  showOverlay(null);
+}
+function makePlayer(k, x, y) {
+  return { k, x, y, rx: cx(x), ry: cx(y), dir: { x: 1, y: 0 }, carry: null, carryOld: null, pin: null, stack: [],
+           fly: null, cool: 0, say: null, shake: 0, bob: Math.random() * 6 };
+}
+const entAt = (x, y) => S.ents.find(e => e.x === x && e.y === y && !e.dead) || null;
+const alive = e => e && !e.dead;
+
+// ───────────────────────── registro de código ─────────────────────────
+function addLog(txt, cls) {
+  S.log.push({ txt, cls }); if (S.log.length > 60) S.log.shift();
+  const el = $('log');
+  el.innerHTML = S.log.map(l => `<div class="${l.cls}">${l.txt.replace(/</g, '&lt;')}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function say(p, text, bad = true) {
+  p.say = { text, t: 2.2 }; if (bad) { p.shake = 0.3; SFX.bump(); }
+}
+
+// ───────────────────────── acciones ─────────────────────────
+function standingOn(p) { return p.fly ? null : entAt(p.x, p.y); }
+
+function actGrab(p) {
+  const e = standingOn(p), who = 'c' + p.k;
+  if (p.carry) {
+    const src = p.carry;
+    if (e === src) {                          // cancelar: la flecha vuelve a donde estaba
+      src.next = alive(p.carryOld) ? p.carryOld : null; src.carriedBy = null; p.carry = null; p.carryOld = null;
+      say(p, 'flecha devuelta', false); SFX.pin(); return;
+    }
+    if (e && e.kind === 'label') { say(p, 'una flecha solo puede apuntar a un nodo'); return; }
+    src.next = e || null; src.carriedBy = null; if (e) e.fresh = false; p.carry = null; p.carryOld = null;
+    S.ops++;
+    addLog(`${nodeName(src)}${src.kind === 'node' ? '.next' : ''} = ${nodeName(e)};`, who);
+    e ? SFX.hook() : SFX.nul();
+    renderPanel(); return;
+  }
+  if (!e) { say(p, 'párate sobre un nodo para tomar su flecha'); return; }
+  if (e.carriedBy) { say(p, 'esa flecha ya la lleva ' + PCOL[e.carriedBy.k].name); return; }
+  p.carry = e; p.carryOld = e.next; e.next = null; e.carriedBy = p;
+  SFX.grab(); renderPanel();
+}
+
+function flyTo(p, target) {
+  const a = { x: p.rx, y: p.ry }, b = { x: cx(target.x), y: cx(target.y) - 28 };
+  p.fly = { a, b, c: bend(a.x, a.y, b.x, b.y), t: 0, to: target };
+  p.dir = { x: Math.sign(target.x - p.x) || p.dir.x, y: 0 };
+}
+function actAdvance(p) {
+  const e = standingOn(p);
+  if (!e) { say(p, 'para avanzar párate en un nodo'); return; }
+  if (e.carriedBy) { say(p, 'la flecha de este nodo está en la mano de ' + PCOL[e.carriedBy.k].name); return; }
+  if (!e.next) { say(p, (e.kind === 'label' ? e.name : PCOL[p.k].name + '.next') + ' es null'); SFX.nul(); return; }
+  p.stack.push(e);
+  addLog(e.kind === 'label' ? `${PCOL[p.k].name} = ${e.name};` : `${PCOL[p.k].name} = ${PCOL[p.k].name}.next;`, 'c' + p.k);
+  flyTo(p, e.next); S.jumps++; SFX.jump(); renderPanel();
+}
+function actBack(p) {
+  if (p.fly) return;
+  while (p.stack.length && !alive(p.stack[p.stack.length - 1])) p.stack.pop();
+  if (!p.stack.length) { say(p, 'tu pila está vacía'); return; }
+  const t = p.stack.pop();
+  addLog(`${PCOL[p.k].name} = pila.pop();`, 'c' + p.k);
+  flyTo(p, t); S.jumps++; SFX.back(); renderPanel();
+}
+function actPin(p) {
+  const e = standingOn(p), nm = PCOL[p.k].tmp;
+  if (e && e.kind === 'node') {
+    if (p.pin === e) { p.pin = null; addLog(`${nm} = null;`, 'c' + p.k); }
+    else { p.pin = e; addLog(`${nm} = ${nodeName(e)};`, 'c' + p.k); }
+    SFX.pin(); renderPanel(); return;
+  }
+  if (p.pin) { p.pin = null; addLog(`${nm} = null;`, 'c' + p.k); SFX.pin(); renderPanel(); return; }
+  say(p, `párate en un nodo para fijar ${nm}`);
+}
+function tryMove(p, dx, dy) {
+  if (p.fly) return;
+  p.dir = { x: dx, y: dy };
+  const nx = p.x + dx, ny = p.y + dy;
+  if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS || S.grid[ny][nx]) { p.shake = 0.15; SFX.bump(); return; }
+  p.x = nx; p.y = ny; scratch(0.03, 0.015);
+}
+
+// ───────────────────────── recolector y reglas ─────────────────────────
+function collect(dt) {
+  const roots = [];
+  for (const e of S.ents) { if (e.kind === 'label' && e.next) roots.push(e.next); if (e.fresh && !e.dead) roots.push(e); }
+  for (const p of S.players) {
+    if (p.pin) roots.push(p.pin);
+    if (p.carry && p.carry.kind === 'node') roots.push(p.carry);
+    const on = p.fly ? p.fly.to : entAt(p.x, p.y);
+    if (on && on.kind === 'node') roots.push(on);
+  }
+  const seen = new Set(), q = roots.filter(alive);
+  while (q.length) { const n = q.pop(); if (seen.has(n)) continue; seen.add(n); if (alive(n.next)) q.push(n.next); }
+  for (const n of S.ents) {
+    if (n.kind !== 'node' || n.dead) continue;
+    if (seen.has(n)) { n.orphan = 0; continue; }
+    n.orphan += dt;
+    if (n.orphan >= GC_TIME) freeNode(n);
+  }
+}
+function freeNode(n) {
+  n.dead = true; SFX.gc();
+  for (const e of S.ents) if (e.next === n) e.next = null;
+  for (const p of S.players) { if (p.pin === n) p.pin = null; if (p.carryOld === n) p.carryOld = null; }
+  for (let i = 0; i < 26; i++) S.parts.push({ x: cx(n.x) + (Math.random() - .5) * NW, y: cx(n.y) + (Math.random() - .5) * NH,
+    vx: (Math.random() - .5) * 120, vy: -Math.random() * 90, t: 0.9 + Math.random() * 0.5, kind: 'crumb' });
+  addLog(`// recolector: ${nodeName(n)} liberado (nadie lo apuntaba)`, 'gc');
+  if (S.required.includes(n.v)) {
+    S.failMsg = `Se perdió el nodo ${n.v}. Durante ${GC_TIME} segundos nadie lo apuntó: ni una flecha, ni head, ni un jugador encima, ni tmp/aux. El recolector de basura lo borró.`;
+    S.state = 'lost'; SFX.lose(); setTimeout(() => showOverlay('lost'), 500);
+  }
+  renderPanel();
+}
+function chainFrom(label) {
+  const out = []; const seen = new Set(); let n = label ? label.next : null;
+  if (label && label.carriedBy) return { items: out, end: 'en la mano de ' + PCOL[label.carriedBy.k].name };
+  while (n && !seen.has(n)) {
+    seen.add(n); out.push(n);
+    if (n.carriedBy) return { items: out, end: 'flecha en la mano' };
+    n = n.next;
+  }
+  return { items: out, end: n ? 'ciclo ↺ ' + nodeName(n) : 'null' };
+}
+function checkWin() {
+  if (S.state !== 'play') return;
+  const G = S.level.goal;
+  if (S.players.some(p => p.carry || p.fly)) return;
+  let ok = false;
+  if (G.type === 'reach') {
+    ok = S.players.some(p => { const e = entAt(p.x, p.y); return e && e.kind === 'node' && e.v === G.val; });
+  } else {
+    const head = S.ents.find(e => e.name === 'head'), ch = chainFrom(head);
+    ok = ch.end === 'null' && ch.items.length === G.head.length && ch.items.every((n, i) => n.v === G.head[i]);
+    if (ok && G.tail != null) { const tail = S.ents.find(e => e.name === 'tail'); ok = tail && tail.next && tail.next.v === G.tail; }
+  }
+  if (ok) {
+    S.state = 'won'; SFX.win();
+    for (let i = 0; i < 40; i++) S.parts.push({ x: W / 2, y: H / 2, vx: (Math.random() - .5) * 600, vy: (Math.random() - .7) * 500, t: 1.4, kind: 'star' });
+    setTimeout(() => showOverlay('won'), 650);
+  }
+}
+
+// ───────────────────────── panel lateral ─────────────────────────
+function chipsHTML(list, labelName, end) {
+  let h = labelName ? `<span class="chip lab">${labelName}</span>` : '';
+  for (const x of list) h += `<span class="ar">→</span>` + (x === '?' ? `<span class="chip hid">?</span>` : `<span class="chip">${x}</span>`);
+  return h + `<span class="ar">→</span><span class="nul${end !== 'null' ? ' warn' : ''}">${end}</span>`;
+}
+function renderPanel() {
+  const L = S.level;
+  $('lvname').textContent = `${LV + 1}. ${L.name}`;
+  $('lvintro').textContent = L.intro;
+  $('lvnum').textContent = `Nivel ${LV + 1}/${LEVELS.length}`;
+  if (L.goal.type === 'reach') {
+    $('goal').innerHTML = `<span>pararte sobre el nodo</span> <span class="chip">${L.goal.val}</span>`;
+    const found = S.ents.filter(e => e.kind === 'node' && e.revealed && !e.dead).map(e => e.v);
+    $('now').innerHTML = found.length ? `<span>vistos:</span> ` + found.map(v => `<span class="chip">${v}</span>`).join(' ') : '<span class="nul">aún no pisas ningún nodo</span>';
+  } else {
+    let g = chipsHTML(L.goal.head, 'head', 'null');
+    if (L.goal.tail != null) g += `<span style="width:100%"></span><span class="chip lab">tail</span><span class="ar">→</span><span class="chip">${L.goal.tail}</span>`;
+    $('goal').innerHTML = g;
+    const head = S.ents.find(e => e.name === 'head'), ch = chainFrom(head);
+    let n = chipsHTML(ch.items.map(x => x.v), 'head', ch.end);
+    const tail = S.ents.find(e => e.name === 'tail');
+    if (tail) n += `<span style="width:100%"></span><span class="chip lab">tail</span><span class="ar">→</span>` +
+      (tail.carriedBy ? `<span class="nul warn">en la mano</span>` : tail.next ? `<span class="chip">${tail.next.v}</span>` : `<span class="nul">null</span>`);
+    $('now').innerHTML = n;
+  }
+  $('sops').textContent = S.ops; $('sjumps').textContent = S.jumps;
+  for (let k = 0; k < 2; k++) {
+    const p = S.players[k];
+    $('stk' + k).innerHTML = !p ? '<span class="lbl">(sin jugador)</span>'
+      : p.stack.length ? p.stack.map(e => `<span class="it">${alive(e) ? nodeName(e) : '✗'}</span>`).join('') : '<span class="lbl">vacía</span>';
+  }
+}
+
+// ───────────────────────── tarjetas ─────────────────────────
+const KEYS_HTML = `<div class="keys">
+  <span style="color:var(--p1)">p</span><span><kbd>WASD</kbd> mover · <kbd>F</kbd> tomar/enganchar flecha · <kbd>E</kbd> avanzar · <kbd>Q</kbd> retroceder · <kbd>R</kbd> fijar tmp</span>
+  <span style="color:var(--p2)">q</span><span><kbd>Flechas</kbd> mover · <kbd>K</kbd> flecha · <kbd>O</kbd> avanzar · <kbd>U</kbd> retroceder · <kbd>L</kbd> fijar aux</span></div>`;
+function showOverlay(kind) {
+  const ov = $('ov');
+  if (!kind) { ov.hidden = true; ov.innerHTML = ''; return; }
+  ov.hidden = false;
+  if (kind === 'menu') {
+    ov.innerHTML = `<div class="card">
+      <h2>Puntero <span style="color:var(--p1)">D</span><span style="color:var(--p2)">ú</span>o</h2>
+      <p>Tú eres un puntero. Camina por la hoja, toma flechas de los nodos y engánchalas donde corresponda. El vacío solo se cruza saltando por una flecha. Y ojo con el recolector de basura: lo que nadie apunta, desaparece.</p>
+      ${KEYS_HTML}
+      <div class="row"><button class="btn big" id="m1">1 jugador</button><button class="btn big" id="m2">2 jugadores (cooperativo)</button></div>
+    </div>`;
+    $('m1').onclick = () => start(1); $('m2').onclick = () => start(2); $('m1').focus();
+  } else if (kind === 'won') {
+    const L = S.level, val = L.metric === 'ops' ? S.ops : S.jumps, unit = L.metric === 'ops' ? 'asignaciones' : 'saltos';
+    const stars = val <= L.optimal ? 3 : val <= L.optimal + 2 ? 2 : 1;
+    const last = LV === LEVELS.length - 1;
+    ov.innerHTML = `<div class="card">
+      <h2>${L.goal.type === 'reach' ? '¡Lo encontraste!' : '¡Lista correcta!'}</h2>
+      <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+      <p>Usaste <b>${val}</b> ${unit}. Lo mínimo es <b>${L.optimal}</b>.</p>
+      ${last ? '<p>Terminaste el piloto. Faltan pilas con pop, tablas hash, árboles y listas dobles.</p>' : ''}
+      <div class="row"><button class="btn big" id="wn">${last ? 'Volver al nivel 1' : 'Siguiente nivel (N)'}</button><button class="btn big" id="wr">Repetir</button></div>
+    </div>`;
+    $('wn').onclick = () => loadLevel(LV + 1); $('wr').onclick = () => loadLevel(LV); $('wn').focus();
+  } else if (kind === 'lost') {
+    ov.innerHTML = `<div class="card">
+      <h2 style="color:var(--bad)">Memory leak</h2>
+      <p>${S.failMsg}</p>
+      <p>Pista: engancha primero la flecha que conserva el resto de la lista, o fija tu variable temporal sobre el nodo antes de soltarlo.</p>
+      <div class="row"><button class="btn big" id="lr">Reintentar (⌫)</button></div>
+    </div>`;
+    $('lr').onclick = () => loadLevel(LV); $('lr').focus();
+  }
+}
+function start(m) { mode = m; loadLevel(LV); }
+
+// ───────────────────────── entrada ─────────────────────────
+const held = new Set();
+const MOVE = [
+  { KeyW: [0, -1], KeyS: [0, 1], KeyA: [-1, 0], KeyD: [1, 0] },
+  { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] },
+];
+const ACT = [
+  { KeyF: actGrab, KeyE: actAdvance, KeyQ: actBack, KeyR: actPin },
+  { KeyK: actGrab, KeyO: actAdvance, KeyU: actBack, KeyL: actPin },
+];
+function playerFor(k) { return mode === 1 ? S.players[0] : S.players[k]; }
+function keyDown(code, repeat) {
+  if (code === 'KeyM') { toggleSound(); return true; }
+  if (mode === 0) return false;
+  if (code === 'Backspace') { loadLevel(LV); return true; }
+  if (S.state === 'won' && (code === 'KeyN' || code === 'Enter')) { loadLevel(LV + 1); return true; }
+  if (S.state === 'lost' && code === 'Enter') { loadLevel(LV); return true; }
+  if (S.state !== 'play') return false;
+  for (let k = 0; k < 2; k++) {
+    if (MOVE[k][code]) { held.add(code); const p = playerFor(k); if (p && !repeat) { const [dx, dy] = MOVE[k][code]; tryMove(p, dx, dy); p.cool = 0.22; } return true; }
+    if (ACT[k][code]) { const p = playerFor(k); if (p && !repeat) ACT[k][code](p); return true; }
+  }
+  return false;
+}
+addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('button') && (e.code === 'Enter' || e.code === 'Space')) return;
+  if (keyDown(e.code, e.repeat)) e.preventDefault();
+});
+addEventListener('keyup', e => held.delete(e.code));
+addEventListener('blur', () => held.clear());
+document.querySelectorAll('#pad button').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); keyDown(b.dataset.k, false); });
+  b.addEventListener('pointerup', () => held.delete(b.dataset.k));
+  b.addEventListener('pointerleave', () => held.delete(b.dataset.k));
+});
+function toggleSound() { soundOn = !soundOn; $('bsnd').setAttribute('aria-pressed', soundOn); }
+$('bsnd').onclick = toggleSound;
+$('breset').onclick = () => { if (mode) loadLevel(LV); };
+$('bprev').onclick = () => { if (mode) loadLevel(LV - 1); else { LV = (LV + LEVELS.length - 1) % LEVELS.length; previewLevel(); } };
+$('bnext').onclick = () => { if (mode) loadLevel(LV + 1); else { LV = (LV + 1) % LEVELS.length; previewLevel(); } };
+
+// ───────────────────────── bucle ─────────────────────────
+function update(dt) {
+  S.t += dt;
+  for (const p of S.players) {
+    p.bob += dt * 5; p.shake = Math.max(0, p.shake - dt);
+    if (p.say) { p.say.t -= dt; if (p.say.t <= 0) p.say = null; }
+    if (p.fly) {
+      p.fly.t += dt / 0.42;
+      const t = Math.min(1, p.fly.t), e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const q = qPoint(p.fly.a, p.fly.c, p.fly.b, e); p.rx = q.x; p.ry = q.y;
+      if (t >= 1) { p.x = p.fly.to.x; p.y = p.fly.to.y; p.fly = null; renderPanel(); }
+      continue;
+    }
+    if (S.state === 'play') {
+      p.cool -= dt;
+      const k = mode === 1 ? -1 : p.k;
+      for (let m = 0; m < 2; m++) {
+        if (k !== -1 && m !== k) continue;
+        for (const [code, [dx, dy]] of Object.entries(MOVE[m])) if (held.has(code) && p.cool <= 0) { tryMove(p, dx, dy); p.cool = 0.12; }
+      }
+    }
+    const on = entAt(p.x, p.y);
+    if (on && on.kind === 'node' && !on.revealed) { on.revealed = true; renderPanel(); }
+    const tx = cx(p.x), ty = cx(p.y) - (on ? 28 : 0);
+    p.rx = lerp(p.rx, tx, Math.min(1, dt * 16)); p.ry = lerp(p.ry, ty, Math.min(1, dt * 16));
+  }
+  for (const q of S.parts) { q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 300 * dt; }
+  S.parts = S.parts.filter(q => q.t > 0);
+  if (S.state === 'play') { if (S.level.gc !== false) collect(dt); checkWin(); }
+}
+
+// ───────────────────────── dibujo ─────────────────────────
+let paperLayer = null, voidLayers = null;
+function makeLayer(draw) {
+  const c = document.createElement('canvas'); c.width = W * DPR; c.height = H * DPR;
+  const g = c.getContext('2d'); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const old = ctx; draw(g); return c;
+}
+function buildPaper() {
+  paperLayer = makeLayer(g => {
+    g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = '#c9dbeb'; g.lineWidth = 1;
+    for (let x = 0; x <= W; x += CS / 2) { g.globalAlpha = x % CS ? .45 : .9; g.beginPath(); g.moveTo(x + .5, 0); g.lineTo(x + .5, H); g.stroke(); }
+    for (let y = 0; y <= H; y += CS / 2) { g.globalAlpha = y % CS ? .45 : .9; g.beginPath(); g.moveTo(0, y + .5); g.lineTo(W, y + .5); g.stroke(); }
+    g.globalAlpha = 1;
+    // mancha de café
+    g.strokeStyle = 'rgba(160,110,50,.18)'; g.lineWidth = 5;
+    g.beginPath(); g.arc(W - 70, H - 64, 38, 0.3, Math.PI * 1.85); g.stroke();
+    g.lineWidth = 2; g.beginPath(); g.arc(W - 66, H - 60, 33, 2, Math.PI * 2.6); g.stroke();
+  });
+}
+function buildVoid() {
+  voidLayers = [];
+  const saved = ctx;
+  for (let b = 0; b < 3; b++) {
+    voidLayers.push(makeLayer(g => {
+      const hb = (s, a) => hash(s * 7919 + b * 104729) * a;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (!S.grid[r][c]) continue;
+        const x = c * CS, y = r * CS, s = r * 97 + c * 13;
+        g.fillStyle = 'rgba(46,44,42,.07)'; g.fillRect(x, y, CS, CS);
+        g.save(); g.beginPath(); g.rect(x, y, CS, CS); g.clip();
+        g.strokeStyle = 'rgba(46,44,42,.32)'; g.lineWidth = 1.2; g.lineCap = 'round';
+        for (let i = -CS; i < CS; i += 8) {
+          g.beginPath();
+          g.moveTo(x + i + hb(s + i, 1.5), y + CS + hb(s + i + 1, 1.5));
+          g.quadraticCurveTo(x + i + CS / 2 + hb(s + i + 2, 2.5), y + CS / 2, x + i + CS + hb(s + i + 3, 1.5), y + hb(s + i + 4, 1.5));
+          g.stroke();
+        }
+        g.restore();
+        // borde a lápiz donde el vacío toca papel
+        g.strokeStyle = '#2e2c2a'; g.lineWidth = 2;
+        const edge = (x1, y1, x2, y2, k) => { g.beginPath(); g.moveTo(x1 + hb(k, 1.2), y1 + hb(k + 1, 1.2)); g.lineTo(x2 + hb(k + 2, 1.2), y2 + hb(k + 3, 1.2)); g.stroke(); };
+        const fl = (cc, rr) => cc >= 0 && rr >= 0 && cc < COLS && rr < ROWS && !S.grid[rr][cc];
+        if (fl(c, r - 1)) edge(x, y, x + CS, y, s + 1);
+        if (fl(c, r + 1)) edge(x, y + CS, x + CS, y + CS, s + 2);
+        if (fl(c - 1, r)) edge(x, y, x, y + CS, s + 3);
+        if (fl(c + 1, r)) edge(x + CS, y, x + CS, y + CS, s + 4);
+      }
+    }));
+  }
+}
+
+function drawLabel(e) {
+  const x = cx(e.x), y = cx(e.y), w = 54, h = 30;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-0.05);
+  ctx.fillStyle = '#ffe27a'; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.fillStyle = 'rgba(0,0,0,.06)'; ctx.fillRect(-w / 2, h / 2 - 5, w, 5);
+  ctx.strokeStyle = '#8a7420'; ctx.lineWidth = 1.4; rRect(-w / 2, -h / 2, w, h, e.id * 31, 0.8);
+  ctx.fillStyle = '#2e2c2a'; ctx.font = '19px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(e.name, -5, 1);
+  ctx.restore();
+  const d = dotOf(e);
+  ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(d.x, d.y, 3.4, 0, 7); ctx.fill();
+}
+function drawNode(e) {
+  let x = cx(e.x), y = cx(e.y);
+  const orph = e.orphan > 0 ? e.orphan / GC_TIME : 0;
+  if (orph) { x += Math.sin(S.t * 40) * 2 * orph; }
+  ctx.save(); ctx.globalAlpha = 1 - orph * 0.65;
+  const L = x - NW / 2, T = y - NH / 2, vw = NW - 16;
+  ctx.fillStyle = '#fffdf6'; ctx.fillRect(L, T, NW, NH);
+  ctx.strokeStyle = e.bug ? '#c23a32' : '#2e2c2a'; ctx.lineWidth = 2;
+  rRect(L, T, NW, NH, e.id * 17, 1);
+  rLine(L + vw, T, L + vw, T + NH, e.id * 17 + 9, 0.8, 1);
+  ctx.fillStyle = e.bug ? '#c23a32' : '#2e2c2a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '25px "Patrick Hand", sans-serif';
+  ctx.fillText(e.revealed ? String(e.v) : '?', L + vw / 2, y + 2);
+  // casilla next: punto si apunta, tachado si es null
+  const d = dotOf(e);
+  if (e.next || e.carriedBy) { ctx.beginPath(); ctx.arc(d.x, d.y, 3.4, 0, 7); ctx.fill(); }
+  else { ctx.lineWidth = 1.6; rLine(L + vw + 2, T + NH - 3, L + NW - 2, T + 3, e.id * 5, 0.7, 1); }
+  if (e.bug) drawBug(L + NW - 2, T - 6);
+  if (e.fresh) { ctx.font = '15px "Patrick Hand", sans-serif'; ctx.fillStyle = '#6f6a62'; ctx.fillText('nuevo', x, T - 9); }
+  ctx.restore();
+  if (orph) {
+    ctx.strokeStyle = '#c23a32'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y - NH / 2 - 14, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - orph)); ctx.stroke();
+    ctx.fillStyle = '#c23a32'; ctx.font = '16px "Patrick Hand", sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('sin referencia', x, y + NH / 2 + 13);
+  }
+}
+function drawBug(x, y) {
+  ctx.save(); ctx.strokeStyle = '#c23a32'; ctx.fillStyle = '#f2b3a9'; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(x, y, 6, 8, 0.4, 0, 7); ctx.fill(); ctx.stroke();
+  for (const s of [-1, 1]) for (const k of [-4, 0, 4]) { ctx.beginPath(); ctx.moveTo(x + s * 4, y + k); ctx.lineTo(x + s * 9, y + k - 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(x - 2, y - 7); ctx.lineTo(x - 5, y - 12); ctx.moveTo(x + 2, y - 7); ctx.lineTo(x + 5, y - 12); ctx.stroke();
+  ctx.restore();
+}
+function drawPin(p) {
+  const e = p.pin; if (!alive(e)) return;
+  const col = PCOL[p.k], x = cx(e.x) - NW / 2 + 4 + p.k * 10, y = cx(e.y) - NH / 2 - 2;
+  ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 3, y + 9); ctx.stroke();
+  ctx.fillStyle = col.ink; ctx.beginPath(); ctx.arc(x, y - 3, 5, 0, 7); ctx.fill();
+  ctx.font = '15px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(col.tmp, x - 2, y - 13 - p.k * 0);
+}
+function drawPlayer(p) {
+  const col = PCOL[p.k];
+  const sh = p.shake ? Math.sin(p.shake * 80) * 3 : 0;
+  const bob = p.fly ? 0 : Math.sin(p.bob) * 1.5;
+  const x = p.rx + sh, y = p.ry + bob;
+  // sombra
+  ctx.fillStyle = 'rgba(46,44,42,.13)'; ctx.beginPath(); ctx.ellipse(x, (p.fly ? p.ry + 26 : y + 17), 13, 4, 0, 0, 7); ctx.fill();
+  // patitas
+  ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
+  const st = p.fly ? 0 : Math.sin(p.bob * 1.6) * 2;
+  rLine(x - 5, y + 10, x - 7 - st, y + 17, p.k * 50 + 1, 0.5, 1);
+  rLine(x + 5, y + 10, x + 7 + st, y + 17, p.k * 50 + 2, 0.5, 1);
+  // cuerpo
+  ctx.lineWidth = 2.4; rCircle(x, y, 15, p.k * 50 + 3, col.fill);
+  // punta de flecha en la cabeza, hacia donde mira
+  const a = Math.atan2(p.dir.y, p.dir.x);
+  const hx = x + Math.cos(a) * 15, hy = y + Math.sin(a) * 15;
+  ctx.fillStyle = col.ink; ctx.beginPath();
+  ctx.moveTo(hx + Math.cos(a) * 10, hy + Math.sin(a) * 10);
+  ctx.lineTo(hx + Math.cos(a + 2.2) * 7, hy + Math.sin(a + 2.2) * 7);
+  ctx.lineTo(hx + Math.cos(a - 2.2) * 7, hy + Math.sin(a - 2.2) * 7);
+  ctx.closePath(); ctx.fill();
+  // ojos
+  const ex = p.dir.x * 3, ey = p.dir.y * 3;
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(x + s * 5 + ex * 0.4, y - 3 + ey * 0.4, 4, 5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + s * 5 + ex, y - 3 + ey, 2, 0, 7); ctx.fill();
+  }
+  // nombre
+  ctx.fillStyle = col.ink; ctx.font = 'bold 17px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(col.name, x, y + 8);
+  if (p.say) {
+    ctx.save(); ctx.globalAlpha = Math.min(1, p.say.t * 2);
+    ctx.font = '17px "Patrick Hand", sans-serif';
+    const w = ctx.measureText(p.say.text).width + 16;
+    const bx = Math.max(w / 2 + 4, Math.min(W - w / 2 - 4, x)), by = Math.max(18, y - 40);
+    ctx.fillStyle = '#fffdf6'; ctx.fillRect(bx - w / 2, by - 13, w, 26);
+    ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.4; rRect(bx - w / 2, by - 13, w, 26, p.k * 7 + 300, 0.8);
+    ctx.fillStyle = '#2e2c2a'; ctx.fillText(p.say.text, bx, by + 1);
+    ctx.restore();
+  }
+}
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (!paperLayer) buildPaper();
+  ctx.drawImage(paperLayer, 0, 0, W, H);
+  if (!S) return;
+  if (!voidLayers) buildVoid();
+  ctx.drawImage(voidLayers[boil % 3], 0, 0, W, H);
+
+  // flechas fijas
+  for (const e of S.ents) {
+    if (e.dead || !alive(e.next)) continue;
+    const a = dotOf(e), b = clipToBox(a, e.next);
+    const fade = e.orphan ? 1 - (e.orphan / GC_TIME) * 0.65 : 1;
+    ctx.globalAlpha = fade; rArrow(a, b, e.id * 101, '#2e2c2a', 2.2); ctx.globalAlpha = 1;
+  }
+  for (const e of S.ents) if (!e.dead) (e.kind === 'node' ? drawNode : drawLabel)(e);
+  for (const p of S.players) drawPin(p);
+  // flechas en la mano
+  for (const p of S.players) if (p.carry) {
+    const a = dotOf(p.carry), b = { x: p.rx, y: p.ry + 4 };
+    rArrow(a, b, 900 + p.k * 50, PCOL[p.k].ink, 2.8, false);
+    ctx.fillStyle = PCOL[p.k].ink; ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, 7); ctx.fill();
+  }
+  // partículas
+  for (const q of S.parts) {
+    ctx.globalAlpha = Math.min(1, q.t);
+    if (q.kind === 'crumb') { ctx.fillStyle = '#e9a3a0'; ctx.fillRect(q.x, q.y, 4, 3); }
+    else { ctx.fillStyle = '#d9a400'; ctx.font = '20px "Patrick Hand", sans-serif'; ctx.fillText('★', q.x, q.y); }
+  }
+  ctx.globalAlpha = 1;
+  const order = S.players.slice().sort((a, b) => a.ry - b.ry);
+  for (const p of order) drawPlayer(p);
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  boil = REDUCED ? 0 : Math.floor(now / 200) % 6;
+  if (S && mode) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// Antes de elegir modo se ve el nivel de fondo, sin jugadores activos.
+function previewLevel() { const m = mode; mode = 2; loadLevel(LV); mode = m; showOverlay('menu'); }
+resize();
+addEventListener('resize', () => { if (Math.min(2, window.devicePixelRatio || 1) !== DPR) { resize(); voidLayers = null; } });
+previewLevel();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paperLayer = null; });
+requestAnimationFrame(frame);
+</script>
