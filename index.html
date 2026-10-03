@@ -2379,8 +2379,8 @@ function explode(cx, cy, toGem, now){
     if (caught.length) {
       const n = Math.max(3, Math.ceil(450 / tickMs));
       pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n });
-      for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) holdCell[(cy+dy)*W + cx+dx] = 1;   // what caught them waits too
-      caught.forEach(p => { p.doomed = true; p.walking = false; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
+      holdKiller(pendingBooms[pendingBooms.length - 1]);   // what caught them waits too; nothing else does
+      caught.forEach(p => { p.doomed = true; p.walking = false; p.held = []; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
       sfx.ohno();
       return;
     }
@@ -2555,16 +2555,21 @@ function stepPlayer(p){
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
 
-/* "¡Oh no!": when a kid is caught, the kid and whatever caught them (the cells of the coming blast) stand still for
+/* "¡Oh no!": when a kid is caught, the kid and whatever caught them (the firefly or butterfly, or the rock on their head) stand still for
    a few ticks (half a second at least) while the kid says it, and only then the explosion goes off. The rest of the
    cave goes on. Only when playing in real time: training, turbo and the PC learning a cave explode at once, so the
    rules stay the same as the Python copy. */
 let pendingBooms = [], holdCell = new Uint8Array(W*H);
 const deferDeaths = () => mode !== 'train' && speed === 1 && !turbo && !simHook && !hlTrain();
+// the one that caught them: the firefly or butterfly at the centre of the blast, and the rock or gem resting on it
+function holdKiller(e){
+  const c = e.cy*W + e.cx; holdCell[c] = 1;
+  if (GOFF && (grid[c - GOFF] === ROCK || grid[c - GOFF] === GEM)) holdCell[c - GOFF] = 1;
+}
 function runPendingBooms(){
   const due = pendingBooms.filter(e => e.at <= tickN); if (!due.length) return;
   pendingBooms = pendingBooms.filter(e => e.at > tickN);
-  holdCell.fill(0); pendingBooms.forEach(e => { for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) holdCell[(e.cy+dy)*W + e.cx+dx] = 1; });
+  holdCell.fill(0); pendingBooms.forEach(holdKiller);
   due.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
   players.forEach(p => { if (!p.alive) p.doomed = false; });
 }
