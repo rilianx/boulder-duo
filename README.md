@@ -30,7 +30,9 @@ Cada jugador tiene su propio reloj: el paso empieza apenas aprietas (si el anter
 
 **Gravedad.** Siempre: lo que cae arranca lento y acelera durante la primera casilla, las rocas giran al rodar y al aterrizar se aplastan un poco, rebotan y levantan polvo (solo dibujo). Opcional, con el botón **GRAVEDAD REAL** del menú: lo que cae acelera de verdad, una casilla en su primer tick, dos en el siguiente y tres desde ahí; escapar de una roca que viene de lejos es más difícil, y si vas cavando hacia abajo con una roca cayendo encima, te alcanza y te aplasta. Además, una roca que cae 6 casillas o más rompe la casilla con que choca (tierra, ladrillo u otra roca; el acero, la salida y los diamantes aguantan) y se deshace en tierra que tapa ese agujero, con polvo y un pequeño temblor. Solo en las cuevas originales.
 
-La velocidad depende del nivel de dificultad de la cueva: un tick dura 170 ms en el nivel 1, 145 en el 2, 120 en el 3, 105 en el 4 y 92 en el 5 (el modo Entrenar PC sigue en 120 ms). El reloj de la cueva cuenta segundos reales.
+La velocidad depende del nivel de dificultad de la cueva: un tick dura 170 ms en el nivel 1, 145 en el 2, 120 en el 3, 105 en el 4 y 92 en el 5 (el modo Entrenar PC sigue en 120 ms). El reloj de la cueva va al mismo ritmo que el juego: en el nivel 3 cuenta segundos reales, en el nivel 1 cada segundo dura 1,4 s de verdad y en el 5 apenas 0,77 s, igual que los pasos de los niños.
+
+**¡Oh no!** Un tick o dos antes de morir, el niño o la niña lo ve venir y lo dice en un globito con un sonido de alarma: una roca (o una gema, si no es amigable) que cae hacia su cabeza o está por soltarse encima, una luciérnaga o mariposa al lado o a punto de ponerse al lado (también si el niño va a dar el paso junto a ella), o una roca a punto de caerle a un enemigo que está pegado a él. Es solo un aviso: el juego no cambia y todavía se puede escapar. Si la muerte llega igual de sorpresa, lo dice al explotar.
 
 El movimiento se dibuja suave: cada roca, gema, enemigo o minero se desliza de su casilla a la nueva durante el tick (unos 7 cuadros a 60 Hz), sin cambiar la mecánica, que sigue avanzando de a una casilla por tick.
 

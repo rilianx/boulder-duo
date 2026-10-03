@@ -1966,6 +1966,7 @@ const sfx = {
   open(){ [523,659,784,1046].forEach((f,i)=>beep(f,.12,'square',.04,0,i*.08)); },
   exit(){ [784,988,1175,1568].forEach((f,i)=>beep(f,.1,'triangle',.07,0,i*.06)); },
   step(){ beep(220,.02,'square',.012); },
+  ohno(){ beep(660,.09,'triangle',.06); beep(440,.16,'triangle',.06,-60,.1); },
   crash(){ noise(.3,.12); beep(70,.25,'triangle',.08,-30); }
 };
 
@@ -2126,7 +2127,7 @@ function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let 
 
 function newPlayer(id){
   return { id, cell: P1 + id, x:0, y:0, sx:0, sy:0, alive:false, exited:false, lives:3, gems:0, score:0, wins:0,
-           respawn:-1, immune:0, face:0, walking:false, dig:-1, idle:0, actAt:-1e9, nextAt:0, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
+           respawn:-1, immune:0, ohnoAt:-1e9, ohnoUntil:-1e9, face:0, walking:false, dig:-1, idle:0, actAt:-1e9, nextAt:0, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
 }
 
 function genLevel(n){
@@ -2352,6 +2353,9 @@ function move(i, j){
 const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === 'true';
 function killPlayer(p){
   if (!p.alive) return;
+  ohnoStats.deaths++; if (tickN - (p.dangerTick || -9) <= 2) ohnoStats.warned++;
+  if (simT >= p.ohnoUntil) p.ohnoAt = simT;   // caught by surprise: they still say it as they go
+  p.ohnoUntil = Math.max(p.ohnoUntil, simT + 500);
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
@@ -2537,6 +2541,54 @@ function stepPlayer(p){
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
 
+/* "¡Oh no!": a kid sees it coming a tick or two before dying (drawing and sound only, the game is the same):
+   a rock (or a gem, unless friendly) falling towards their head or about to drop on it, a firefly or butterfly
+   next to them or about to step next to them, or a rock about to fall on one of those right beside them. */
+function danger(p){
+  const i = p.y*W + p.x;
+  const hitFrom = (c, gemsToo) => {
+    if (gDir < 0) return false;
+    const far = realGravity && caveRules() ? 4 : 2;
+    for (let n = 1, j = c - GOFF; n <= far; n++, j -= GOFF){
+      const t = grid[j];
+      if (t === ROCK || (t === GEM && gemsToo)) return fall[j] || (n > 1 && aux[j]);
+      if (t !== E) return false;
+    }
+    return false;
+  };
+  if (hitFrom(i, !friendly())) return true;
+  if (friendly()) return false;
+  // where they stand, and where they are about to step (walking into a firefly's side counts too)
+  const hd = p.held[p.held.length - 1], nt = hd === undefined ? -1 : grid[i + OFF[hd]];
+  const at = [i]; if (nt === E || nt === DIRT || nt === GEM) at.push(i + OFF[hd]);
+  const near = j => at.some(c => Math.abs(j % W - c % W) + Math.abs((j / W | 0) - (c / W | 0)) === 1);
+  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++){
+    const e = i + dy*W + dx, t = grid[e];
+    if (e < 0 || e >= W*H || (t !== FIRE && t !== BUTT)) continue;
+    if (near(e)) return true;
+    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && hitFrom(e, true)) return true;   // its blast would reach them
+    const d = dir[e], turn = t === FIRE ? (d + 3) % 4 : (d + 1) % 4;
+    const nx = grid[e + OFF[turn]] === E ? e + OFF[turn] : grid[e + OFF[d]] === E ? e + OFF[d] : e;
+    if (near(nx)) return true;
+  }
+  return false;
+}
+function drawOhNo(g, ox, oy){
+  players.forEach(p => {
+    if (simT >= p.ohnoUntil || p.exited) return;
+    const [gx, gy] = p.alive ? glidePos(p) : [p.x, p.y], q = (simT - p.ohnoAt) / 160;
+    const x = gx * T - ox + T / 2, y = gy * T - oy - 3 - Math.min(1, q) * 2, sc = Math.min(1, .4 + q * .6) + .05 * Math.sin(simT / 50);
+    g.save(); g.translate(x, y); g.scale(sc, sc);
+    g.font = '5px "Press Start 2P", monospace'; g.textAlign = 'center';
+    const msg = '¡OH NO!', w = g.measureText(msg).width + 6;
+    g.fillStyle = '#fffdf2'; g.strokeStyle = '#2a1c14'; g.lineWidth = .8;
+    g.beginPath(); g.roundRect ? g.roundRect(-w/2, -9, w, 9, 3) : g.rect(-w/2, -9, w, 9);
+    g.moveTo(-2, 0); g.lineTo(0, 3); g.lineTo(2, 0); g.fill(); g.stroke();
+    g.fillStyle = '#fffdf2'; g.fillRect(-1.6, -.9, 3.2, 1.3);
+    g.fillStyle = '#e8443a'; g.fillText(msg, 0, -2.3);
+    g.restore();
+  });
+}
 function fallObj(i, x, y){
   if (gDir < 0) { fall[i] = 0; aux[i] = 0; return; }
   const G = GOFF, b = i + G, bt = grid[b], bx = b % W, by = b / W | 0;
@@ -2622,8 +2674,9 @@ function amoebaCell(i){
   }
 }
 
+let tickN = 0, ohnoStats = { deaths: 0, warned: 0 };   // for tests: deaths that had their "¡oh no!" first
 function tick(){
-  moved.fill(0); landThisTick = false;
+  tickN++; moved.fill(0); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
@@ -2669,9 +2722,17 @@ function tick(){
     }
   });
 
+  if (mode !== 'train' && speed === 1) players.forEach(p => {
+    if (!p.alive || p.exited || p.immune > 0 || !danger(p)) return;
+    p.dangerTick = tickN;
+    if (simT >= p.ohnoUntil) { sfx.ohno(); p.ohnoAt = simT; }
+    p.ohnoUntil = simT + Math.max(450, tickMs * 2.5);
+  });
   if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; exitOpenAt = nowT; sfx.open(); }
 
-  timeAcc += tickMs;
+  // the clock runs with the cave's pace: a cave second is 1000 ms at the normal pace (cave 3's), longer in the
+  // slow easy caves and shorter in the fast hard ones, just like the kids' steps
+  timeAcc += TICK;
   if (timeAcc >= 1000) { timeAcc -= 1000; timeLeft--; if (timeLeft <= 10 && timeLeft > 0) beep(880,.05,'square',.03); }
 
   checkEnd();
@@ -3785,6 +3846,7 @@ function renderView(k){
     g.restore();
   }
   drawRps(g, ox, oy);
+  drawOhNo(g, ox, oy);
   dust = dust.filter(d => simT - d.at < 600);
   dust.forEach(d => {
     const q = (simT - d.at) / 600, R = rng(d.x * 97 + d.y * 13);
@@ -4133,15 +4195,19 @@ window.__sim = {
   // runs cave n for k ticks with nobody moving (for tests); returns how many cells of each type are left
   // hidden gravity for tests: 2 down, 3 left, 0 up, 1 right, -1 none
   gravity(d){ let n = 0; while (gDirSet !== d && n++ < 5) cycleGravity(); return gDirSet; },
-  playCave(n, k){
+  playCave(n, k, walk){
     if (turbo) setTurbo(false);
     simHook = false; mode = 'coop'; players = [newPlayer(0), newPlayer(1)];
     initLevel(n); state = 'play';
-    for (let t=0; t<k && state === 'play'; t++) tick();
+    for (let t=0; t<k && state === 'play'; t++){
+      // walk: the kids wander at random (a direction held for a few ticks), for tests
+      if (walk) players.forEach(p => { if (Math.random() < .25) p.held = Math.random() < .2 ? [] : [Math.floor(Math.random() * 4)]; if (ownClock(p)) stepPlayer(p); });
+      tick();
+    }
     const c = {}; grid.forEach(v => { c[v] = (c[v] || 0) + 1; });
     let unsettled = 0; if (GOFF) grid.forEach((v, i) => { if ((v === ROCK || v === GEM) && grid[i + GOFF] === E) unsettled++; });
     let rx = 0, ry = 0, rn = 0; grid.forEach((v, i) => { if (v === ROCK) { rx += i % W; ry += i / W | 0; rn++; } });
-    const r = { state, need, timeLeft, magicState, counts: c, hardHits, unsettled, rocks: [+(rx / rn).toFixed(2), +(ry / rn).toFixed(2)] }; menu(); return r;
+    const r = { state, need, timeLeft, magicState, counts: c, hardHits, unsettled, ohno: ohnoStats, rocks: [+(rx / rn).toFixed(2), +(ry / rn).toFixed(2)] }; menu(); return r;
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
