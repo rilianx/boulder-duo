@@ -63,6 +63,7 @@ button:hover{border-color:var(--gem)}
 button.b1{border-color:var(--p1)} button.b2{border-color:var(--p2)}
 .sets button{font-size:10px;padding:8px 10px}
 .views.solo{grid-template-columns:1fr;max-width:860px;width:100%;margin-inline:auto} .views.solo .p2v{display:none}
+.views.solo.netguest .p1v{display:none} .views.solo.netguest .p2v{display:flex}
 .cavegrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;width:100%}
 .cavegrid button{font-size:10px;padding:8px 2px;position:relative} .cavegrid button span{position:absolute;top:-6px;right:-3px;color:#ffd84a;font-size:12px;text-shadow:0 0 3px #000} .cavegrid button.on{border-color:var(--warn);color:var(--warn)}
 @media (max-height:600px){ .card .long{display:none} .card{gap:10px} .card .row button{padding:9px 12px} } .sets button.on{border-color:var(--warn);color:var(--warn)}
@@ -2331,7 +2332,7 @@ function initLevel(n){
   for (let i=0; i<W*H; i++) untouched[i] = grid[i] === ROCK ? 1 : 0;
   buttBase = 0; for (let i=0; i<W*H; i++) if (grid[i] === BUTT) buttBase++;
   timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; applyGravity(); snapCams();
-  state = 'play'; hideOverlay(); updateHud();
+  state = 'play'; hideOverlay(); updateHud(); netFull = true;
 }
 
 /* ---------- rules ---------- */
@@ -2776,7 +2777,10 @@ let onEnter = null;
 
 function menu(){
   if (turbo) setTurbo(false);
+  if (netRole === 'host' && state !== 'menu') netSend({ t: 'menu' });
+  if (netRole === 'guest' && netLink) { netQuit(); return; }
   state = 'menu'; document.body.classList.remove('needland'); lockOrientation();
+  if (netRole === 'host' && netLink) return hostPick();   // connected: the next game is with the other phone
   if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
     <h2>BOULDER DÚO</h2>
@@ -2790,6 +2794,7 @@ function menu(){
       <button id="bpc" class="b2">CONTRA PC</button>
       <button id="btrain">ENTRENAR PC</button>
     </div>
+    ${BT ? '<div class="row"><button id="bbt" class="b1">DOS CELULARES (BLUETOOTH)</button></div>' : ''}
     <div class="row">
       <button id="bpick">ELEGIR CUEVA · ${caveLabel(startN())}</button>
     </div>
@@ -2811,6 +2816,7 @@ function menu(){
   $('bvs').onclick = () => startGame('versus');
   $('bpc').onclick = () => startGame('pc');
   $('btrain').onclick = () => startGame('train');
+  if (BT) $('bbt').onclick = () => btMenu();
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
@@ -2871,7 +2877,7 @@ function askTouch(){
 let solo = false;
 function startGame(m){
   audioOn();
-  const duo = m === 'coop' || m === 'versus';
+  const duo = (m === 'coop' || m === 'versus') && !netRole;   // two phones: each shows only its own kid, sideways
   document.body.classList.toggle('solomode', !duo);
   document.body.classList.toggle('needland', !duo);
   $('views').classList.toggle('duo', duo);
@@ -2879,7 +2885,8 @@ function startGame(m){
   if (turbo) setTurbo(false);
   solo = m === 'solo'; mode = solo ? 'coop' : m;
   state = 'play'; lockOrientation();   // initLevel below sets play anyway; needed so the lock is not the menu's
-  $('views').classList.toggle('solo', solo);
+  $('views').classList.toggle('solo', solo || !!netRole);
+  $('views').classList.toggle('netguest', netRole === 'guest');
   players = [newPlayer(0), newPlayer(1)];
   if (solo) players[1].lives = 0;
   $('w0wrap').hidden = $('w1wrap').hidden = !(mode === 'versus' || mode === 'pc');
@@ -2950,6 +2957,7 @@ function roundDraw(msg){
 function nextRound(){ players.forEach(p => p.lives = 3); initLevel(level + 1); }
 
 function togglePause(){
+  if (netRole === 'guest') return netSend({ t: 'pause' });
   if (state === 'play') {
     state = 'pause';
     const fsb = document.body.classList.contains('fs') && !standalone;
@@ -3980,6 +3988,8 @@ let last = performance.now(), acc = 0;
 function loop(now){
   const dt = Math.min(250, now - last); last = now;
   if (turbo || simHook) { acc = 0; if (turbo) { drawTurbo(); drawAiPanel(); } else render(); requestAnimationFrame(loop); return; }
+  // the guest phone only draws: the cave runs on the host
+  if (netRole === 'guest') { if (state === 'play') simT += dt; worldT = simT; netInput(); frame++; render(); requestAnimationFrame(loop); return; }
     if (state === 'play') {
     simT += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
@@ -3998,6 +4008,7 @@ function loop(now){
   } else worldT = simT;
   // drawing glides each moved thing from its old cell to its new one over the tick (only at normal speed)
   frame++;
+  netFrame();
   render();
   drawAiPanel();
   requestAnimationFrame(loop);
@@ -4012,7 +4023,7 @@ window.addEventListener('keydown', e => {
   const m = KEYMAP[e.code];
   if (m) {
     e.preventDefault();
-    const p = players[m[0]];
+    const p = players[netRole === 'guest' ? 1 : m[0]];
     if (p && !p.ai) { p.held = p.held.filter(d => d !== m[1]); p.held.push(m[1]); }
     return;
   }
@@ -4028,8 +4039,8 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'Space' && state === 'play') e.preventDefault();
 });
 window.addEventListener('keyup', e => {
-  const m = KEYMAP[e.code];
-  if (m && players[m[0]] && !players[m[0]].ai) players[m[0]].held = players[m[0]].held.filter(d => d !== m[1]);
+  const m = KEYMAP[e.code], k = m && netRole === 'guest' ? 1 : m && m[0];
+  if (m && players[k] && !players[k].ai) players[k].held = players[k].held.filter(d => d !== m[1]);
 });
 window.addEventListener('blur', () => players.forEach(p => { if (!p.ai) p.held = []; }));
 
@@ -4088,13 +4099,155 @@ document.addEventListener('pointermove', e => {
 const swipeEnd = e => { const sw = swipes.get(e.pointerId); if (!sw) return; swipes.delete(e.pointerId); sw.ring.remove(); swipeHeld(sw); };
 ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => document.addEventListener(t, swipeEnd));
 document.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch') && state === 'play') e.preventDefault(); });
+/* ---------- two phones over Bluetooth (only inside the Android app, which brings the BtLink plugin) ----------
+   The phones are paired once in Android's settings. One opens the game (the host) and runs it as always, with
+   J1 on its screen; the other joins (the guest) and only draws J2's view: after every change the host sends the
+   cells that changed, what moved and the kids' state, one line of JSON; the guest sends back the direction its
+   kid is held in. Basic on purpose: cooperative and versus, the host picks the cave and moves on between caves. */
+const BT = (() => {
+  const C = window.Capacitor;
+  if (!C || !(C.isNativePlatform ? C.isNativePlatform() : C.platform && C.platform !== 'web')) return null;
+  if (C.Plugins && C.Plugins.BtLink) return C.Plugins.BtLink;
+  return C.registerPlugin ? C.registerPlugin('BtLink') : null;
+})();
+let netRole = null, netPeer = '', netLink = false;
+let netSentG = new Uint8Array(W*H), netSentV = new Uint8Array(W*H), netSentD = new Uint8Array(W*H);
+let netSrcAt = new Float64Array(W*H), netDugAt = new Float64Array(W*H), netKey = '', netSt = '', netFull = true, netFx = [], netHeld = -2;
+const b64 = a => { let t = ''; for (let i = 0; i < a.length; i++) t += String.fromCharCode(a[i]); return btoa(t); };
+const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+function netSend(o){ if (BT && netLink) BT.send({ data: JSON.stringify(o) }).catch(() => {}); }
+// every sound the host plays during a game is played on the guest too
+Object.keys(sfx).forEach(k => { const f = sfx[k]; sfx[k] = (...a) => { if (netRole === 'host' && state !== 'menu') netFx.push(k); return f(...a); }; });
+function netFrame(){
+  // host: send what changed since the last message (everything at the start of a cave)
+  if (netRole !== 'host' || !netLink || !grid || (state === 'menu' && !netFull)) return;
+  const full = netFull, c = [], m = [], dg = [];
+  for (let j = 0; j < W*H; j++){
+    if (full || grid[j] !== netSentG[j] || vari[j] !== netSentV[j] || dir[j] !== netSentD[j]) { if (!full) c.push(j, grid[j], vari[j], dir[j]); netSentG[j] = grid[j]; netSentV[j] = vari[j]; netSentD[j] = dir[j]; }
+    if (src[j] >= 0 && srcAt[j] !== netSrcAt[j]) { m.push(j, src[j]); netSrcAt[j] = srcAt[j]; }
+    if (dugAt[j] !== netDugAt[j]) { if (dugAt[j] > 0) dg.push(j); netDugAt[j] = dugAt[j]; }
+  }
+  const P = players.map(p => [p.x, p.y, p.face, p.walking ? 1 : 0, p.dig, p.stepN, p.alive ? 1 : 0, p.exited ? 1 : 0, p.respawn, p.immune, p.gems, p.lives, p.score, p.doomed ? 1 : 0, p.wins || 0]);
+  const key = JSON.stringify(P) + state + timeLeft + level + magicState;
+  if (!full && !c.length && !m.length && !dg.length && !netFx.length && key === netKey) return;
+  const msg = { t: 's', lv: level, st: state, tl: timeLeft, ms: magicState, P, m, dg, fx: netFx.splice(0) };
+  if (full) { msg.g = b64(grid); msg.v = b64(vari); msg.d = b64(dir); } else msg.c = c;
+  if (state !== netSt) { netSt = state; if (state !== 'play') msg.ov = [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300); }
+  netKey = key; netFull = false; netSend(msg);
+}
+function netGot(o){
+  if (o.t === 'in' && netRole === 'host') { const p = players[1]; if (p && !p.ai) p.held = o.d < 0 ? [] : [o.d]; return; }
+  if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
+  if (netRole !== 'guest') return;
+  if (o.t === 'start') {
+    caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd;
+    startGame(o.m); initLevel(o.lv); return;
+  }
+  if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
+  if (o.t !== 's' || !players.length) return;
+  if (o.lv !== level) initLevel(o.lv);   // the cave's look comes from its own file; its cells come next
+  if (o.g) { grid.set(unb64(o.g)); vari.set(unb64(o.v)); dir.set(unb64(o.d)); src.fill(-1); }
+  if (o.c) for (let k = 0; k < o.c.length; k += 4){ const j = o.c[k]; grid[j] = o.c[k+1]; vari[j] = o.c[k+2]; dir[j] = o.c[k+3]; }
+  for (let k = 0; k < o.m.length; k += 2){ src[o.m[k]] = o.m[k+1]; srcAt[o.m[k]] = simT; }
+  o.dg.forEach(j => { dugAt[j] = simT; });
+  o.P.forEach((a, k) => {
+    const p = players[k]; if (!p) return;
+    const was = p.doomed;
+    [p.x, p.y, p.face] = a; p.walking = !!a[3]; p.dig = a[4]; p.stepN = a[5]; p.alive = !!a[6]; p.exited = !!a[7];
+    p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.doomed = !!a[13]; p.wins = a[14];
+    if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; }
+  });
+  timeLeft = o.tl; magicState = o.ms;
+  o.fx.forEach(n => { if (sfx[n]) sfx[n](); });
+  if (o.st !== state) {
+    state = o.st;
+    if (state === 'play') hideOverlay();
+    else guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
+  }
+  updateHud();
+}
+function guestWait(text){
+  showOverlay(`<div class="card"><h2>DOS CELULARES</h2><p style="white-space:pre-line">${text.replace(/[<&]/g, ch => ch === '<' ? '&lt;' : '&amp;')}</p>
+    <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
+  $('bnetq').onclick = netQuit;
+}
+// guest: send the direction its kid is held in whenever it changes
+function netInput(){
+  const p = players[1]; if (netRole !== 'guest' || !p) return;
+  const d = p.held.length ? p.held[p.held.length - 1] : -1;
+  if (d !== netHeld) { netHeld = d; netSend({ t: 'in', d }); }
+}
+function netQuit(){
+  netRole = null; netLink = false; if (BT) BT.close().catch(() => {});
+  document.getElementById('views').classList.remove('netguest'); menu();
+}
+if (BT) {
+  BT.addListener('data', e => { let o; try { o = JSON.parse(e.line); } catch (err) { return; } netGot(o); });
+  BT.addListener('connected', e => {
+    netLink = true; netPeer = e.name || 'el otro celular';
+    if (netRole === 'host') hostPick(); else guestWait('Conectado con ' + netPeer + '. Esperando que elija el juego…');
+  });
+  BT.addListener('closed', e => {
+    if (!netRole) return;
+    const was = netRole; netRole = null; netLink = false; document.getElementById('views').classList.remove('netguest');
+    state = 'menu';
+    showOverlay(`<div class="card"><h2>SE CORTÓ</h2><p>${e.reason || 'Se perdió la conexión Bluetooth.'}</p><div class="row"><button id="bnetm">VOLVER AL MENÚ</button></div></div>`);
+    $('bnetm').onclick = menu; onEnter = menu;
+  });
+}
+async function btReady(){
+  try { const r = await BT.status(); if (!r.on) throw new Error('Enciende el Bluetooth y vuelve a intentar.'); return true; }
+  catch (e) { btMenu(e.message || String(e)); return false; }
+}
+function btMenu(note){
+  if (netLink && netRole === 'host') return hostPick();
+  showOverlay(`<div class="card"><h2>DOS CELULARES</h2>
+    <p>Cada uno juega en su celular, conectados por Bluetooth. La primera vez, emparejen los dos celulares en Ajustes › Bluetooth. Después, uno abre la partida y el otro se une.</p>
+    ${note ? `<p style="color:#ff8a4c">${note}</p>` : ''}
+    <div class="row"><button id="bbthost" class="b1">ABRIR PARTIDA</button><button id="bbtjoin" class="b2">UNIRSE</button></div>
+    <div class="row"><button id="bbtback">VOLVER</button></div></div>`);
+  $('bbtback').onclick = menu; onEnter = menu;
+  $('bbthost').onclick = async () => {
+    if (!await btReady()) return;
+    try { netRole = 'host'; await BT.host(); }
+    catch (e) { netRole = null; return btMenu(e.message || String(e)); }
+    showOverlay(`<div class="card"><h2>PARTIDA ABIERTA</h2><p>Ahora, en el otro celular: DOS CELULARES › UNIRSE, y elige este celular de la lista.</p>
+      <div class="row"><button id="bbtcancel">CANCELAR</button></div></div>`);
+    $('bbtcancel').onclick = netQuit;
+  };
+  $('bbtjoin').onclick = async () => {
+    if (!await btReady()) return;
+    let list = [];
+    try { list = (await BT.paired()).devices || []; } catch (e) { return btMenu(e.message || String(e)); }
+    showOverlay(`<div class="card"><h2>UNIRSE</h2><p>${list.length ? 'Elige el celular que abrió la partida:' : 'No hay celulares emparejados. Emparéjalos en Ajustes › Bluetooth.'}</p>
+      <div class="row" style="flex-direction:column">${list.map((d, k) => `<button data-k="${k}">${d.name.replace(/[<&]/g, '')}</button>`).join('')}</div>
+      <div class="row"><button id="bbtback2">VOLVER</button></div></div>`);
+    $('bbtback2').onclick = () => btMenu();
+    ov.querySelectorAll('button[data-k]').forEach(b => b.onclick = async () => {
+      const d = list[+b.dataset.k];
+      showOverlay(`<div class="card"><h2>CONECTANDO…</h2><p>Con ${d.name.replace(/[<&]/g, '')}</p></div>`);
+      try { netRole = 'guest'; await BT.join({ address: d.address }); }
+      catch (e) { netRole = null; btMenu(e.message || String(e)); }
+    });
+  };
+}
+// host, once connected: choose the game (the cave is the one picked in the menu)
+function hostPick(){
+  state = 'menu';
+  showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
+    <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
+    <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
+  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet }); netFull = true; };
+  $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
+  onEnter = () => go('coop');
+}
 /* Best effort: Android Chrome can go fullscreen and lock landscape; elsewhere the "gira el celular" screen asks for it. */
 /* In full screen the phone is held the way the game is played: upright on the table for two players
    (cooperative and versus), sideways for one player, against the PC or training. Nothing is locked on the menu. */
 function lockOrientation(){
   const o = screen.orientation; if (!o || !o.lock || !touchPref || !fsEl()) return;
   if (state === 'menu') { try { o.unlock(); } catch (e) {} return; }
-  o.lock(mode === 'coop' && !solo || mode === 'versus' ? 'portrait' : 'landscape').catch(() => {});
+  o.lock(!netRole && (mode === 'coop' && !solo || mode === 'versus') ? 'portrait' : 'landscape').catch(() => {});
 }
 function goLandscape(){
   const el = document.documentElement;

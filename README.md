@@ -111,3 +111,12 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 - un baseline con A\*.
 
 Ver [`rl/README.md`](rl/README.md).
+
+## App de Android y dos celulares por Bluetooth
+
+En `app/` está el juego empaquetado como app de Android con [Capacitor](https://capacitorjs.com) (gratuito). La app es el mismo `index.html`, más un pequeño plugin propio (`BtLink.java`) que conecta dos celulares por Bluetooth.
+
+- **Cómo conseguir el APK:** cada vez que cambia el juego, GitHub Actions ("App de Android") lo compila. En la pestaña *Actions* del repositorio, abre la última ejecución y descarga el artefacto `boulder-duo-apk` (un zip con `boulder-duo.apk`). Para instalarlo hay que permitir apps de fuentes desconocidas. Todas las versiones van firmadas con la misma llave de prueba, así que una nueva se instala encima de la anterior.
+- **Jugar en dos celulares (versión básica):** la primera vez, emparejen los celulares en Ajustes › Bluetooth. Luego, en el menú, **DOS CELULARES (BLUETOOTH)**: uno toca **ABRIR PARTIDA** y el otro **UNIRSE** y elige el primero de la lista. El que abre es J1, elige cooperativo o versus y la cueva (la del menú), y corre el juego; el otro es J2 y ve su propio tablero en su pantalla. Se juega en horizontal.
+- Lo que va por Bluetooth: el celular que abre manda las casillas que cambian, lo que se movió, el estado de los niños y los sonidos (alrededor de 1 KB/s); el otro manda la dirección en que mueve a su niño. El que se une no ve algunos adornos (polvo, bichitos, gemas volando), y entre cuevas o en la pausa decide el que abrió.
+- Fuera de la app (en el navegador) no aparece la opción.
