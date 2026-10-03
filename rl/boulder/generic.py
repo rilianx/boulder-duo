@@ -26,6 +26,7 @@ import torch
 from torch import nn
 
 from .gvgai_env import ROOT
+from .mecanicas.efectos import observar
 
 EX = ROOT / "vendor" / "GVGAI" / "examples" / "gridphysics"
 TO_BRIDGE = {0: 1, 1: 4, 2: 2, 3: 3, 4: 0}          # nuestras direcciones → acciones del puente
@@ -347,6 +348,7 @@ class GenericAgent:
     def __call__(self, st, br):
         K = self.know
         K.observe_types(st)
+        observar(self, K, st)                          # conteos por tipo (efectos causales)
         W, N = st.W, len(st.masks)
         offs = (-W, 1, W, -1)
         # 1) aprender transitabilidad del intento anterior

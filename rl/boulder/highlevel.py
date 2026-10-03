@@ -14,6 +14,7 @@ import math
 import random
 
 from .generic import GenericAgent, value_params
+from .mecanicas.efectos import observar
 
 
 class Commander:
@@ -105,6 +106,14 @@ class Commander:
             return st.types.get(t, ("", -1))[1] == 3 or sum(K.move_dirs.get(t, {}).values()) >= 3
         targets = [t for t in targets if not moves(t) or safe_mover(t)]
         vals = {t: self.va._value(t, st, avatars) for t in targets}
+        # medios y fines (efectos causales aprendidos): si lo valioso está tapado por algo que desaparece al
+        # quitar o tocar otro tipo, ese otro tipo vale lo tapado (empujarlo a desaparecer / ir a tocarlo)
+        self._quitar, tocar = K.bonos_causales(self, st, info, vals, targets)
+        for c, b in tocar.items():
+            if b > vals.get(c, 0.0):
+                vals[c] = b
+                if c not in targets:
+                    targets = targets + [c]
         best, choice = self.P["min_score"], None
         self._scores = {}
         for j, (t, H) in info.items():
@@ -262,6 +271,8 @@ class Commander:
         if self.learn and st.tick % 50 == 25:              # muestras de mitad de partida (para el fin por conteo)
             self.know.emitir("mitad", st=st)
         self._learn_touch(st)
+        if self.learn:                                     # conteos por tipo, para los efectos causales
+            observar(self, self.know, st)
         if self.P["push"]:
             self._learn_push(st)
         if self.P["use"]:

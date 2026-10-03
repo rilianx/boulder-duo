@@ -52,13 +52,15 @@ def run(a, out):
     X, Y = [], []
     T = [None]
     arms = {w: [0.0, 0] for w in a.w_arms}               # w_risk → [suma de puntajes, partidas]
+    ends = {}                                            # tick final de las partidas no ganadas → veces
     log = {"juegos_explorar": 0, "juegos_practica": 0, "victorias_practica": 0}
 
     def recorder(inner, stop_at):
         """Envuelve una política: etiqueta los pasos reales y, pasado stop_at, se queda quieta sin pensar."""
-        pending = []
+        pending, last = [], [0]
 
         def pol(st, br):
+            last[0] = st.tick
             if T[0] is None:
                 T[0] = max(st.types) + 1
             if time.time() > stop_at:
@@ -75,7 +77,13 @@ def run(a, out):
             return act
 
         def end(won):
-            if won != 1:                               # murió (o se acabó sin ganar): culpar a los últimos pasos
+            # murió: culpar a los últimos pasos. Pero si la partida terminó sin ganar en un tick en que ya terminó
+            # otra, es el límite de tiempo del juego (Doorkoban: nada mata y toda derrota es a los 1000 ticks)
+            fin = last[0] + 1
+            tope = won != 1 and ends.get(fin, 0) >= 1 and fin >= 100
+            if won != 1:
+                ends[fin] = ends.get(fin, 0) + 1
+            if won != 1 and not tope:
                 for _, i in pending:
                     Y[i] = 1.0
             inner.end(won)

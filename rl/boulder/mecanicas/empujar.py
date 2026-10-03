@@ -9,7 +9,7 @@ class Empujar(Mecanica):
     nombre = "empujar"
     estado = {"push": (dict, "I>v"), "push_into": (dict, "I>I>v")}
     neutros = {"pushable": False, "push_candidate": False, "push_ok": False, "push_value": (0.0, 0),
-               "plan_empujes": None}
+               "plan_empujes": None, "push_vanishes": False}
 
     def pushable(self, t):
         """¿El avatar corre al tipo t al entrar en su casilla? (una caja de Sokoban)"""
@@ -40,6 +40,11 @@ class Empujar(Mecanica):
             return 0.0, 0
         return (r[3] / r[0] if media(r[2], r[0] - r[2]) > 0.5 else 0.0), r[0]
 
+    def push_vanishes(self, t, mask):
+        """¿Empujar un t hacia esa máscara lo hace desaparecer? (visto al menos una vez, y casi siempre)"""
+        r = self.K.push_into.get(t, {}).get(mask)
+        return bool(r and r[2] and media(r[2], r[0] - r[2]) > 0.5)
+
     def al_empuje(self, st, pos0, act, objs, masks0, sc0, turned, abits):
         """Tras un paso: ¿el objeto que había en la casilla a la que entró el avatar se corrió en esa dirección,
         desapareció (p. ej. cayó en un hoyo) o se trabó? Se anota según qué había adelante."""
@@ -67,8 +72,9 @@ class Empujar(Mecanica):
                 else:
                     p[1] += 1
             elif not turned:
-                if K.pushable(t):
-                    r[1] += 1                                     # empujable, pero ahí se traba
+                adelante = masks0[dest] & ~abits
+                if K.pushable(t) or any(adelante >> u & 1 and u != t and K.is_blocking(u) for u in range(63)):
+                    r[1] += 1             # se trabó: si adelante había algo que bloquea, no dice si t se empuja
                 else:
                     p[1] += 1
 
@@ -80,9 +86,12 @@ class Empujar(Mecanica):
         K, W, H, N = cmd.know, st.W, st.H, len(st.masks)
         p = cmd.nav.risk.grid(st.masks)
         boxes = {}
+        quitar = getattr(cmd, "_quitar", {})
         for oid, (t, x, y) in st.objects.items():
             # solo objetos quietos (lo que se mueve solo no es una caja) y en casillas sin riesgo
-            if st.types.get(t, ("", -1))[1] != 6 or not K.push_candidate(t) or cmd.nav.track.random_type(t):
+            # (o, si quitarlo abre algo, con que se haya corrido alguna vez)
+            cand = K.push_candidate(t) or (quitar.get(t, 0) > 0 and K.push.get(t, [0])[0] > 0)
+            if st.types.get(t, ("", -1))[1] != 6 or not cand or cmd.nav.track.random_type(t):
                 continue
             vx, vy = cmd.nav.track.velocity(oid)
             b = int(round(y)) * W + int(round(x))
@@ -132,6 +141,7 @@ class Empujar(Mecanica):
             return acts[::-1]
 
         reach = flood(wall, st.pos)
+        comp_t = {t: K.companeros(t) if quitar.get(t) else set() for t in set(boxes.values())}
         ab = ~cmd._abits()
         lam, best = cmd.P["lam"], None
         for b0, t in boxes.items():
@@ -158,9 +168,17 @@ class Empujar(Mecanica):
                             continue
                         behind = by * W + bx
                         m = st.masks[dest] & ab
-                        if walls2[behind] or cb.get(behind) != lab or not K.push_ok(t, m):
+                        if walls2[behind] or cb.get(behind) != lab:
+                            continue
+                        # medios y fines: si hacer desaparecer t abre algo valioso, empujarlo adonde desaparece
+                        # (visto al empujar, o donde está lo que desaparece junto con él: su hoyo) vale eso
+                        bono = quitar.get(t, 0.0)
+                        junto = bono > 0 and (self.push_vanishes(t, m) or any(m >> u & 1 for u in comp_t[t]))
+                        if not junto and not K.push_ok(t, m):
                             continue
                         v, tries = K.push_value(t, m)
+                        if junto and bono > v:
+                            v = bono
                         cur = cmd.P["push_new"] / (1 + tries) if v <= 0 and tries < 2 else 0.0
                         steps = 0
                         s, chain = (b, lab), [(behind, d)]
