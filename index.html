@@ -2686,7 +2686,7 @@ let onEnter = null;
 
 function menu(){
   if (turbo) setTurbo(false);
-  state = 'menu'; document.body.classList.remove('needland');
+  state = 'menu'; document.body.classList.remove('needland'); lockOrientation();
   if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
     <h2>BOULDER DÚO</h2>
@@ -2786,6 +2786,7 @@ function startGame(m){
   if (touchPref && !duo) goLandscape();
   if (turbo) setTurbo(false);
   solo = m === 'solo'; mode = solo ? 'coop' : m;
+  state = 'play'; lockOrientation();   // initLevel below sets play anyway; needed so the lock is not the menu's
   $('views').classList.toggle('solo', solo);
   players = [newPlayer(0), newPlayer(1)];
   if (solo) players[1].lives = 0;
@@ -3962,10 +3963,17 @@ document.querySelectorAll('.view').forEach((view, k) => {
   view.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch')) e.preventDefault(); });
 });
 /* Best effort: Android Chrome can go fullscreen and lock landscape; elsewhere the "gira el celular" screen asks for it. */
+/* In full screen the phone is held the way the game is played: upright on the table for two players
+   (cooperative and versus), sideways for one player, against the PC or training. Nothing is locked on the menu. */
+function lockOrientation(){
+  const o = screen.orientation; if (!o || !o.lock || !touchPref || !fsEl()) return;
+  if (state === 'menu') { try { o.unlock(); } catch (e) {} return; }
+  o.lock(mode === 'coop' && !solo || mode === 'versus' ? 'portrait' : 'landscape').catch(() => {});
+}
 function goLandscape(){
   const el = document.documentElement;
   if (document.fullscreenElement || !el.requestFullscreen || !matchMedia('(max-height:600px), (max-width:600px)').matches) return;
-  el.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape')).catch(() => {});
+  el.requestFullscreen({ navigationUI: 'hide' }).then(lockOrientation).catch(() => {});
 }
 /* Fullscreen button: real fullscreen where the browser allows it (Android, computers); iPhone only allows it from the home screen. */
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
@@ -3975,7 +3983,7 @@ function toggleFull(){
   if (fsEl()) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
   if (req) {
     const r = req.call(el, { navigationUI: 'hide' });
-    if (r && r.then) r.then(() => screen.orientation && screen.orientation.lock && touchPref && screen.orientation.lock('landscape')).catch(() => {});
+    if (r && r.then) r.then(lockOrientation).catch(() => {});
     return;
   }
   if (state === 'play') togglePause();
