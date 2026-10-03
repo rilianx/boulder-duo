@@ -8,7 +8,9 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 
 Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular. Si dices que sí, te mueves **deslizando el dedo sobre tu propio tablero**: lo apoyas en cualquier parte y lo arrastras hacia abajo, la izquierda, arriba o la derecha; mientras no lo levantes el minero sigue caminando, y para girar basta con arrastrar hacia el otro lado. Un círculo marca dónde pusiste el dedo y la flecha, la dirección. El botón **TÁCTIL** de arriba lo activa o desactiva y la elección se recuerda.
 
-Se juega en **horizontal**: J1 desliza en el tablero de la izquierda y J2 en el de la derecha; contra el PC sirven los dos tableros para J1. Si el celular está en vertical, el juego pide girarlo.
+Solo o contra el PC se juega en **horizontal** (si el celular está en vertical, el juego pide girarlo). **De a dos (cooperativo o versus) se juega con el celular sobre la mesa, en vertical:** J1 tiene su tablero abajo y J2 arriba, dado vuelta para que lo vea derecho desde el otro lado de la mesa; cada uno desliza en su tablero y para J2 las direcciones también van al revés. En horizontal también se puede, con los tableros lado a lado.
+
+![De a dos en la mesa](docs/mesa.png)
 
 **Pantalla completa:** botón **PANT. COMPLETA** arriba (Android y computador). En iPhone, Safari no lo permite en páginas: hay que agregar el juego a la pantalla de inicio (Compartir → Agregar a inicio) y abrirlo desde ahí, y se abre sin barras.
 

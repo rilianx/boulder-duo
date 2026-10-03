@@ -126,7 +126,10 @@ button:disabled{opacity:.4;cursor:default}
 @media (orientation:portrait){
   .touch .views{width:min(100%, calc((100dvh - 110px) / 1.45));margin-inline:auto}
   .touch .views.solo{width:100%}
-  .touch:not(.portrait-ok) .rotate{display:flex;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
+  /* two players on one phone lying on the table: J1 reads it from the bottom edge, J2 from the top edge */
+  .touch .views.duo{grid-template-columns:1fr;gap:6px;width:min(100%, calc((100dvh - 92px) / 1.47))}
+  .touch .views.duo .p2v{order:-1;transform:rotate(180deg)}
+  .touch.needland:not(.portrait-ok) .rotate{display:flex;position:fixed;inset:0;z-index:10;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center}
   .rotate h2{font-family:var(--display);font-size:16px;margin:0;line-height:1.6}
   .rotate p{margin:0;color:var(--muted)}
   .rotate .phone{width:60px;height:100px;border:4px solid var(--ink);border-radius:10px;animation:turn 1.8s ease-in-out infinite}
@@ -2671,7 +2674,7 @@ let onEnter = null;
 
 function menu(){
   if (turbo) setTurbo(false);
-  state = 'menu';
+  state = 'menu'; document.body.classList.remove('needland');
   if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
     <h2>BOULDER DÚO</h2>
@@ -2752,7 +2755,7 @@ function askTouch(){
       <button id="btyes" class="b1">SÍ, JUGAR CON CELULAR</button>
       <button id="btno">NO, USO TECLADO</button>
     </div>
-    <p>Se juega con el celular en horizontal. De a dos, J1 desliza en el tablero de la izquierda y J2 en el de la derecha. Puedes cambiarlo después con el botón TÁCTIL.</p>
+    <p>Solo o contra el PC, con el celular en horizontal. De a dos (cooperativo o versus), pongan el celular sobre la mesa en vertical: J1 juega desde abajo y J2 desde arriba, con su tablero al revés. Puedes cambiarlo después con el botón TÁCTIL.</p>
   </div>`);
   const pick = on => { setTouch(on); menu(); };
   $('btyes').onclick = () => { audioOn(); goLandscape(); pick(true); };
@@ -2764,7 +2767,10 @@ function askTouch(){
 let solo = false;
 function startGame(m){
   audioOn();
-  if (touchPref) goLandscape();
+  const duo = m === 'coop' || m === 'versus';
+  document.body.classList.toggle('needland', !duo);
+  $('views').classList.toggle('duo', duo);
+  if (touchPref && !duo) goLandscape();
   if (turbo) setTurbo(false);
   solo = m === 'solo'; mode = solo ? 'coop' : m;
   $('views').classList.toggle('solo', solo);
@@ -3909,7 +3915,9 @@ document.querySelectorAll('.view').forEach((view, k) => {
   const ring = document.createElement('div'); ring.className = 'swipe'; ring.hidden = true; view.appendChild(ring);
   let pid = null, ax = 0, ay = 0, d = -1;
   const who = () => { const p = players[k]; return p && !p.ai ? p : players[0] && !players[0].ai && players[1] && players[1].ai ? players[0] : null; };
-  const put = () => { const r = view.getBoundingClientRect(); ring.style.left = (ax - r.left) + 'px'; ring.style.top = (ay - r.top) + 'px'; };
+  // J2's board is upside down in the table layout: flip the swipe and the ring with it
+  const flipped = () => k === 1 && $('views').classList.contains('duo') && getComputedStyle(view).transform !== 'none';
+  const put = () => { const r = view.getBoundingClientRect(), f = flipped(); ring.style.left = (f ? r.right - ax : ax - r.left) + 'px'; ring.style.top = (f ? r.bottom - ay : ay - r.top) + 'px'; };
   const set = nd => { d = nd; const p = who(); if (p) p.held = d < 0 ? [] : [d]; ring.textContent = d < 0 ? '' : '▲▶▼◀'[d]; };
   view.addEventListener('pointerdown', e => {
     if (!document.body.classList.contains('touch') || pid !== null || !ov.hidden || !who()) return;
@@ -3920,7 +3928,8 @@ document.querySelectorAll('.view').forEach((view, k) => {
     if (e.pointerId !== pid) return;
     let dx = e.clientX - ax, dy = e.clientY - ay; const dist = Math.hypot(dx, dy);
     if (dist < 14) return;
-    set(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+    const s = flipped() ? -1 : 1;
+    set(Math.abs(dx) > Math.abs(dy) ? (dx * s > 0 ? 1 : 3) : (dy * s > 0 ? 2 : 0));
     if (dist > 36) { ax = e.clientX - dx / dist * 36; ay = e.clientY - dy / dist * 36; put(); }
   });
   const end = e => { if (e.pointerId !== pid) return; pid = null; ring.hidden = true; set(-1); };
@@ -4079,6 +4088,7 @@ window.__sim = {
     }
     menu(); return log;
   },
+  pos2(){ return players[1] ? players[1].x + ',' + players[1].y : ''; },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
   butts(){ const c = document.createElement('canvas'); c.width = 8 * 96; c.height = 2 * 96; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); BUTT_T.forEach((f, k) => g.drawImage(f[0], (k % 8) * 96, (k / 8 | 0) * 96, 96, 96)); return c.toDataURL(); },
   map(n){
