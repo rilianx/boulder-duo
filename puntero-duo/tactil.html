@@ -1,0 +1,773 @@
+<title>Puntero C</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
+<style>
+/* Cuaderno abierto en vertical: a la izquierda el dibujo (margen = stack, hoja = heap), a la derecha el código en C que se va escribiendo. Un solo look de papel, a propósito. */
+:root{
+  color-scheme: light;
+  --paper:#fbf8ef;
+  --paper-2:#f3eedf;
+  --grid:#c9dbeb;
+  --graphite:#2e2c2a;
+  --soft:#6f6a62;
+  --margin:#e0726a;
+  --ink:#2350b8;
+  --note:#ffe27a;
+  --ok:#2f8a4c;
+  --bad:#c23a32;
+  --warn:#b7791f;
+  --display:"Caveat","Comic Sans MS",cursive;
+  --body:"Patrick Hand","Comic Sans MS",system-ui,sans-serif;
+  --code:"Cutive Mono","Courier New",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--body);font-size:17px;line-height:1.25;
+  padding-inline:16px;padding-block:8px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.app{height:100%;max-width:980px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
+
+header{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
+h1{font-family:var(--display);font-size:30px;margin:0;line-height:1;white-space:nowrap}
+h1 span{color:var(--ink)}
+.lv{flex:1;min-width:0;font-size:16px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{font-family:var(--body);font-size:20px;line-height:1;width:36px;height:36px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,40%);gap:8px;min-height:0}
+@media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 320px} }
+.boardcell{position:relative;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+canvas#cv{display:block;touch-action:none;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
+
+.code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
+  padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.code div{white-space:pre-wrap}
+.code .dim{color:var(--soft)}
+.code .goal{color:var(--ok)}
+.code .err{color:var(--bad)}
+.code .leak{color:var(--warn)}
+.code .new{background:var(--note);animation:fade 1.6s ease-out forwards}
+@keyframes fade{to{background:transparent}}
+
+.bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.bar button{font-family:var(--code);font-size:clamp(12px,3.4vw,15px);min-height:46px;padding:4px 6px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation}
+.bar button.body{font-family:var(--body);font-size:16px}
+.bar button:active{background:var(--note)}
+.bar button:disabled{opacity:.35}
+button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
+
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.82);padding:8px;z-index:2}
+.card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:14px 16px;max-width:430px;width:100%;
+  display:flex;flex-direction:column;gap:9px;box-shadow:4px 5px 0 rgba(46,44,42,.18);max-height:100%;overflow-y:auto}
+.card h2{font-family:var(--display);font-size:34px;margin:0;line-height:1;text-wrap:balance}
+.card p{margin:0}
+.card code{font-family:var(--code);font-size:.9em;background:var(--paper-2);padding:0 3px}
+.card .row{display:flex;gap:8px;flex-wrap:wrap}
+.card button{font-family:var(--body);font-size:19px;padding:7px 16px;border:2px solid var(--graphite);background:var(--note);color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
+.card button.sec{background:#fffdf6}
+.stars{font-size:36px;letter-spacing:4px;color:#d9a400;line-height:1}
+.tally{font-variant-numeric:tabular-nums}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Puntero <span>C</span></h1>
+    <span class="lv" id="lvname">—</span>
+    <button class="mini" id="bprev" aria-label="Nivel anterior">‹</button>
+    <button class="mini" id="bnext" aria-label="Nivel siguiente">›</button>
+  </header>
+
+  <div class="main">
+    <div class="boardcell" id="cell">
+      <canvas id="cv" aria-label="Tablero: variables en el margen, nodos en la hoja"></canvas>
+      <div class="overlay" id="ov" hidden></div>
+    </div>
+    <div class="code" id="code" aria-live="polite"></div>
+  </div>
+
+  <div class="bar" id="bar">
+    <button id="bnext1">p = p-&gt;next</button>
+    <button id="bprev1">p = p-&gt;prev</button>
+    <button id="bnew">n = crearNodo()</button>
+    <button id="bundo" class="body">↶ deshacer</button>
+    <button id="breset" class="body">⟲ reiniciar</button>
+    <button id="bhelp" class="body">? ayuda</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ───────────────────────── tablero lógico ─────────────────────────
+const LW = 250, LH = 520;          // coordenadas lógicas del dibujo
+const MX = 66;                     // línea roja del margen: a la izquierda el stack, a la derecha el heap
+const NW = 62, NH = 30, DW = 40;   // nodo: [dato | next]
+const PW = 56, PH = 26;            // post-it de variable
+const X1 = 132, X2 = 210;          // columnas del heap
+const Y = i => 52 + i * 70;
+const TRASH = { x: 33, y: 478, r: 22 };
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* Cada nivel:
+   nodes: [id, dato, x, y]   links: { id: idSiguiente }   vars: [[nombre, id|null]]
+   create: valores que entrega crearNodo() a la variable n, y dónde aparecen
+   goal: reach (p sobre el dato) | before (p justo antes del dato) | list (head → … → NULL, y tail opcional) */
+const LEVELS = [
+  { name: 'Recorrer', optimal: 3, hidden: true,
+    intro: 'Los datos están ocultos. Solo ves el nodo al que apunta <code>p</code> y el siguiente. Avanza con <code>p = p->next</code> hasta que <code>p</code> apunte al 7.<br><br>Prueba también <code>p = p->prev</code>: en una lista simple ese campo no existe.',
+    goal: { type: 'reach', val: 7 },
+    nodes: [['a', 4, X1, Y(0)], ['b', 1, X1, Y(1)], ['c', 9, X1, Y(2)], ['d', 7, X1, Y(3)], ['e', 3, X1, Y(4)]],
+    links: { a: 'b', b: 'c', c: 'd', d: 'e' }, vars: [['head', 'a'], ['p', 'a']] },
+
+  { name: 'Frenar a tiempo', optimal: 2, hidden: true,
+    intro: 'Deja <code>p</code> en el nodo <b>anterior</b> al 7. Para borrar o insertar casi siempre hay que pararse antes.<br><br>Si te pasas, no hay vuelta atrás: toca el post-it <code>head</code> para hacer <code>p = head</code> y empezar de nuevo.',
+    goal: { type: 'before', val: 7 },
+    nodes: [['a', 3, X1, Y(0)], ['b', 8, X1, Y(1)], ['c', 5, X1, Y(2)], ['d', 7, X1, Y(3)], ['e', 2, X1, Y(4)]],
+    links: { a: 'b', b: 'c', c: 'd', d: 'e' }, vars: [['head', 'a'], ['p', 'a']] },
+
+  { name: 'Insertar el 2', optimal: 3,
+    intro: 'Crea un nodo con el 2 y mételo entre el 1 y el 3.<br><br><b>Arrastra</b> desde un post-it o desde la casilla <code>next</code> de un nodo, y suelta sobre un nodo o un nombre. Soltar en el papel es <code>NULL</code>.<br><br>Ojo con el orden: un nodo al que nada apunta se pierde para siempre.',
+    goal: { type: 'list', head: [1, 2, 3] },
+    nodes: [['a', 1, X1, Y(0)], ['b', 3, X1, Y(2)]],
+    links: { a: 'b' }, vars: [['head', 'a'], ['p', 'a'], ['n', null]],
+    create: { vals: [2], at: [[X2, Y(1)]] } },
+
+  { name: 'Borrar el 13', optimal: 3,
+    intro: 'Saca el 13 de la lista <b>y libéralo</b>. Si solo lo saltas, queda ocupando memoria y nadie puede volver a alcanzarlo: una fuga.<br><br>Para liberar, arrastra el post-it de la variable que lo apunta hasta el basurero: <code>free(aux)</code>.',
+    goal: { type: 'list', head: [1, 2, 4] },
+    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 13, X1, Y(2), true], ['d', 4, X1, Y(3)]],
+    links: { a: 'b', b: 'c', c: 'd' }, vars: [['head', 'a'], ['p', 'a'], ['aux', null]] },
+
+  { name: 'Pila: push', optimal: 6,
+    intro: 'Una pila crece por <code>head</code>. Haz push del 8 y después push del 9.<br><br>En cada push: crea el nodo, haz que apunte al tope actual y luego mueve <code>head</code>.',
+    goal: { type: 'list', head: [9, 8, 5, 2] },
+    nodes: [['a', 5, X1, Y(2)], ['b', 2, X1, Y(3)]],
+    links: { a: 'b' }, vars: [['head', 'a'], ['n', null]],
+    create: { vals: [8, 9], at: [[X2, Y(1)], [X2, Y(0)]] } },
+
+  { name: 'Pila: pop', optimal: 3,
+    intro: 'Saca el tope (el 9) y libéralo. Si mueves <code>head</code> sin guardar antes el nodo en <code>aux</code>, ya no tendrás con qué hacer <code>free</code>.',
+    goal: { type: 'list', head: [8, 5] },
+    nodes: [['a', 9, X1, Y(0)], ['b', 8, X1, Y(1)], ['c', 5, X1, Y(2)]],
+    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['aux', null]] },
+
+  { name: 'Cola: encolar', optimal: 3,
+    intro: 'Una cola tiene <code>head</code> (sale primero) y <code>tail</code> (el último que llegó). Encola el 4 al final, sin recorrer la lista.',
+    goal: { type: 'list', head: [1, 2, 3, 4], tail: 4 },
+    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 3, X1, Y(2)]],
+    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['tail', 'c'], ['n', null]],
+    create: { vals: [4], at: [[X2, Y(3)]] } },
+
+  { name: 'Invertir', optimal: 5,
+    intro: 'Deja la lista al revés: <code>head → 3 → 2 → 1 → NULL</code>. Tienes <code>p</code>, <code>ant</code> y <code>sig</code> para no perder nodos mientras das vuelta las flechas.',
+    goal: { type: 'list', head: [3, 2, 1] },
+    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 3, X1, Y(2)]],
+    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['p', 'a'], ['ant', null], ['sig', null]] },
+];
+
+// ───────────────────────── utilidades ─────────────────────────
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let SC = 1, DPR = 1;
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return ((n >>> 0) % 10000) / 5000 - 1; }
+let boil = 0;
+const J = (s, a) => hash(s * 7919 + boil * 104729) * a;
+const lerp = (a, b, t) => a + (b - a) * t;
+
+function rLine(x1, y1, x2, y2, seed, amp = 1, passes = 2) {
+  for (let p = 0; p < passes; p++) {
+    const s = seed * 13 + p * 5;
+    ctx.beginPath();
+    ctx.moveTo(x1 + J(s + 2, amp), y1 + J(s + 3, amp));
+    ctx.quadraticCurveTo((x1 + x2) / 2 + J(s, amp * 1.4), (y1 + y2) / 2 + J(s + 1, amp * 1.4), x2 + J(s + 4, amp), y2 + J(s + 5, amp));
+    ctx.stroke();
+  }
+}
+function rRect(x, y, w, h, seed, amp = 0.9) {
+  rLine(x, y, x + w, y, seed, amp); rLine(x + w, y, x + w, y + h, seed + 1, amp);
+  rLine(x + w, y + h, x, y + h, seed + 2, amp); rLine(x, y + h, x, y, seed + 3, amp);
+}
+function rCircle(x, y, r, seed, fill) {
+  ctx.beginPath();
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 22) * Math.PI * 2, rr = r + J(seed + i, r * 0.07);
+    i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  ctx.stroke();
+}
+function ctrlOf(a, b, k) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  return { x: (a.x + b.x) / 2 - dy * k, y: (a.y + b.y) / 2 + dx * k };
+}
+function qp(a, c, b, t) { const u = 1 - t; return { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y }; }
+function rArrow(a, b, seed, color, width, k = 0.22, dash = null, head = true) {
+  const c = ctrlOf(a, b, k);
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
+  if (dash) ctx.setLineDash(dash);
+  for (let p = 0; p < 2; p++) {
+    ctx.beginPath(); ctx.moveTo(a.x + J(seed + p, 0.8), a.y + J(seed + p + 9, 0.8));
+    ctx.quadraticCurveTo(c.x + J(seed + p + 3, 2), c.y + J(seed + p + 4, 2), b.x, b.y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  if (!head) return;
+  const t = qp(a, c, b, 0.88), ang = Math.atan2(b.y - t.y, b.x - t.x), L = 9;
+  rLine(b.x, b.y, b.x - Math.cos(ang - 0.45) * L, b.y - Math.sin(ang - 0.45) * L, seed + 20, 0.6, 1);
+  rLine(b.x, b.y, b.x - Math.cos(ang + 0.45) * L, b.y - Math.sin(ang + 0.45) * L, seed + 21, 0.6, 1);
+}
+// punto donde una flecha que viene de `from` entra a la caja del nodo
+function entry(from, n, k) {
+  const c = { x: n.px, y: n.py }, ct = ctrlOf(from, c, k);
+  let dx = c.x - ct.x, dy = c.y - ct.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  const t = Math.min(Math.abs(dx) > 1e-6 ? (NW / 2 + 2) / Math.abs(dx) : 1e9, Math.abs(dy) > 1e-6 ? (NH / 2 + 2) / Math.abs(dy) : 1e9);
+  return { x: c.x - dx * t, y: c.y - dy * t };
+}
+
+// ───────────────────────── sonido ─────────────────────────
+let AC = null;
+function beep(f, d = 0.08, type = 'triangle', v = 0.05, slide = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
+  } catch (e) {}
+}
+const SFX = {
+  ok: () => beep(620, 0.08, 'triangle', 0.05, 1.3),
+  jump: () => beep(380, 0.2, 'sine', 0.05, 2),
+  err: () => { beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); },
+  leak: () => beep(500, 0.5, 'sine', 0.05, 0.3),
+  free: () => beep(900, 0.12, 'triangle', 0.04, 0.5),
+  win: () => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.05), i * 110)),
+};
+function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+// ───────────────────────── estado ─────────────────────────
+let LVI = 0, S = null;
+const addrOf = n => '0x' + (0x3a0 + n.k * 0x18).toString(16);
+
+function loadLevel(i) {
+  LVI = (i + LEVELS.length) % LEVELS.length;
+  const L = LEVELS[LVI];
+  S = { L, nodes: [], vars: [], ops: 0, errors: 0, leaks: 0, made: 0, undo: [], code: [], state: 'play',
+        drag: null, toast: null, t: 0, avatar: null };
+  const byId = {};
+  for (const [id, v, x, y, bug] of L.nodes) {
+    const n = { k: S.nodes.length, v, x, y, px: x, py: y, next: null, freed: false, dead: false, bug: !!bug, revealed: !L.hidden, tray: -1, wob: 0 };
+    S.nodes.push(n); byId[id] = n;
+  }
+  for (const [a, b] of Object.entries(L.links)) byId[a].next = byId[b];
+  L.vars.forEach(([name, id], i) => S.vars.push({ name, t: id ? byId[id] : null, x: 4, y: 20 + i * 48 }));
+  S.required = L.goal.type === 'list' ? L.goal.head.slice() : [L.goal.val];
+  const p = varNamed('p');
+  if (p) S.avatar = { x: 0, y: 0, dir: 1, hop: 0 };
+  placeAvatar(true);
+  reveal();
+
+  // código inicial
+  addCode('// struct Nodo: dato, next', 'dim');
+  addCode('// objetivo: ' + goalText(), 'goal');
+  const headList = listText(varNamed('head'));
+  for (const v of S.vars) {
+    let rhs;
+    if (!v.t) rhs = 'NULL';
+    else if (v.name === 'head') rhs = 'lista();';
+    else if (v.t === varNamed('head').t) rhs = 'head';
+    else rhs = 'ultimo(head)';
+    addCode(`Nodo *${v.name} = ${rhs}${rhs.endsWith(';') ? '' : ';'}` + (v.name === 'head' ? `  // ${headList}` : ''), 'dim');
+  }
+  // botones
+  $('bnext1').hidden = $('bprev1').hidden = !p;
+  $('bnew').hidden = !L.create;
+  updateButtons();
+  $('lvname').textContent = `${LVI + 1}/${LEVELS.length} · ${L.name}`;
+  showCard('intro');
+}
+const varNamed = name => S.vars.find(v => v.name === name) || null;
+const live = n => n && !n.dead;
+
+function goalText() {
+  const G = S.L.goal;
+  if (G.type === 'reach') return `p apunta al ${G.val}`;
+  if (G.type === 'before') return `p->next apunta al ${G.val}`;
+  return 'head → ' + G.head.join(' → ') + ' → NULL' + (G.tail != null ? `; tail → ${G.tail}` : '');
+}
+function listText(v) {
+  if (!v || !v.t) return 'NULL';
+  const out = [], seen = new Set(); let n = v.t;
+  while (n && !seen.has(n)) { seen.add(n); out.push(n.freed ? '✗' : (n.revealed ? n.v : '?')); n = n.next; }
+  return out.join(' → ') + (n ? ' → ↺' : ' → NULL');
+}
+function updateButtons() {
+  const L = S.L;
+  if (L.create) {
+    const left = L.create.vals.length - S.made;
+    $('bnew').textContent = left > 0 ? `n = crearNodo(${L.create.vals[S.made]})` : 'n = crearNodo()';
+    $('bnew').disabled = left <= 0;
+  }
+  $('bundo').disabled = !S.undo.length;
+}
+
+// ───────────────────────── código ─────────────────────────
+function addCode(txt, cls = '') {
+  S.code.push({ txt, cls });
+  renderCode(true);
+}
+function renderCode(fresh) {
+  const el = $('code');
+  el.innerHTML = S.code.map((l, i) => `<div class="${l.cls}${fresh && i === S.code.length - 1 && !/dim|goal/.test(l.cls) ? ' new' : ''}">${l.txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+function toast(text, bad) { S.toast = { text, t: 2.6, bad }; }
+function error(code, msg) {
+  S.errors++; addCode(code, 'err'); toast(msg, true); SFX.err(); vibrate([30, 40, 30]);
+  if (S.avatar) S.avatar.shake = 0.35;
+}
+
+// ───────────────────────── nombres: cómo llegar a un nodo en C ─────────────────────────
+// Devuelve una expresión C que vale `n`, con a lo más `maxArrows` flechas (->). p va primero.
+function orderedVars() { const v = S.vars.slice(); v.sort((a, b) => (b.name === 'p') - (a.name === 'p')); return v; }
+function nameOf(n, maxArrows = 2) {
+  if (!n) return 'NULL';
+  for (const v of orderedVars()) if (v.t === n) return v.name;
+  for (let d = 1; d <= maxArrows; d++) {
+    for (const v of orderedVars()) {
+      let m = v.t, ok = true;
+      for (let i = 0; i < d; i++) { if (!m || m.freed) { ok = false; break; } m = m.next; }
+      if (ok && m === n) return v.name + '->next'.repeat(d);
+    }
+  }
+  return null;
+}
+
+// ───────────────────────── ejecutar instrucciones ─────────────────────────
+function snapshot() {
+  const idx = n => n ? n.k : -1;
+  return { nodes: S.nodes.map(n => ({ next: idx(n.next), freed: n.freed, dead: n.dead, revealed: n.revealed, tray: n.tray })),
+           vars: S.vars.map(v => idx(v.t)), ops: S.ops, leaks: S.leaks, made: S.made, count: S.nodes.length, code: S.code.length };
+}
+function restore(s) {
+  S.nodes.length = s.count;
+  const at = k => k < 0 ? null : S.nodes[k];
+  s.nodes.forEach((o, i) => Object.assign(S.nodes[i], { next: at(o.next), freed: o.freed, dead: o.dead, revealed: o.revealed, tray: o.tray }));
+  s.vars.forEach((k, i) => S.vars[i].t = at(k));
+  S.ops = s.ops; S.leaks = s.leaks; S.made = s.made;
+  S.code.length = s.code; renderCode(false);
+}
+function exec(code, mutate, sfx = SFX.ok) {
+  if (S.state !== 'play') return;
+  S.undo.push(snapshot());
+  mutate(); S.ops++;
+  addCode(code);
+  sfx(); vibrate(12);
+  afterOp();
+}
+function afterOp() {
+  checkLeaks(); reveal(); placeAvatar(false); updateButtons(); checkWin();
+}
+function checkLeaks() {
+  const seen = new Set(), q = S.vars.map(v => v.t).filter(n => live(n) && !n.freed);
+  while (q.length) { const n = q.pop(); if (seen.has(n)) continue; seen.add(n); if (live(n.next) && !n.next.freed) q.push(n.next); }
+  for (const n of S.nodes) {
+    if (n.dead || n.freed || seen.has(n)) continue;
+    n.dead = true; n.tray = S.leaks++;
+    addCode(`// ⚠ fuga: el ${n.v} quedó sin referencias`, 'leak');
+    SFX.leak();
+    if (S.required.includes(n.v)) {
+      S.state = 'lost'; S.lostVal = n.v; vibrate(200);
+      { const cur = S; setTimeout(() => { if (S === cur && S.state === 'lost') showCard('lost'); }, 700); }
+    }
+  }
+}
+function reveal() {
+  if (!S.L.hidden) return;
+  const p = varNamed('p');
+  if (p && live(p.t)) { p.t.revealed = true; if (live(p.t.next)) p.t.next.revealed = true; }
+}
+function checkWin() {
+  if (S.state !== 'play') return;
+  const G = S.L.goal, p = varNamed('p');
+  let ok = false;
+  if (G.type === 'reach') ok = p && p.t && p.t.v === G.val;
+  else if (G.type === 'before') ok = p && p.t && p.t.next && p.t.next.v === G.val;
+  else {
+    const out = [], seen = new Set(); let n = varNamed('head').t;
+    while (n && !n.freed && !seen.has(n)) { seen.add(n); out.push(n.v); n = n.next; }
+    ok = !n && out.length === G.head.length && out.every((v, i) => v === G.head[i]);
+    if (ok && G.tail != null) { const t = varNamed('tail'); ok = t && t.t && !t.t.freed && t.t.v === G.tail; }
+    // y nada queda colgando fuera de la lista sin liberar (lo que sobra se libera con free)
+    if (ok) ok = S.nodes.every(m => m.dead || m.freed || seen.has(m));
+  }
+  if (ok) { S.state = 'won'; SFX.win(); vibrate([20, 60, 20]); { const cur = S; setTimeout(() => { if (S === cur && S.state === 'won') showCard('won'); }, 600); } }
+}
+
+// acciones de los botones
+function advance() {
+  const p = varNamed('p'); if (!p || S.state !== 'play') return;
+  if (!p.t) { error('p = p->next;  // Segmentation fault', 'p es NULL: no hay nodo del cual leer next'); return; }
+  if (p.t.freed) { error('p = p->next;  // ✗ uso después de free', 'p apunta a memoria liberada'); return; }
+  if (S.avatar) S.avatar.hop = 1;
+  exec('p = p->next;', () => { p.t = p.t.next; }, SFX.jump);
+}
+function goBack() {
+  if (S.state !== 'play') return;
+  error("p = p->prev;  // error: 'Nodo' no tiene un miembro llamado 'prev'",
+        'En una lista simple no hay vuelta atrás. Guarda el nodo en otra variable antes de avanzar, o vuelve a empezar con p = head.');
+}
+function createNode() {
+  const L = S.L; if (!L.create || S.state !== 'play') return;
+  const i = S.made; if (i >= L.create.vals.length) return;
+  const v = L.create.vals[i], [x, y] = L.create.at[i] || [X2, Y(i)];
+  const n = varNamed('n');
+  exec(`n = crearNodo(${v});`, () => {
+    const node = { k: S.nodes.length, v, x, y, px: x, py: y - 30, next: null, freed: false, dead: false, bug: false, revealed: true, tray: -1, wob: 0 };
+    S.nodes.push(node); n.t = node; S.made++;
+  });
+}
+
+// ───────────────────────── arrastrar y soltar ─────────────────────────
+function toLogical(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
+}
+const inRect = (pt, x, y, w, h, pad = 0) => pt.x >= x - pad && pt.x <= x + w + pad && pt.y >= y - pad && pt.y <= y + h + pad;
+function varAt(pt) { return S.vars.find(v => inRect(pt, v.x, v.y, PW, PH, 4)) || null; }
+function avatarAt(pt) { const a = S.avatar; return a && Math.hypot(pt.x - a.x, pt.y - a.y) < 16 ? varNamed('p') : null; }
+function nodeAt(pt, pad = 6) { return S.nodes.slice().reverse().find(n => live(n) && !n.freed && inRect(pt, n.x - NW / 2, n.y - NH / 2, NW, NH, pad)) || null; }
+function nextBoxAt(pt) { return S.nodes.find(n => live(n) && !n.freed && inRect(pt, n.x - NW / 2 + DW, n.y - NH / 2, NW - DW, NH, 7)) || null; }
+const onTrash = pt => Math.hypot(pt.x - TRASH.x, pt.y - TRASH.y) < TRASH.r + 6;
+
+function describeDrop(d) {
+  // devuelve { code, run } o { err, msg } o { noop }
+  const pt = d.pt;
+  let lhs, current;
+  if (d.kind === 'var') { lhs = d.v.name; current = d.v.t; }
+  else {
+    const base = nameOf(d.node, 1);
+    if (!base) return { err: '// ✗ ese nodo no tiene nombre', msg: 'Para cambiar el next de un nodo, primero apúntalo con una variable.' };
+    lhs = base + '->next'; current = d.node.next;
+  }
+  if (onTrash(pt)) {
+    if (d.kind !== 'var') return { err: '// ✗ free() recibe una variable', msg: 'Arrastra al basurero el post-it de una variable.' };
+    const v = d.v;
+    if (!v.t) return { code: `free(${v.name});  // free(NULL) no hace nada`, run: () => {} };
+    if (v.t.freed) return { err: `free(${v.name});  // ✗ double free`, msg: 'Ese nodo ya estaba liberado.' };
+    return { code: `free(${v.name});`, run: () => { v.t.freed = true; }, sfx: SFX.free };
+  }
+  const w = varAt(pt) || avatarAt(pt);
+  let target, rhs;
+  if (w) {
+    if (d.kind === 'var' && w === d.v) return { noop: true };
+    target = w.t; rhs = w.name;
+  } else {
+    const n = nodeAt(pt);
+    if (n) {
+      target = n; rhs = nameOf(n, 2);
+      if (!rhs) return { err: '// ✗ ese nodo no tiene nombre', msg: 'No hay una variable (ni var->next) que llegue a ese nodo. En C no se puede nombrar.' };
+    } else { target = null; rhs = 'NULL'; }
+  }
+  if (target === current && !(d.kind === 'var' && w)) return { noop: true, msg: `${lhs} ya apunta ahí` };
+  if (d.kind === 'var') return { code: `${lhs} = ${rhs};`, run: () => { d.v.t = target; }, sfx: d.v.name === 'p' ? SFX.jump : SFX.ok };
+  return { code: `${lhs} = ${rhs};`, run: () => { d.node.next = target; } };
+}
+
+cv.addEventListener('pointerdown', e => {
+  if (!S || S.state !== 'play') return;
+  const pt = toLogical(e);
+  let d = null;
+  const v = avatarAt(pt) || varAt(pt);
+  if (v) d = { kind: 'var', v, from: v === varNamed('p') && avatarAt(pt) ? { x: S.avatar.x, y: S.avatar.y } : { x: v.x + PW, y: v.y + PH / 2 } };
+  else { const n = nextBoxAt(pt); if (n) d = { kind: 'next', node: n, from: dotOf(n) }; }
+  if (!d) {
+    const n = nodeAt(pt, 0);
+    if (n) toast(n === (varNamed('p') || {}).t ? 'Arrastra desde la casilla next (●) para cambiar su flecha' : 'En C se llega a un nodo con una variable o con ->next', false);
+    return;
+  }
+  d.start = pt; d.pt = pt; d.moved = false; d.id = e.pointerId;
+  S.drag = d; cv.setPointerCapture(e.pointerId); e.preventDefault();
+});
+cv.addEventListener('pointermove', e => {
+  const d = S && S.drag; if (!d || e.pointerId !== d.id) return;
+  d.pt = toLogical(e);
+  if (Math.hypot(d.pt.x - d.start.x, d.pt.y - d.start.y) > 6) d.moved = true;
+  d.preview = d.moved ? describeDrop(d) : null;
+});
+function endDrag(e, cancel) {
+  const d = S && S.drag; if (!d || e.pointerId !== d.id) return;
+  S.drag = null;
+  if (cancel) return;
+  if (!d.moved) {   // un toque
+    if (d.kind === 'var') {
+      const p = varNamed('p');
+      if (!p) { toast('Arrastra el post-it para cambiar a dónde apunta ' + d.v.name, false); return; }
+      if (d.v === p) { toast('Arrastra a p hasta un nodo o un nombre', false); return; }
+      if (p.t === d.v.t) { toast(`p ya apunta a lo mismo que ${d.v.name}`, false); return; }
+      exec(`p = ${d.v.name};`, () => { p.t = d.v.t; }, SFX.jump);
+    } else toast('Arrastra desde aquí hasta un nodo o un nombre', false);
+    return;
+  }
+  const r = describeDrop(d);
+  if (r.err) error(r.err, r.msg);
+  else if (r.noop) { if (r.msg) toast(r.msg, false); }
+  else exec(r.code, r.run, r.sfx);
+}
+cv.addEventListener('pointerup', e => endDrag(e, false));
+cv.addEventListener('pointercancel', e => endDrag(e, true));
+
+// ───────────────────────── tarjetas ─────────────────────────
+function showCard(kind) {
+  const ov = $('ov');
+  if (!kind) { ov.hidden = true; ov.innerHTML = ''; return; }
+  ov.hidden = false;
+  const L = S.L;
+  if (kind === 'intro') {
+    ov.innerHTML = `<div class="card"><h2>${LVI + 1}. ${L.name}</h2><p>${L.intro}</p>
+      <p class="tally"><b>Objetivo:</b> <code>${goalText()}</code></p>
+      <div class="row"><button id="cgo">Empezar</button></div></div>`;
+    $('cgo').onclick = () => showCard(null); $('cgo').focus();
+  } else if (kind === 'won') {
+    const clean = S.errors === 0 && S.leaks === 0;
+    let stars = S.ops <= L.optimal ? 3 : S.ops <= L.optimal * 2 ? 2 : 1;
+    if (!clean) stars = Math.min(stars, 2);
+    const last = LVI === LEVELS.length - 1;
+    const notes = [];
+    if (S.leaks) notes.push(`Quedaron <b>${S.leaks}</b> nodo(s) perdidos en memoria. Faltó un <code>free</code>.`);
+    if (S.errors) notes.push(`Tuviste <b>${S.errors}</b> error(es).`);
+    if (S.ops < L.optimal) notes.push('¡Lo hiciste en menos pasos que nuestra solución!');
+    ov.innerHTML = `<div class="card"><h2>${S.leaks ? 'Funciona, pero…' : '¡Compila y funciona!'}</h2>
+      <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+      <p class="tally"><b>${S.ops}</b> ${S.ops === 1 ? 'instrucción' : 'instrucciones'} · nuestra solución usa <b>${L.optimal}</b></p>
+      ${notes.map(n => `<p>${n}</p>`).join('')}
+      ${last ? '<p>Terminaste el piloto. Lo siguiente sería: listas dobles (donde <code>p->prev</code> sí existe), insertar en orden y tablas hash.</p>' : ''}
+      <div class="row"><button id="cn">${last ? 'Volver al nivel 1' : 'Siguiente nivel'}</button><button class="sec" id="cr">Repetir</button></div></div>`;
+    $('cn').onclick = () => loadLevel(LVI + 1); $('cr').onclick = () => loadLevel(LVI); $('cn').focus();
+  } else if (kind === 'lost') {
+    ov.innerHTML = `<div class="card"><h2 style="color:var(--bad)">Fuga de memoria</h2>
+      <p>El nodo con el <b>${S.lostVal}</b> quedó sin ninguna variable ni flecha que lo apunte. En C ya no hay forma de volver a alcanzarlo, y lo necesitabas.</p>
+      <p>Pista: antes de cambiar una flecha, asegúrate de que lo que estaba al otro lado siga apuntado por algo.</p>
+      <div class="row"><button id="cu">↶ Deshacer</button><button class="sec" id="cr">Reiniciar</button></div></div>`;
+    $('cu').onclick = undo; $('cr').onclick = () => loadLevel(LVI); $('cu').focus();
+  } else if (kind === 'help') {
+    ov.innerHTML = `<div class="card"><h2>Cómo se juega</h2>
+      <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[dato | next]</code>.</p>
+      <p><b>Arrastra</b> desde un post-it o desde la casilla <code>next</code> (●) y suelta sobre un nodo, sobre un nombre o en el papel (<code>NULL</code>). Mientras arrastras ves la línea de C que vas a escribir.</p>
+      <p><b>Toca</b> un post-it para hacer <code>p = ese_nombre</code>.</p>
+      <p>Arrastra un post-it al <b>basurero</b> para hacer <code>free</code>.</p>
+      <p>Un nodo al que nada apunta es una <b>fuga</b>: se pierde para siempre.</p>
+      <div class="row"><button id="cg">Seguir</button></div></div>`;
+    $('cg').onclick = () => showCard(null); $('cg').focus();
+  }
+}
+function undo() {
+  if (!S.undo.length) return;
+  restore(S.undo.pop());
+  S.state = 'play'; showCard(null);
+  placeAvatar(false); updateButtons();
+}
+$('bnext1').onclick = advance;
+$('bprev1').onclick = goBack;
+$('bnew').onclick = createNode;
+$('bundo').onclick = undo;
+$('breset').onclick = () => loadLevel(LVI);
+$('bhelp').onclick = () => showCard('help');
+$('bprev').onclick = () => loadLevel(LVI - 1);
+$('bnext').onclick = () => loadLevel(LVI + 1);
+
+// ───────────────────────── dibujo ─────────────────────────
+function dotOf(n) { return { x: n.px + NW / 2 - (NW - DW) / 2, y: n.py }; }
+function varAnchor(v) { return { x: v.x + PW, y: v.y + PH / 2 }; }
+function placeAvatar(snap) {
+  const a = S.avatar; if (!a) return;
+  const p = varNamed('p');
+  a.tx = p.t && !p.t.dead ? p.t.x - NW / 2 - 2 : p.x + PW + 12;
+  a.ty = p.t && !p.t.dead ? p.t.y - NH / 2 - 8 : p.y + PH / 2 - 2;
+  if (snap) { a.x = a.tx; a.y = a.ty; }
+}
+
+let paper = null;
+function buildPaper() {
+  paper = document.createElement('canvas'); paper.width = LW * SC * DPR; paper.height = LH * SC * DPR;
+  const g = paper.getContext('2d'); g.scale(SC * DPR, SC * DPR);
+  g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, LW, LH);
+  g.strokeStyle = '#c9dbeb'; g.lineWidth = 0.7;
+  for (let x = 0; x <= LW; x += 12.5) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, LH); g.stroke(); }
+  for (let y = 0; y <= LH; y += 12.5) { g.beginPath(); g.moveTo(0, y); g.lineTo(LW, y); g.stroke(); }
+  g.strokeStyle = '#e0726a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(MX, 0); g.lineTo(MX, LH); g.stroke();
+  g.fillStyle = '#b6b0a6'; g.font = '13px "Patrick Hand", sans-serif'; g.textAlign = 'center';
+  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', (MX + LW) / 2, 12);
+}
+
+function drawVar(v, hot) {
+  ctx.save(); ctx.translate(v.x + PW / 2, v.y + PH / 2); ctx.rotate(-0.04 + (v.name.length % 3) * 0.02);
+  ctx.fillStyle = hot ? '#ffd23a' : '#ffe27a'; ctx.fillRect(-PW / 2, -PH / 2, PW, PH);
+  ctx.fillStyle = 'rgba(0,0,0,.06)'; ctx.fillRect(-PW / 2, PH / 2 - 4, PW, 4);
+  ctx.strokeStyle = '#8a7420'; ctx.lineWidth = 1.1; rRect(-PW / 2, -PH / 2, PW, PH, v.name.charCodeAt(0) * 7, 0.6);
+  ctx.fillStyle = v.name === 'p' ? '#2350b8' : '#2e2c2a'; ctx.font = '17px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(v.name, -4, 1);
+  ctx.restore();
+  const a = varAnchor(v);
+  ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(a.x - 6, a.y, 2.6, 0, 7); ctx.fill();
+}
+function drawNull(x, y) {   // tierra eléctrica: el NULL de los diagramas
+  ctx.strokeStyle = '#6f6a62'; ctx.lineWidth = 1.4;
+  rLine(x, y, x + 6, y, 901, 0.4, 1);
+  rLine(x + 6, y - 6, x + 6, y + 6, 902, 0.4, 1); rLine(x + 9, y - 4, x + 9, y + 4, 903, 0.4, 1); rLine(x + 12, y - 2, x + 12, y + 2, 904, 0.4, 1);
+}
+function drawNode(n, hot) {
+  const x = n.px, y = n.py, L = x - NW / 2, T = y - NH / 2;
+  ctx.save();
+  if (n.dead) { ctx.globalAlpha = 0.5; }
+  if (n.freed) { ctx.globalAlpha = 0.45; ctx.setLineDash([3, 3]); }
+  ctx.fillStyle = hot ? '#fff3c4' : '#fffdf6'; ctx.fillRect(L, T, NW, NH);
+  ctx.strokeStyle = n.bug ? '#c23a32' : '#2e2c2a'; ctx.lineWidth = 1.8;
+  rRect(L, T, NW, NH, n.k * 17 + 3);
+  rLine(L + DW, T, L + DW, T + NH, n.k * 17 + 9, 0.6, 1);
+  ctx.setLineDash([]);
+  ctx.fillStyle = n.bug ? '#c23a32' : '#2e2c2a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '22px "Patrick Hand", sans-serif';
+  ctx.fillText(n.revealed ? String(n.v) : '?', L + DW / 2, y + 1);
+  const d = dotOf(n);
+  if (n.next) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, 7); ctx.fill(); }
+  else { ctx.lineWidth = 1.4; rLine(L + DW + 3, T + NH - 4, L + NW - 3, T + 4, n.k * 5 + 1, 0.5, 1); }
+  ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'right';
+  ctx.fillText(addrOf(n), L + NW, T + NH + 8);
+  if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('liberado', x, T - 7); }
+  ctx.restore();
+}
+function drawTrash(hot) {
+  const { x, y } = TRASH;
+  ctx.strokeStyle = hot ? '#c23a32' : '#6f6a62'; ctx.lineWidth = 1.6;
+  ctx.fillStyle = hot ? '#fde2df' : 'rgba(0,0,0,0)';
+  if (hot) ctx.fillRect(x - 12, y - 10, 24, 26);
+  rLine(x - 12, y - 10, x - 9, y + 16, 701, 0.6); rLine(x + 12, y - 10, x + 9, y + 16, 702, 0.6); rLine(x - 9, y + 16, x + 9, y + 16, 703, 0.6);
+  rLine(x - 15, y - 13, x + 15, y - 13, 704, 0.6); rLine(x - 4, y - 17, x + 4, y - 17, 705, 0.6);
+  rLine(x - 4, y - 5, x - 3, y + 11, 706, 0.4, 1); rLine(x + 4, y - 5, x + 3, y + 11, 707, 0.4, 1);
+  ctx.fillStyle = '#6f6a62'; ctx.font = '12px "Cutive Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('free', x, y - 25);
+}
+function drawAvatar() {
+  const a = S.avatar; if (!a) return;
+  const sh = a.shake ? Math.sin(a.shake * 70) * 3 : 0;
+  const x = a.x + sh, y = a.y - Math.sin(Math.min(1, a.hop) * Math.PI) * 12 + Math.sin(S.t * 4) * 0.8;
+  ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.8; rCircle(x, y, 11, 77, '#c9dbff');
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(x + s * 4, y - 2, 3, 3.6, 0, 0, 7); ctx.fill();
+    ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + s * 4 + 1, y - 1.5, 1.4, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = '#2350b8'; ctx.font = 'bold 12px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('p', x, y + 6);
+}
+function wrapText(text, maxW) {
+  const words = text.split(' '), lines = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+  if (cur) lines.push(cur); return lines;
+}
+function drawBubble(text, color, y, bg = '#fffdf6') {
+  ctx.font = '14px "Patrick Hand", sans-serif';
+  const lines = wrapText(text, LW - 30), h = lines.length * 16 + 10;
+  const w = Math.min(LW - 12, Math.max(...lines.map(l => ctx.measureText(l).width)) + 18);
+  const x = (LW - w) / 2;
+  ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = color; ctx.lineWidth = 1.3; rRect(x, y, w, h, 333, 0.6);
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  lines.forEach((l, i) => ctx.fillText(l, LW / 2, y + 13 + i * 16));
+}
+
+function draw() {
+  ctx.setTransform(SC * DPR, 0, 0, SC * DPR, 0, 0);
+  if (!paper) buildPaper();
+  ctx.drawImage(paper, 0, 0, LW, LH);
+  if (!S) return;
+  const d = S.drag, pv = d && d.preview;
+  const dropVar = d && d.moved ? (varAt(d.pt) || avatarAt(d.pt)) : null;
+  const dropNode = d && d.moved && !dropVar ? nodeAt(d.pt) : null;
+  drawTrash(d && d.moved && d.kind === 'var' && onTrash(d.pt));
+
+  // memoria perdida
+  const lost = S.nodes.filter(n => n.dead);
+  if (lost.length) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 40); }
+
+  // flechas next
+  for (const n of S.nodes) {
+    if (n.dead || !n.next || (d && d.kind === 'next' && d.node === n && d.moved)) continue;
+    const a = dotOf(n), t = n.next;
+    if (t.dead) continue;
+    const b = entry(a, { px: t.px, py: t.py }, -0.35);
+    rArrow(a, b, n.k * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, -0.35, t.freed ? [4, 4] : null);
+  }
+  // flechas de variables
+  for (const v of S.vars) {
+    if (d && d.kind === 'var' && d.v === v && d.moved) continue;
+    const a = varAnchor(v);
+    if (!v.t) { drawNull(a.x - 4, a.y); continue; }
+    if (v.t.dead) continue;
+    const b = entry(a, { px: v.t.px, py: v.t.py }, 0.12);
+    rArrow(a, b, v.name.charCodeAt(0) * 31, v.t.freed ? '#c23a32' : (v.name === 'p' ? '#2350b8' : '#5d574f'), v.name === 'p' ? 1.7 : 1.3, 0.12, v.t.freed ? [4, 4] : [5, 3]);
+  }
+  for (const n of S.nodes) drawNode(n, n === dropNode);
+  for (const v of S.vars) drawVar(v, v === dropVar);
+  drawAvatar();
+
+  // flecha en el dedo y vista previa del código
+  if (d && d.moved) {
+    let b = d.pt;
+    if (dropNode) b = entry(d.from, { px: dropNode.px, py: dropNode.py }, 0.2);
+    rArrow(d.from, b, 999, '#2350b8', 2.4, 0.2);
+    if (pv) {
+      if (pv.err) drawBubble(pv.msg, '#c23a32', 6, '#fff3f1');
+      else if (pv.code) drawBubble(pv.code, '#2350b8', 6, '#f2f6ff');
+    }
+  } else if (S.toast) {
+    ctx.globalAlpha = Math.min(1, S.toast.t * 2);
+    drawBubble(S.toast.text, S.toast.bad ? '#c23a32' : '#2e2c2a', 6, S.toast.bad ? '#fff3f1' : '#fffdf6');
+    ctx.globalAlpha = 1;
+  }
+}
+
+function update(dt) {
+  S.t += dt;
+  if (S.toast) { S.toast.t -= dt; if (S.toast.t <= 0) S.toast = null; }
+  for (const n of S.nodes) {
+    const tx = n.dead ? MX + 22 + n.tray * 30 : n.x, ty = n.dead ? LH - 18 : n.y;
+    n.px = lerp(n.px, tx, Math.min(1, dt * 7)); n.py = lerp(n.py, ty, Math.min(1, dt * 7));
+  }
+  const a = S.avatar;
+  if (a) {
+    placeAvatar(false);
+    a.x = lerp(a.x, a.tx, Math.min(1, dt * 10)); a.y = lerp(a.y, a.ty, Math.min(1, dt * 10));
+    if (a.hop > 0) a.hop = Math.max(0, a.hop - dt * 3);
+    if (a.shake) a.shake = Math.max(0, a.shake - dt);
+  }
+}
+
+// ───────────────────────── tamaño ─────────────────────────
+function fit() {
+  const cell = $('cell').getBoundingClientRect();
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (cell.height - 4) / LH));
+  DPR = Math.min(3, window.devicePixelRatio || 1);
+  if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
+    SC = s;
+    cv.style.width = LW * SC + 'px'; cv.style.height = LH * SC + 'px';
+    cv.width = Math.round(LW * SC * DPR); cv.height = Math.round(LH * SC * DPR);
+    paper = null;
+  }
+}
+new ResizeObserver(fit).observe($('cell'));
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  boil = REDUCED ? 0 : Math.floor(now / 220) % 5;
+  if (S) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+fit();
+loadLevel(0);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
+requestAnimationFrame(frame);
+</script>

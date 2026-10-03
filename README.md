@@ -37,3 +37,7 @@ Ver [`rl/README.md`](rl/README.md).
 ## Puntero Dúo (piloto)
 
 [`puntero-duo/index.html`](puntero-duo/index.html) es un juego hermano, todavía en borrador, sobre listas enlazadas. Tiene estética de cuaderno dibujado a mano. Cada jugador es un puntero (`p` y `q`): toma flechas de los nodos y las engancha en otro nodo. El vacío solo se cruza saltando por una flecha (`p = p.next`), y para volver se usa una pila de pasos. Además, un recolector de basura borra cualquier nodo que se quede 5 segundos sin que nada lo apunte. Trae 6 niveles: buscar, insertar, borrar, push en una pila, cola con head y tail, e invertir una lista.
+
+### Puntero C (versión táctil)
+
+[`puntero-duo/tactil.html`](puntero-duo/tactil.html) es la versión para celular, de un jugador, con el código en C apareciendo al lado. Las variables viven en el margen del cuaderno (stack) y los nodos en la hoja (heap). Todo se hace arrastrando flechas, y cada gesto escribe una línea como `n->next = p->next;` o `free(aux);`. A un nodo solo se llega por una variable o por `->next`. `p = p->prev` es un error de compilación, un nodo sin referencias es una fuga de memoria y se puede deshacer. Trae 8 niveles: recorrer, frenar antes, insertar, borrar con `free`, push, pop, encolar e invertir.
