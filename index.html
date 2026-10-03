@@ -2353,9 +2353,9 @@ function move(i, j){
 const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === 'true';
 function killPlayer(p){
   if (!p.alive) return;
-  ohnoStats.deaths++; if (tickN - (p.dangerTick || -9) <= 2) ohnoStats.warned++;
+  lastDeathTick = tickN; ohnoStats.deaths++; if (tickN - (p.dangerTick || -9) <= 2) ohnoStats.warned++;
   if (simT >= p.ohnoUntil) p.ohnoAt = simT;   // caught by surprise: they still say it as they go
-  p.ohnoUntil = Math.max(p.ohnoUntil, simT + 500);
+  p.ohnoUntil = Math.max(p.ohnoUntil, simT + 1100);
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
@@ -2674,7 +2674,7 @@ function amoebaCell(i){
   }
 }
 
-let tickN = 0, ohnoStats = { deaths: 0, warned: 0 };   // for tests: deaths that had their "¡oh no!" first
+let tickN = 0, lastDeathTick = -99, ohnoStats = { deaths: 0, warned: 0 };   // for tests: deaths that had their "¡oh no!" first
 function tick(){
   tickN++; moved.fill(0); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
@@ -2754,6 +2754,8 @@ function checkEnd(){
     if (a.exited || timeLeft <= 0) { if (!a.exited) aiTruncate(a); a.score = 0; initLevel(1 + Math.floor(Math.random() * 12)); }
     return;
   }
+  // the last life: let the explosion and the kid's "¡oh no!" play for a moment before the screen comes up
+  if (active() === 0 && timeLeft > 0 && tickN - lastDeathTick < Math.ceil(1100 / tickMs)) return;
   if (isBonus() && (timeLeft <= 0 || active() === 0) && !players.some(p => p.exited)) return bonusOver(timeLeft <= 0 ? 'Se acabó el tiempo.' : 'No alcanzaron a salir.');
   if (timeLeft <= 0) {
     if (isBonus() && mode === 'coop') return levelWon();
