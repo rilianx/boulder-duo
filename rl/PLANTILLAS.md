@@ -188,3 +188,18 @@ Siguen fuera de esta regla:
 | C = 0,9 | 100 | 90 | 100 | 70 | 27 | 10 | 0 | 95 | 83 | 56 | 63 |
 
 El resultado no depende finamente de C: entre 0,7 y 0,9 el promedio va de 60 a 63 %, y las diferencias por juego están dentro del ruido (±15 puntos con 30 partidas). Se deja C = 0,8, el valor central elegido antes de ver estos resultados.
+
+## Efectos causales y medios y fines (rama `estrategias`)
+
+Plantilla nueva `efectos`: cada tick compara cuántas casillas tiene cada tipo. Aprende "si X desaparece, Y desaparece" (y "si el avatar toca X, Y desaparece") cuando casi siempre que X desaparece también lo hace Y, e Y casi nunca desaparece solo. Con eso, el alto nivel razona hacia atrás: si lo valioso (o terreno nunca pisado) queda tapado por un bloqueo D que se sabe quitar, la causa de D vale lo tapado, encadenando hasta tres pasos con descuento 0,9. El plan de empujes lleva la causa adonde desaparece junto con su compañero (la caja a su hoyo).
+
+Arreglo genérico en `budget.py`: una derrota en un tick final ya visto antes es el límite de tiempo del juego, no una muerte (en Doorkoban nada mata y se aprendían 51 muertes falsas que paralizaban al navegador).
+
+Doorkoban (no visto antes, 5 minutos de entrenamiento, niveles 3–4, 15 semillas): base 0 % (puntaje 0,9) → solo efectos 3 % (puntaje 15,5: abre las cuatro puertas pero no sale) → con el arreglo del tiempo **100 %**.
+
+Regresión en los 10 juegos de desarrollo (práctica de 40 partidas desde cero, 15 semillas):
+
+| versión | Sokoban | Aliens | Butterflies | Missilecommand | Portals | Chase | Survivezombies | Frogs | Zelda | Boulder Dash | prom. |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| probabilidades (C = 0,8) | 100 | 93 | 100 | 53 | 23 | 13 | 0 | 89 | 84 | 55 | 61 |
+| + efectos causales | 100 | 100 | 100 | 63 | 27 | 17 | 0 | 95 | 83 | 57 | 64 |
