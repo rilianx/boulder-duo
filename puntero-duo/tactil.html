@@ -3,12 +3,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
 <style>
-/* Cuaderno abierto en vertical: a la izquierda el dibujo (margen = stack, hoja = heap), a la derecha el código en C que se va escribiendo. Un solo look de papel, a propósito. */
+/* Cuaderno en vertical: arriba el dibujo (margen = stack, hoja = heap) con el código en C al lado; abajo, las líneas candidatas para escribir. Un solo look de papel, a propósito. */
 :root{
   color-scheme: light;
   --paper:#fbf8ef;
   --paper-2:#f3eedf;
-  --grid:#c9dbeb;
   --graphite:#2e2c2a;
   --soft:#6f6a62;
   --margin:#e0726a;
@@ -16,6 +15,7 @@
   --note:#ffe27a;
   --ok:#2f8a4c;
   --bad:#c23a32;
+  --bad-bg:#fff1ee;
   --warn:#b7791f;
   --display:"Caveat","Comic Sans MS",cursive;
   --body:"Patrick Hand","Comic Sans MS",system-ui,sans-serif;
@@ -28,17 +28,17 @@ body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--bo
   padding-inline:16px;padding-block:8px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .app{height:100%;max-width:980px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
 
-header{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
-h1{font-family:var(--display);font-size:30px;margin:0;line-height:1;white-space:nowrap}
+header{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
+h1{font-family:var(--display);font-size:28px;margin:0;line-height:1;white-space:nowrap}
 h1 span{color:var(--ink)}
 .lv{flex:1;min-width:0;font-size:16px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mini{font-family:var(--body);font-size:20px;line-height:1;width:36px;height:36px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
-  border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none}
+.mini{font-family:var(--body);font-size:19px;line-height:1;width:34px;height:34px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
 
-.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,40%);gap:8px;min-height:0}
-@media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 320px} }
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,42%);gap:8px;min-height:0}
+@media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 340px} }
 .boardcell{position:relative;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
-canvas#cv{display:block;touch-action:none;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
+canvas#cv{display:block;touch-action:manipulation;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
   padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
@@ -50,18 +50,25 @@ canvas#cv{display:block;touch-action:none;border:2px solid var(--graphite);borde
 .code .new{background:var(--note);animation:fade 1.6s ease-out forwards}
 @keyframes fade{to{background:transparent}}
 
-.bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
-.bar button{font-family:var(--code);font-size:clamp(12px,3.4vw,15px);min-height:46px;padding:4px 6px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
-  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation}
-.bar button.body{font-family:var(--body);font-size:16px}
-.bar button:active{background:var(--note)}
-.bar button:disabled{opacity:.35}
+.choose{display:flex;flex-direction:column;gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.choose .ask{font-size:15px;color:var(--soft);margin:0}
+.opts{display:grid;grid-template-columns:1fr;gap:6px}
+@media (min-width:700px){ .opts{grid-template-columns:1fr 1fr} }
+.opt{font-family:var(--code);font-size:clamp(13px,3.6vw,16px);text-align:left;min-height:38px;padding:5px 10px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation;overflow-wrap:anywhere}
+.opt:active{background:var(--note)}
+.opt.tried{text-decoration:line-through;text-decoration-color:var(--bad);color:var(--soft);border-style:dashed}
 button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
+.fb{border:2px solid var(--bad);background:var(--bad-bg);border-radius:12px 5px 12px 5px / 5px 12px 5px 12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.fb code{font-family:var(--code);color:var(--bad);font-size:15px}
+.fb p{margin:0}
+.fb button{align-self:flex-start;font-family:var(--body);font-size:18px;padding:5px 14px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
 
-.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.82);padding:8px;z-index:2}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.85);padding:6px;z-index:2}
 .card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:14px 16px;max-width:430px;width:100%;
   display:flex;flex-direction:column;gap:9px;box-shadow:4px 5px 0 rgba(46,44,42,.18);max-height:100%;overflow-y:auto}
-.card h2{font-family:var(--display);font-size:34px;margin:0;line-height:1;text-wrap:balance}
+.card h2{font-family:var(--display);font-size:32px;margin:0;line-height:1;text-wrap:balance}
 .card p{margin:0}
 .card code{font-family:var(--code);font-size:.9em;background:var(--paper-2);padding:0 3px}
 .card .row{display:flex;gap:8px;flex-wrap:wrap}
@@ -69,7 +76,6 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
   border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
 .card button.sec{background:#fffdf6}
 .stars{font-size:36px;letter-spacing:4px;color:#d9a400;line-height:1}
-.tally{font-variant-numeric:tabular-nums}
 </style>
 
 <div class="app">
@@ -78,6 +84,8 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <span class="lv" id="lvname">—</span>
     <button class="mini" id="bprev" aria-label="Nivel anterior">‹</button>
     <button class="mini" id="bnext" aria-label="Nivel siguiente">›</button>
+    <button class="mini" id="breset" aria-label="Reiniciar nivel">⟲</button>
+    <button class="mini" id="bhelp" aria-label="Ayuda">?</button>
   </header>
 
   <div class="main">
@@ -88,94 +96,461 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <div class="code" id="code" aria-live="polite"></div>
   </div>
 
-  <div class="bar" id="bar">
-    <button id="bnext1">p = p-&gt;next</button>
-    <button id="bprev1">p = p-&gt;prev</button>
-    <button id="bnew">n = crearNodo()</button>
-    <button id="bundo" class="body">↶ deshacer</button>
-    <button id="breset" class="body">⟲ reiniciar</button>
-    <button id="bhelp" class="body">? ayuda</button>
+  <div class="choose">
+    <p class="ask" id="ask">¿Qué línea escribes ahora?</p>
+    <div class="opts" id="opts"></div>
+    <div class="fb" id="fb" hidden>
+      <code id="fbcode"></code>
+      <p id="fbwhy"></p>
+      <button id="fbok">↶ Deshacer y elegir otra</button>
+    </div>
   </div>
 </div>
 
 <script>
 'use strict';
+const $ = id => document.getElementById(id);
 // ───────────────────────── tablero lógico ─────────────────────────
-const LW = 250, LH = 520;          // coordenadas lógicas del dibujo
-const MX = 66;                     // línea roja del margen: a la izquierda el stack, a la derecha el heap
-const NW = 62, NH = 30, DW = 40;   // nodo: [dato | next]
-const PW = 56, PH = 26;            // post-it de variable
-const X1 = 132, X2 = 210;          // columnas del heap
-const Y = i => 52 + i * 70;
-const TRASH = { x: 33, y: 478, r: 22 };
+const LW = 250, LH = 440;
+const MX = 70;                     // línea roja del margen: a la izquierda el stack, a la derecha el heap
+const NW = 62, NH = 30, DW = 40;   // nodo: [value | next]
+const PW = 60, PH = 26;            // post-it de variable
+const X1 = 136, X2 = 212;
+const Y = i => 40 + i * 70;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* Cada nivel:
-   nodes: [id, dato, x, y]   links: { id: idSiguiente }   vars: [[nombre, id|null]]
-   create: valores que entrega crearNodo() a la variable n, y dónde aparecen
-   goal: reach (p sobre el dato) | before (p justo antes del dato) | list (head → … → NULL, y tail opcional) */
+// ───────────────────────── semántica de C ─────────────────────────
+class Crash { constructor(msg) { this.msg = msg; } }
+const SEG = 'Segmentation fault: se leyó a través de un puntero NULL.';
+const UAF = 'Uso después de free: ese nodo ya fue liberado.';
+const get = name => { const v = varNamed(name); return v ? v.t : null; };
+const nx = n => { if (!n) throw new Crash(SEG); if (n.freed) throw new Crash(UAF); return n.next; };
+const setV = (name, n) => { varNamed(name).t = n; };
+const setNext = (n, m) => { if (!n) throw new Crash(SEG); if (n.freed) throw new Crash(UAF); n.next = m; };
+const decl = (name, n) => { const v = varNamed(name); v.declared = true; v.slot = S.slot++; v.t = n; };
+const freeN = n => { if (!n) return; if (n.freed) throw new Crash('double free: ese nodo ya estaba liberado.'); n.freed = true; };
+const create = v => {
+  const [x, y] = S.L.spawn || [X2, Y(1)];
+  const n = mkNode(v, x, y); n.py -= 30; S.nodes.push(n); return n;
+};
+const declared = name => { const v = varNamed(name); return !!(v && v.declared); };
+const O = (code, run, why, when) => ({ code, run, why, when });
+
+/* ───────────────────────── niveles ─────────────────────────
+   kind 'search': las opciones se generan del estado (ver searchOptions).
+   kind 'script': grupos en orden. Un grupo `all` exige todas sus líneas (en cualquier orden);
+   un grupo `any` se cumple con cualquiera de ellas. `bad` son las líneas malas que se ofrecen. */
 const LEVELS = [
-  { name: 'Recorrer', optimal: 3, hidden: true,
-    intro: 'Los datos están ocultos. Solo ves el nodo al que apunta <code>p</code> y el siguiente. Avanza con <code>p = p->next</code> hasta que <code>p</code> apunte al 7.<br><br>Prueba también <code>p = p->prev</code>: en una lista simple ese campo no existe.',
-    goal: { type: 'reach', val: 7 },
-    nodes: [['a', 4, X1, Y(0)], ['b', 1, X1, Y(1)], ['c', 9, X1, Y(2)], ['d', 7, X1, Y(3)], ['e', 3, X1, Y(4)]],
-    links: { a: 'b', b: 'c', c: 'd', d: 'e' }, vars: [['head', 'a'], ['p', 'a']] },
+  { name: '¿Está el 7?', kind: 'search', x: 7, list: [4, 1, 9, 7, 3],
+    sig: 'int esta(Lista *l, int x)',
+    intro: 'Queremos saber si el 7 está en la lista. Al comienzo solo tienes <code>l->head</code>: no hay ningún puntero para recorrer.<br><br>Elige en cada paso la línea correcta. Los datos están ocultos (<code>?</code>): cada vez que preguntas <code>if (p->value == 7)</code> y la respuesta es no, el nodo pasa a <code>≠7</code>. Es lo único que sabes con certeza.' },
 
-  { name: 'Frenar a tiempo', optimal: 2, hidden: true,
-    intro: 'Deja <code>p</code> en el nodo <b>anterior</b> al 7. Para borrar o insertar casi siempre hay que pararse antes.<br><br>Si te pasas, no hay vuelta atrás: toca el post-it <code>head</code> para hacer <code>p = head</code> y empezar de nuevo.',
-    goal: { type: 'before', val: 7 },
-    nodes: [['a', 3, X1, Y(0)], ['b', 8, X1, Y(1)], ['c', 5, X1, Y(2)], ['d', 7, X1, Y(3)], ['e', 2, X1, Y(4)]],
-    links: { a: 'b', b: 'c', c: 'd', d: 'e' }, vars: [['head', 'a'], ['p', 'a']] },
+  { name: '¿Está el 5?', kind: 'search', x: 5, list: [6, 2, 8, 3],
+    sig: 'int esta(Lista *l, int x)',
+    intro: 'Ahora buscas el 5. Si no está, la única forma de saberlo es revisar <b>todos</b> los nodos hasta que <code>p</code> sea <code>NULL</code>.' },
 
-  { name: 'Insertar el 2', optimal: 3,
-    intro: 'Crea un nodo con el 2 y mételo entre el 1 y el 3.<br><br><b>Arrastra</b> desde un post-it o desde la casilla <code>next</code> de un nodo, y suelta sobre un nodo o un nombre. Soltar en el papel es <code>NULL</code>.<br><br>Ojo con el orden: un nodo al que nada apunta se pierde para siempre.',
-    goal: { type: 'list', head: [1, 2, 3] },
-    nodes: [['a', 1, X1, Y(0)], ['b', 3, X1, Y(2)]],
-    links: { a: 'b' }, vars: [['head', 'a'], ['p', 'a'], ['n', null]],
-    create: { vals: [2], at: [[X2, Y(1)]] } },
+  { name: 'Insertar el 2', kind: 'script', list: [1, 3], spawn: [X2, Y(1)], goal: [1, 2, 3],
+    sig: 'void insertar(Lista *l)',
+    intro: 'Inserta un nodo con el 2 entre el 1 y el 3.<br><br>Necesitas tres punteros: <code>p</code> al nodo después del cual insertas, <code>sig</code> para guardar el que sigue (si no, se pierde) y <code>nuevo</code> para el nodo creado.',
+    groups: [
+      { all: [O('Nodo *p = l->head;', () => decl('p', get('l->head')))],
+        bad: [O('Nodo *p = l->head->next;', () => decl('p', nx(get('l->head'))), 'p quedó en el 3. Para insertar después del 1, p tiene que apuntar al 1.'),
+              O('l->head = crearNodo(2);', () => setV('l->head', create(2)), 'Pisaste la cabeza: el 1 y el 3 quedaron sin ninguna referencia.'),
+              O('Nodo p = l->head;', null, 'Error de compilación: l->head es un Nodo *, no un Nodo. Falta el asterisco.'),
+              O('p = l->head;', null, "Error de compilación: 'p' no está declarada. Hay que escribir Nodo *p.")] },
+      { all: [O('Nodo *sig = p->next;', () => decl('sig', nx(get('p')))),
+              O('Nodo *nuevo = crearNodo(2);', () => decl('nuevo', create(2)))],
+        bad: [O('p->next = crearNodo(2);', () => setNext(get('p'), create(2)), 'Enganchaste el 2, pero el 3 quedó sin referencia: fuga de memoria. Primero guarda el siguiente en sig.', () => !declared('sig')),
+              O('Nodo *sig = p;', () => decl('sig', get('p')), 'sig debe guardar el nodo que sigue a p (el 3), no el mismo nodo de p.', () => !declared('sig')),
+              O('Nodo *nuevo = p->next;', () => decl('nuevo', nx(get('p'))), 'Eso no crea un nodo: nuevo apunta al 3, que ya existía.', () => !declared('nuevo')),
+              O('p->value = 2;', () => { get('p').v = 2; }, 'Eso sobrescribe el 1. No inserta nada.'),
+              O('p = p->next;', () => setV('p', nx(get('p'))), 'p se fue al 3. Ahora no puedes volver al 1 para enganchar el nuevo nodo.')] },
+      { all: [O('p->next = nuevo;', () => setNext(get('p'), get('nuevo'))),
+              O('nuevo->next = sig;', () => setNext(get('nuevo'), get('sig')))],
+        bad: [O('nuevo->next = p;', () => setNext(get('nuevo'), get('p')), 'El 2 apuntaría hacia atrás, al 1: se forma un ciclo.'),
+              O('sig->next = nuevo;', () => setNext(get('sig'), get('nuevo')), 'Eso pone el 2 después del 3, no entre el 1 y el 3.'),
+              O('p = nuevo;', () => setV('p', get('nuevo')), 'Moviste la variable p. Ninguna flecha de la lista cambió.'),
+              O('nuevo = sig;', () => setV('nuevo', get('sig')), 'Moviste la variable nuevo. Si el 2 no estaba enganchado, quedó perdido.')] },
+    ] },
 
-  { name: 'Borrar el 13', optimal: 3,
-    intro: 'Saca el 13 de la lista <b>y libéralo</b>. Si solo lo saltas, queda ocupando memoria y nadie puede volver a alcanzarlo: una fuga.<br><br>Para liberar, arrastra el post-it de la variable que lo apunta hasta el basurero: <code>free(aux)</code>.',
-    goal: { type: 'list', head: [1, 2, 4] },
-    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 13, X1, Y(2), true], ['d', 4, X1, Y(3)]],
-    links: { a: 'b', b: 'c', c: 'd' }, vars: [['head', 'a'], ['p', 'a'], ['aux', null]] },
+  { name: 'Borrar el 13', kind: 'script', list: [1, 2, 13, 4], bug: 13, goal: [1, 2, 4],
+    sig: 'void borrar13(Lista *l)',
+    intro: 'Saca el 13 de la lista <b>y libera su memoria</b>. Para borrar un nodo hay que pararse en el anterior y guardar el que se va en otro puntero, porque si no, no hay con qué hacer <code>free</code>.',
+    groups: [
+      { all: [O('Nodo *p = l->head;', () => decl('p', get('l->head')))],
+        bad: [O('Nodo *p = l->head->next->next;', () => decl('p', nx(nx(get('l->head')))), 'p quedó en el 13. Para sacarlo necesitas el nodo anterior, y en una lista simple no se puede retroceder.'),
+              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 1, que sigue en la lista. Ahora l->head apunta a memoria liberada.'),
+              O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Moviste la cabeza: el 1 quedó fuera de la lista y sin referencia.')] },
+      { all: [O('p = p->next;', () => setV('p', nx(get('p'))))],
+        bad: [O('p = p->next->next;', () => setV('p', nx(nx(get('p')))), 'Te pasaste: p está en el 13 y no hay vuelta atrás.'),
+              O('p->next = NULL;', () => setNext(get('p'), null), 'Cortaste la lista después del 1: el 2, el 13 y el 4 quedaron sin referencia.'),
+              O('free(p->next);', () => freeN(nx(get('p'))), 'Liberaste el 2, que no era el que había que borrar.')] },
+      { all: [O('Nodo *borrar = p->next;', () => decl('borrar', nx(get('p'))))],
+        bad: [O('free(p->next);', () => freeN(nx(get('p'))), 'Liberaste el 13, pero p->next sigue apuntando ahí (puntero colgante) y el 4 quedó inalcanzable.'),
+              O('p->next = p->next->next;', () => setNext(get('p'), nx(nx(get('p')))), 'El 13 salió de la lista, pero nadie lo apunta: ya no puedes hacerle free. Fuga de memoria.'),
+              O('Nodo *borrar = p;', () => decl('borrar', get('p')), 'borrar quedó en el 2. Tiene que apuntar al 13.')] },
+      { all: [O('p->next = borrar->next;', () => setNext(get('p'), nx(get('borrar'))))],
+        bad: [O('free(borrar);', () => freeN(get('borrar')), 'El 13 sigue enganchado: p->next quedaría apuntando a memoria liberada.'),
+              O('borrar = borrar->next;', () => setV('borrar', nx(get('borrar'))), 'Moviste borrar al 4. La lista no cambió.'),
+              O('p->next = borrar;', () => setNext(get('p'), get('borrar')), 'p->next ya apuntaba al 13. No cambia nada.')] },
+      { all: [O('free(borrar);', () => freeN(get('borrar')))],
+        bad: [O('borrar = NULL;', () => setV('borrar', null), 'Nadie liberó el 13: queda ocupando memoria sin que nada lo apunte. Fuga.'),
+              O('free(p);', () => freeN(get('p')), 'Liberaste el 2, que sigue en la lista.'),
+              O('free(borrar->next);', () => freeN(nx(get('borrar'))), 'Liberaste el 4, que sigue en la lista.')] },
+    ] },
 
-  { name: 'Pila: push', optimal: 6,
-    intro: 'Una pila crece por <code>head</code>. Haz push del 8 y después push del 9.<br><br>En cada push: crea el nodo, haz que apunte al tope actual y luego mueve <code>head</code>.',
-    goal: { type: 'list', head: [9, 8, 5, 2] },
-    nodes: [['a', 5, X1, Y(2)], ['b', 2, X1, Y(3)]],
-    links: { a: 'b' }, vars: [['head', 'a'], ['n', null]],
-    create: { vals: [8, 9], at: [[X2, Y(1)], [X2, Y(0)]] } },
+  { name: 'Pila: push', kind: 'script', list: [5, 2], spawn: [X2, Y(0)], goal: [8, 5, 2],
+    sig: 'void push(Lista *l)',
+    intro: 'Una pila crece por <code>l->head</code>. Haz push del 8: crea el nodo, haz que apunte al tope actual y luego mueve la cabeza. El orden importa.',
+    groups: [
+      { all: [O('Nodo *nuevo = crearNodo(8);', () => decl('nuevo', create(8)))],
+        bad: [O('l->head = crearNodo(8);', () => setV('l->head', create(8)), 'Pisaste la cabeza: el 5 y el 2 quedaron sin referencia.'),
+              O('Nodo *nuevo = l->head;', () => decl('nuevo', get('l->head')), 'Eso no crea un nodo: nuevo apunta al 5.'),
+              O('Nodo nuevo = crearNodo(8);', null, 'Error de compilación: crearNodo devuelve un Nodo *. Falta el asterisco.')] },
+      { all: [O('nuevo->next = l->head;', () => setNext(get('nuevo'), get('l->head')))],
+        bad: [O('l->head = nuevo;', () => setV('l->head', get('nuevo')), 'Si mueves la cabeza primero, el 5 y el 2 quedan sin referencia: fuga.'),
+              O('l->head->next = nuevo;', () => setNext(get('l->head'), get('nuevo')), 'Eso engancha el 8 después del 5, y el 2 queda perdido.'),
+              O('nuevo->next = l->head->next;', () => setNext(get('nuevo'), nx(get('l->head'))), 'El 8 apuntaría al 2: te saltas el 5.')] },
+      { all: [O('l->head = nuevo;', () => setV('l->head', get('nuevo')))],
+        bad: [O('nuevo = l->head;', () => setV('nuevo', get('l->head')), 'Al revés: nuevo se movió al 5, el 8 quedó sin referencia y la cabeza no cambió.'),
+              O('l->head->next = nuevo;', () => setNext(get('l->head'), get('nuevo')), 'El 5 apuntaría al 8 y el 8 al 5: un ciclo. Además el 2 se pierde.'),
+              O('nuevo->next = NULL;', () => setNext(get('nuevo'), null), 'Desenganchaste el 8 del resto de la pila.')] },
+    ] },
 
-  { name: 'Pila: pop', optimal: 3,
-    intro: 'Saca el tope (el 9) y libéralo. Si mueves <code>head</code> sin guardar antes el nodo en <code>aux</code>, ya no tendrás con qué hacer <code>free</code>.',
-    goal: { type: 'list', head: [8, 5] },
-    nodes: [['a', 9, X1, Y(0)], ['b', 8, X1, Y(1)], ['c', 5, X1, Y(2)]],
-    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['aux', null]] },
+  { name: 'Pila: pop', kind: 'script', list: [9, 8, 5], goal: [8, 5],
+    sig: 'void pop(Lista *l)',
+    intro: 'Saca el tope (el 9) y libéralo. Antes de mover <code>l->head</code>, guarda el 9 en <code>aux</code>: si no, no tendrás con qué hacer <code>free</code>.',
+    groups: [
+      { all: [O('Nodo *aux = l->head;', () => decl('aux', get('l->head')))],
+        bad: [O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Sin guardar antes el 9, quedó sin referencia y nunca podrás liberarlo: fuga.'),
+              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 9, pero l->head sigue apuntando ahí y el 8 y el 5 quedaron inalcanzables.'),
+              O('Nodo *aux = l->head->next;', () => decl('aux', nx(get('l->head'))), 'aux debe guardar el nodo que vas a sacar: el 9.')] },
+      { any: [O('l->head = aux->next;', () => setV('l->head', nx(get('aux')))),
+              O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))))],
+        bad: [O('free(aux);', () => freeN(get('aux')), 'Liberaste el 9, pero l->head todavía apunta a él.'),
+              O('aux = aux->next;', () => setV('aux', nx(get('aux'))), 'Moviste aux. La pila no cambió.'),
+              O('l->head = NULL;', () => setV('l->head', null), 'Vaciaste la pila: el 8 y el 5 se perdieron.')] },
+      { all: [O('free(aux);', () => freeN(get('aux')))],
+        bad: [O('aux = NULL;', () => setV('aux', null), 'El 9 nunca se liberó: fuga de memoria.'),
+              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 8, que ahora es el tope.'),
+              O('aux = l->head;', () => setV('aux', get('l->head')), 'aux era la única referencia al 9: se perdió sin liberarlo.')] },
+    ] },
 
-  { name: 'Cola: encolar', optimal: 3,
-    intro: 'Una cola tiene <code>head</code> (sale primero) y <code>tail</code> (el último que llegó). Encola el 4 al final, sin recorrer la lista.',
-    goal: { type: 'list', head: [1, 2, 3, 4], tail: 4 },
-    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 3, X1, Y(2)]],
-    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['tail', 'c'], ['n', null]],
-    create: { vals: [4], at: [[X2, Y(3)]] } },
+  { name: 'Cola: encolar', kind: 'script', list: [1, 2, 3], tail: true, spawn: [X2, Y(3)], goal: [1, 2, 3, 4], goalTail: 4,
+    sig: 'void encolar(Lista *l)',
+    intro: 'Una cola tiene <code>l->head</code> (el primero en salir) y <code>l->tail</code> (el último en llegar). Encola el 4 al final. No hace falta recorrer: para eso está <code>tail</code>.',
+    groups: [
+      { all: [O('Nodo *nuevo = crearNodo(4);', () => decl('nuevo', create(4)))],
+        bad: [O('l->tail = crearNodo(4);', () => setV('l->tail', create(4)), 'tail se movió al 4, pero el 3 no apunta a él: el 4 quedó fuera de la lista.'),
+              O('Nodo *p = l->head;', () => decl('p', get('l->head')), 'No hace falta recorrer la cola: l->tail ya apunta al último.'),
+              O('l->head = crearNodo(4);', () => setV('l->head', create(4)), 'Pisaste la cabeza: el 1, el 2 y el 3 quedaron sin referencia.')] },
+      { all: [O('l->tail->next = nuevo;', () => setNext(get('l->tail'), get('nuevo')))],
+        bad: [O('l->tail = nuevo;', () => setV('l->tail', get('nuevo')), 'Si mueves tail primero, ya no tienes cómo llegar al 3 para engancharlo.'),
+              O('nuevo->next = l->tail;', () => setNext(get('nuevo'), get('l->tail')), 'La flecha va al revés: el 4 apunta al 3, pero el 3 no apunta al 4.'),
+              O('nuevo->next = l->head;', () => setNext(get('nuevo'), get('l->head')), 'Así el 4 queda delante del 1, pero nadie apunta al 4: no está en la cola.')] },
+      { any: [O('l->tail = nuevo;', () => setV('l->tail', get('nuevo'))),
+              O('l->tail = l->tail->next;', () => setV('l->tail', nx(get('l->tail'))))],
+        bad: [O('nuevo = l->tail;', () => setV('nuevo', get('l->tail')), 'Al revés: moviste nuevo y l->tail sigue en el 3.'),
+              O('l->tail->next = NULL;', () => setNext(get('l->tail'), null), 'Desenganchaste el 4 que acababas de encolar.'),
+              O('l->head = nuevo;', () => setV('l->head', get('nuevo')), 'l->head es el primero en salir: la cola empezaría en el 4 y el 1, 2 y 3 se perderían.')] },
+    ] },
 
-  { name: 'Invertir', optimal: 5,
-    intro: 'Deja la lista al revés: <code>head → 3 → 2 → 1 → NULL</code>. Tienes <code>p</code>, <code>ant</code> y <code>sig</code> para no perder nodos mientras das vuelta las flechas.',
-    goal: { type: 'list', head: [3, 2, 1] },
-    nodes: [['a', 1, X1, Y(0)], ['b', 2, X1, Y(1)], ['c', 3, X1, Y(2)]],
-    links: { a: 'b', b: 'c' }, vars: [['head', 'a'], ['p', 'a'], ['ant', null], ['sig', null]] },
+  { name: 'Invertir', kind: 'script', list: [1, 2, 3], goal: [3, 2, 1],
+    sig: 'void invertir(Lista *l)',
+    intro: 'Deja la lista al revés: <code>3 → 2 → 1 → NULL</code>. El patrón usa tres punteros: <code>ant</code> (lo ya invertido), <code>act</code> (el nodo que estás dando vuelta) y <code>sig</code> (el resto, para no perderlo). Se repite una vuelta por nodo.',
+    groups: null },   // se generan en invertGroups()
 ];
 
-// ───────────────────────── utilidades ─────────────────────────
-const $ = id => document.getElementById(id);
+function invertGroups() {
+  const G = [
+    { all: [O('Nodo *ant = NULL;', () => decl('ant', null)), O('Nodo *act = l->head;', () => decl('act', get('l->head')))],
+      bad: [O('l->head = NULL;', () => setV('l->head', null), 'La lista entera quedó sin referencia.'),
+            O('Nodo *act = l->head->next;', () => decl('act', nx(get('l->head'))), 'act tiene que partir en el primer nodo, el 1.', () => !declared('act')),
+            O('Nodo *ant = l->head;', () => decl('ant', get('l->head')), 'ant parte en NULL: el primer nodo será el último, y el último apunta a NULL.', () => !declared('ant'))] },
+  ];
+  for (let i = 0; i < 3; i++) {
+    G.push({ note: `// vuelta ${i + 1}: act está en el ${i + 1}`,
+      all: [O(i ? 'sig = act->next;' : 'Nodo *sig = act->next;', () => i ? setV('sig', nx(get('act'))) : decl('sig', nx(get('act'))))],
+      bad: [i < 2 ? O('act->next = ant;', () => setNext(get('act'), get('ant')), 'Sin guardar sig antes, el resto de la lista quedó sin referencia.')
+                  : O('act = act->next;', () => setV('act', nx(get('act'))), 'Si avanzas antes de dar vuelta la flecha, el 3 queda apuntando hacia adelante.'),
+            O('ant = act;', () => setV('ant', get('act')), 'Todavía no: primero guarda el resto en sig y da vuelta la flecha de act.'),
+            O('l->head = act;', () => setV('l->head', get('act')), 'La cabeza se actualiza al final, cuando todo está invertido.')] });
+    G.push({ all: [O('act->next = ant;', () => setNext(get('act'), get('ant')))],
+      bad: [O('ant->next = act;', () => setNext(get('ant'), get('act')), i ? 'Esa es la flecha de ant, que ya está invertida. La que se da vuelta es la de act.' : 'ant es NULL.'),
+            O('act = sig;', () => setV('act', get('sig')), 'Avanzaste sin dar vuelta la flecha de act.'),
+            O('ant = act;', () => setV('ant', get('act')), 'Si mueves ant antes, act->next = ant haría que act se apunte a sí mismo.')] });
+    G.push({ all: [O('ant = act;', () => setV('ant', get('act')))],
+      bad: [O('act = sig;', () => setV('act', get('sig')), 'Si avanzas act primero, ant ya no tiene cómo llegar al nodo que acabas de invertir.'),
+            O('ant = sig;', () => setV('ant', get('sig')), 'ant debe quedar en el nodo que acabas de invertir: act.'),
+            O('act->next = sig;', () => setNext(get('act'), get('sig')), 'Deshiciste la vuelta: act vuelve a apuntar hacia adelante.')] });
+    G.push({ all: [O('act = sig;', () => setV('act', get('sig')))],
+      bad: [O('act = act->next;', () => setV('act', nx(get('act'))), 'act->next ya apunta hacia atrás: volverías al nodo anterior.'),
+            O('sig = sig->next;', () => setV('sig', nx(get('sig'))), 'Eso adelanta sig; el que tiene que avanzar ahora es act.'),
+            O('act = ant;', () => setV('act', get('ant')), 'act retrocedió al nodo ya invertido.')] });
+  }
+  G.push({ note: '// act es NULL: terminó el recorrido',
+    all: [O('l->head = ant;', () => setV('l->head', get('ant')))],
+    bad: [O('l->head = act;', () => setV('l->head', get('act')), 'act es NULL: la lista quedaría vacía y todo se perdería.'),
+          O('l->head = sig;', () => setV('l->head', get('sig')), 'sig es NULL: la lista quedaría vacía.'),
+          O('l->head->next = NULL;', () => setNext(get('l->head'), null), 'l->head todavía apunta al 1, que ya apunta a NULL. No cambia nada.')] });
+  return G;
+}
+
+// ───────────────────────── opciones de la búsqueda ─────────────────────────
+function searchOptions() {
+  const x = S.L.x, head = get('l->head'), hasP = declared('p'), pt = get('p');
+  const known = pt && pt.known, good = [], bad = [];
+  const winYes = () => { S.answer = 1; }, winNo = () => { S.answer = 0; };
+  if (!hasP) good.push(O('Nodo *p = l->head;', () => decl('p', get('l->head'))));
+  else if (pt && !known) good.push(O(`if (p->value == ${x})`, () => check(pt)));
+  else if (pt && known === 'neq') good.push(O('p = p->next;', () => setV('p', nx(pt))));
+  else if (pt && known === 'eq') good.push(O('return 1;', winYes));
+  else if (!pt) good.push(O('return 0;', winNo));
+
+  bad.push(O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Para recorrer no se mueve la cabeza: el primer nodo quedó sin referencia y la lista cambió.', () => head));
+  if (!hasP) {
+    bad.push(O('Nodo *p = l->head->next;', () => decl('p', nx(head)), 'Te saltas el primer nodo sin revisarlo.'),
+             O('Nodo p = l->head;', null, 'Error de compilación: l->head es un Nodo *. Falta el asterisco: Nodo *p.'),
+             O('p = l->head;', null, "Error de compilación: 'p' no está declarada."),
+             O('return 0;', null, 'No has revisado ningún nodo todavía.'));
+  } else {
+    bad.push(O('p = p->prev;', null, "Error de compilación: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder."),
+             O('p++;', null, 'Los nodos no están uno al lado del otro en memoria: p++ apunta a basura.', () => pt));
+    if (pt) {
+      if (!known) bad.push(O('p = p->next;', () => setV('p', nx(pt)), `Avanzaste sin revisar este nodo. ¿Y si era el ${x}?`),
+                           O('p = p->next->next;', () => setV('p', nx(nx(pt))), 'Te saltas nodos sin revisarlos.'));
+      else bad.push(O(`if (p->value == ${x})`, null, `Ya lo preguntaste: este nodo vale ${known === 'eq' ? x : '≠' + x}.`));
+      bad.push(O(`p->value = ${x};`, () => { pt.v = x; }, `Eso no busca el ${x}: lo escribe. Cambiaste los datos de la lista.`),
+               O('free(p);', () => freeN(pt), 'free libera el nodo; no sirve para recorrer. La lista quedó con un hueco.'));
+      if (pt !== head) bad.push(O('p = l->head;', () => setV('p', head), 'Volver al inicio no aporta: los nodos anteriores ya los revisaste.'));
+      if (known !== 'eq') bad.push(O('return 1;', null, `Todavía no has visto un ${x}.`));
+      bad.push(O('return 0;', null, known === 'eq' ? `Lo encontraste: el ${x} sí está.` : 'Aún quedan nodos sin revisar.'));
+      if (known === 'eq') bad.push(O('p = p->next;', () => setV('p', nx(pt)), `¡Ya lo encontraste! No hace falta seguir.`));
+    } else {
+      bad.push(O(`if (p->value == ${x})`, () => nx(null), 'Segmentation fault: p es NULL, no hay nodo que leer.'),
+               O('p = p->next;', () => nx(null), 'Segmentation fault: p es NULL.'),
+               O('return 1;', null, `Revisaste todos los nodos y ninguno era ${x}.`));
+    }
+  }
+  return { good, bad };
+}
+function check(n) {
+  n.known = n.v === S.L.x ? 'eq' : 'neq';
+}
+
+// ───────────────────────── estado ─────────────────────────
+let LVI = 0, S = null;
+const varNamed = name => S.vars.find(v => v.name === name) || null;
+const live = n => n && !n.dead;
+let NK = 0;
+function mkNode(v, x, y) { return { k: NK++, v, x, y, px: x, py: y, next: null, freed: false, dead: false, known: null, bug: false, tray: -1 }; }
+const addrOf = n => '0x' + (0x3a0 + n.k * 0x18).toString(16);
+
+function loadLevel(i) {
+  LVI = (i + LEVELS.length) % LEVELS.length;
+  const L = LEVELS[LVI];
+  NK = 0;
+  S = { L, nodes: [], vars: [], errors: 0, steps: 0, code: [], state: 'play', slot: 0, gi: 0, gdone: new Set(),
+        tried: new Set(), opts: [], pending: null, toast: null, t: 0, avatar: null, answer: null, leaks: 0 };
+  S.nodes = L.list.map((v, j) => { const n = mkNode(v, X1, Y(j)); n.bug = v === L.bug; return n; });
+  S.nodes.forEach((n, j) => n.next = S.nodes[j + 1] || null);
+  const vnames = ['l->head'].concat(L.tail ? ['l->tail'] : [], ['p', 'sig', 'nuevo', 'borrar', 'aux', 'ant', 'act']);
+  S.vars = vnames.map(name => ({ name, t: null, declared: false, slot: -1 }));
+  decl('l->head', S.nodes[0]);
+  if (L.tail) decl('l->tail', S.nodes[S.nodes.length - 1]);
+  S.groups = L.kind === 'script' ? (L.groups || invertGroups()) : null;
+  S.avatar = { x: 0, y: 0, hop: 0, shake: 0 };
+
+  addCode('// Nodo: value, next', 'dim');
+  addCode('// objetivo: ' + goalText(), 'goal');
+  addCode(L.sig + ' {', 'dim');
+  $('lvname').textContent = `${LVI + 1}/${LEVELS.length} · ${L.name}`;
+  $('fb').hidden = true;
+  newOptions();
+  showCard('intro');
+}
+function goalText() {
+  const L = S.L;
+  if (L.kind === 'search') return `responder si el ${L.x} está (1) o no (0)`;
+  return 'l->head → ' + L.goal.join(' → ') + ' → NULL' + (L.goalTail != null ? `, l->tail → ${L.goalTail}` : '') + ', sin fugas';
+}
+
+// ───────────────────────── opciones ─────────────────────────
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function newOptions() {
+  let good, bad;
+  if (S.L.kind === 'search') ({ good, bad } = searchOptions());
+  else {
+    const g = S.groups[S.gi];
+    good = (g.all || g.any).filter(o => !S.gdone.has(o.code));
+    bad = g.bad.slice();
+    if (declared('p') && !S.L.noPrev) bad.push(O('p = p->prev;', null, "Error de compilación: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder."));
+  }
+  const goodCodes = new Set(good.map(o => o.code));
+  bad = bad.filter(o => (!o.when || o.when()) && !goodCodes.has(o.code));
+  // dedupe por texto
+  const seen = new Set(); bad = bad.filter(o => !seen.has(o.code) && seen.add(o.code));
+  const nBad = Math.max(3, 5 - good.length);
+  S.opts = shuffle(good.map(o => ({ ...o, good: true })).concat(shuffle(bad).slice(0, nBad).map(o => ({ ...o, good: false }))));
+  S.tried = new Set();
+  renderOptions();
+}
+function renderOptions() {
+  const box = $('opts');
+  box.innerHTML = '';
+  S.opts.forEach((o, i) => {
+    const b = document.createElement('button');
+    b.className = 'opt' + (S.tried.has(o.code) ? ' tried' : '');
+    b.textContent = o.code; b.disabled = S.tried.has(o.code) || S.state !== 'play';
+    b.onclick = () => choose(i);
+    box.appendChild(b);
+  });
+  $('ask').textContent = S.state === 'play' ? '¿Qué línea escribes ahora?' : '';
+}
+
+// ───────────────────────── ejecutar ─────────────────────────
+function snapshot() {
+  const idx = n => n ? S.nodes.indexOf(n) : -1;
+  return { nodes: S.nodes.map(n => ({ n, next: idx(n.next), freed: n.freed, dead: n.dead, known: n.known, v: n.v, tray: n.tray })),
+           vars: S.vars.map(v => ({ t: idx(v.t), declared: v.declared, slot: v.slot })), slot: S.slot, nk: NK, leaks: S.leaks };
+}
+function restore(s) {
+  S.nodes = s.nodes.map(o => o.n);
+  const at = k => k < 0 ? null : S.nodes[k];
+  s.nodes.forEach(o => Object.assign(o.n, { next: at(o.next), freed: o.freed, dead: o.dead, known: o.known, v: o.v, tray: o.tray }));
+  s.vars.forEach((o, i) => Object.assign(S.vars[i], { t: at(o.t), declared: o.declared, slot: o.slot }));
+  S.slot = s.slot; NK = s.nk; S.leaks = s.leaks;
+}
+function choose(i) {
+  if (S.state !== 'play' || S.pending) return;
+  const o = S.opts[i];
+  const snap = snapshot();
+  let crash = null;
+  try { if (o.run) o.run(); } catch (e) { if (e instanceof Crash) crash = e.msg; else throw e; }
+  const leaked = crash ? [] : checkLeaks();
+  if (o.good && !crash && !leaked.length) {
+    S.steps++;
+    if (S.L.kind === 'search' && /^if/.test(o.code)) {
+      const n = get('p'); addCode(`  ${o.code} // ${n.known === 'eq' ? 'sí' : '≠' + S.L.x}`);
+    } else addCode('  ' + o.code);
+    if (S.avatar && /^p = p->next/.test(o.code)) S.avatar.hop = 1;
+    beep(620, 0.08, 'triangle', 0.05, 1.3); vibrate(12);
+    advanceScript(o);
+    return;
+  }
+  // línea mala: se ejecuta para ver qué pasa, se explica y se deshace
+  S.errors++; S.pending = { snap, o };
+  if (S.avatar) S.avatar.shake = 0.4;
+  beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
+  let why = o.why || 'Esa línea no te acerca al objetivo.';
+  if (crash && !o.why) why = crash;
+  else if (crash && !why.startsWith('Segmentation')) why = crash + ' ' + why;
+  if (leaked.length) why += ` (Se perdió el ${leaked.map(n => n.v).join(' y el ')}.)`;
+  $('fbcode').textContent = '✗ ' + o.code; $('fbwhy').textContent = why;
+  $('opts').hidden = true; $('ask').hidden = true; $('fb').hidden = false; $('fbok').focus();
+}
+$('fbok').onclick = () => {
+  const p = S.pending; if (!p) return;
+  restore(p.snap); S.pending = null;
+  addCode('  // ✗ ' + p.o.code, 'err');
+  S.tried.add(p.o.code);
+  $('fb').hidden = true; $('opts').hidden = false; $('ask').hidden = false;
+  renderOptions();
+};
+function advanceScript(o) {
+  const L = S.L;
+  if (L.kind === 'search') {
+    if (S.answer != null) { finish(); return; }
+    newOptions(); return;
+  }
+  const g = S.groups[S.gi];
+  S.gdone.add(o.code);
+  const done = g.any ? true : g.all.every(x => S.gdone.has(x.code));
+  if (done) {
+    S.gi++; S.gdone = new Set();
+    if (S.gi >= S.groups.length) { finish(); return; }
+    if (S.groups[S.gi].note) addCode('  ' + S.groups[S.gi].note, 'dim');
+  }
+  newOptions();
+}
+function checkLeaks() {
+  const seen = new Set(), q = S.vars.filter(v => v.declared).map(v => v.t).filter(n => live(n) && !n.freed);
+  while (q.length) { const n = q.pop(); if (seen.has(n)) continue; seen.add(n); if (live(n.next) && !n.next.freed) q.push(n.next); }
+  const out = [];
+  for (const n of S.nodes) {
+    if (n.dead || n.freed || seen.has(n)) continue;
+    n.dead = true; n.tray = S.leaks++; out.push(n);
+  }
+  return out;
+}
+function finish() {
+  addCode('}', 'dim');
+  S.state = 'won'; renderOptions();
+  [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.05), i * 110)); vibrate([20, 60, 20]);
+  const cur = S; setTimeout(() => { if (S === cur) showCard('won'); }, 700);
+}
+
+// ───────────────────────── tarjetas ─────────────────────────
+function showCard(kind) {
+  const ov = $('ov');
+  if (!kind) { ov.hidden = true; ov.innerHTML = ''; return; }
+  ov.hidden = false;
+  const L = S.L;
+  if (kind === 'intro') {
+    ov.innerHTML = `<div class="card"><h2>${LVI + 1}. ${L.name}</h2><p>${L.intro}</p>
+      <div class="row"><button id="cgo">Empezar</button></div></div>`;
+    $('cgo').onclick = () => showCard(null); $('cgo').focus();
+  } else if (kind === 'won') {
+    const stars = S.errors === 0 ? 3 : S.errors <= 2 ? 2 : 1;
+    const last = LVI === LEVELS.length - 1;
+    const title = L.kind === 'search' ? (S.answer ? `¡Sí, el ${L.x} está!` : `No, el ${L.x} no está`) : '¡Compila y funciona!';
+    ov.innerHTML = `<div class="card"><h2>${title}</h2>
+      <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+      <p><b>${S.steps}</b> líneas correctas · <b>${S.errors}</b> ${S.errors === 1 ? 'línea mala' : 'líneas malas'}</p>
+      ${last ? '<p>Terminaste el piloto. Lo siguiente sería: listas dobles (donde <code>p->prev</code> sí existe), insertar en orden y tablas hash.</p>' : ''}
+      <div class="row"><button id="cn">${last ? 'Volver al nivel 1' : 'Siguiente nivel'}</button><button class="sec" id="cr">Repetir</button></div></div>`;
+    $('cn').onclick = () => loadLevel(LVI + 1); $('cr').onclick = () => loadLevel(LVI); $('cn').focus();
+  } else if (kind === 'help') {
+    ov.innerHTML = `<div class="card"><h2>Cómo se juega</h2>
+      <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code>.</p>
+      <p>Abajo eliges la próxima línea de C. Siempre hay varias malas. Si eliges una mala, se ejecuta para que veas qué pasa, se explica y se deshace.</p>
+      <p>Un nodo al que no apunta ninguna variable ni ninguna flecha es una <b>fuga</b>: cae a «memoria perdida».</p>
+      <div class="row"><button id="cg">Seguir</button></div></div>`;
+    $('cg').onclick = () => showCard(null); $('cg').focus();
+  }
+}
+$('breset').onclick = () => loadLevel(LVI);
+$('bhelp').onclick = () => showCard('help');
+$('bprev').onclick = () => loadLevel(LVI - 1);
+$('bnext').onclick = () => loadLevel(LVI + 1);
+
+// ───────────────────────── código ─────────────────────────
+function addCode(txt, cls = '') { S.code.push({ txt, cls }); renderCode(); }
+function renderCode() {
+  const el = $('code');
+  el.innerHTML = S.code.map((l, i) => `<div class="${l.cls}${i === S.code.length - 1 && !/dim|goal/.test(l.cls) ? ' new' : ''}">${l.txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+// ───────────────────────── sonido ─────────────────────────
+let AC = null;
+function beep(f, d = 0.08, type = 'triangle', v = 0.05, slide = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
+  } catch (e) {}
+}
+function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+// ───────────────────────── trazos a mano ─────────────────────────
 const cv = $('cv'), ctx = cv.getContext('2d');
-let SC = 1, DPR = 1;
+let SC = 1, DPR = 1, boil = 0;
 function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return ((n >>> 0) % 10000) / 5000 - 1; }
-let boil = 0;
 const J = (s, a) => hash(s * 7919 + boil * 104729) * a;
 const lerp = (a, b, t) => a + (b - a) * t;
-
 function rLine(x1, y1, x2, y2, seed, amp = 1, passes = 2) {
   for (let p = 0; p < passes; p++) {
     const s = seed * 13 + p * 5;
@@ -198,12 +573,9 @@ function rCircle(x, y, r, seed, fill) {
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   ctx.stroke();
 }
-function ctrlOf(a, b, k) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  return { x: (a.x + b.x) / 2 - dy * k, y: (a.y + b.y) / 2 + dx * k };
-}
+function ctrlOf(a, b, k) { const dx = b.x - a.x, dy = b.y - a.y; return { x: (a.x + b.x) / 2 - dy * k, y: (a.y + b.y) / 2 + dx * k }; }
 function qp(a, c, b, t) { const u = 1 - t; return { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y }; }
-function rArrow(a, b, seed, color, width, k = 0.22, dash = null, head = true) {
+function rArrow(a, b, seed, color, width, k = 0.22, dash = null) {
   const c = ctrlOf(a, b, k);
   ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
   if (dash) ctx.setLineDash(dash);
@@ -212,12 +584,10 @@ function rArrow(a, b, seed, color, width, k = 0.22, dash = null, head = true) {
     ctx.quadraticCurveTo(c.x + J(seed + p + 3, 2), c.y + J(seed + p + 4, 2), b.x, b.y); ctx.stroke();
   }
   ctx.setLineDash([]);
-  if (!head) return;
   const t = qp(a, c, b, 0.88), ang = Math.atan2(b.y - t.y, b.x - t.x), L = 9;
   rLine(b.x, b.y, b.x - Math.cos(ang - 0.45) * L, b.y - Math.sin(ang - 0.45) * L, seed + 20, 0.6, 1);
   rLine(b.x, b.y, b.x - Math.cos(ang + 0.45) * L, b.y - Math.sin(ang + 0.45) * L, seed + 21, 0.6, 1);
 }
-// punto donde una flecha que viene de `from` entra a la caja del nodo
 function entry(from, n, k) {
   const c = { x: n.px, y: n.py }, ct = ctrlOf(from, c, k);
   let dx = c.x - ct.x, dy = c.y - ct.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
@@ -225,372 +595,14 @@ function entry(from, n, k) {
   return { x: c.x - dx * t, y: c.y - dy * t };
 }
 
-// ───────────────────────── sonido ─────────────────────────
-let AC = null;
-function beep(f, d = 0.08, type = 'triangle', v = 0.05, slide = 0) {
-  try {
-    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
-    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
-    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
-    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
-  } catch (e) {}
-}
-const SFX = {
-  ok: () => beep(620, 0.08, 'triangle', 0.05, 1.3),
-  jump: () => beep(380, 0.2, 'sine', 0.05, 2),
-  err: () => { beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); },
-  leak: () => beep(500, 0.5, 'sine', 0.05, 0.3),
-  free: () => beep(900, 0.12, 'triangle', 0.04, 0.5),
-  win: () => [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.05), i * 110)),
-};
-function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
-
-// ───────────────────────── estado ─────────────────────────
-let LVI = 0, S = null;
-const addrOf = n => '0x' + (0x3a0 + n.k * 0x18).toString(16);
-
-function loadLevel(i) {
-  LVI = (i + LEVELS.length) % LEVELS.length;
-  const L = LEVELS[LVI];
-  S = { L, nodes: [], vars: [], ops: 0, errors: 0, leaks: 0, made: 0, undo: [], code: [], state: 'play',
-        drag: null, toast: null, t: 0, avatar: null };
-  const byId = {};
-  for (const [id, v, x, y, bug] of L.nodes) {
-    const n = { k: S.nodes.length, v, x, y, px: x, py: y, next: null, freed: false, dead: false, bug: !!bug, revealed: !L.hidden, tray: -1, wob: 0 };
-    S.nodes.push(n); byId[id] = n;
-  }
-  for (const [a, b] of Object.entries(L.links)) byId[a].next = byId[b];
-  L.vars.forEach(([name, id], i) => S.vars.push({ name, t: id ? byId[id] : null, x: 4, y: 20 + i * 48 }));
-  S.required = L.goal.type === 'list' ? L.goal.head.slice() : [L.goal.val];
-  const p = varNamed('p');
-  if (p) S.avatar = { x: 0, y: 0, dir: 1, hop: 0 };
-  placeAvatar(true);
-  reveal();
-
-  // código inicial
-  addCode('// struct Nodo: dato, next', 'dim');
-  addCode('// objetivo: ' + goalText(), 'goal');
-  const headList = listText(varNamed('head'));
-  for (const v of S.vars) {
-    let rhs;
-    if (!v.t) rhs = 'NULL';
-    else if (v.name === 'head') rhs = 'lista();';
-    else if (v.t === varNamed('head').t) rhs = 'head';
-    else rhs = 'ultimo(head)';
-    addCode(`Nodo *${v.name} = ${rhs}${rhs.endsWith(';') ? '' : ';'}` + (v.name === 'head' ? `  // ${headList}` : ''), 'dim');
-  }
-  // botones
-  $('bnext1').hidden = $('bprev1').hidden = !p;
-  $('bnew').hidden = !L.create;
-  updateButtons();
-  $('lvname').textContent = `${LVI + 1}/${LEVELS.length} · ${L.name}`;
-  showCard('intro');
-}
-const varNamed = name => S.vars.find(v => v.name === name) || null;
-const live = n => n && !n.dead;
-
-function goalText() {
-  const G = S.L.goal;
-  if (G.type === 'reach') return `p apunta al ${G.val}`;
-  if (G.type === 'before') return `p->next apunta al ${G.val}`;
-  return 'head → ' + G.head.join(' → ') + ' → NULL' + (G.tail != null ? `; tail → ${G.tail}` : '');
-}
-function listText(v) {
-  if (!v || !v.t) return 'NULL';
-  const out = [], seen = new Set(); let n = v.t;
-  while (n && !seen.has(n)) { seen.add(n); out.push(n.freed ? '✗' : (n.revealed ? n.v : '?')); n = n.next; }
-  return out.join(' → ') + (n ? ' → ↺' : ' → NULL');
-}
-function updateButtons() {
-  const L = S.L;
-  if (L.create) {
-    const left = L.create.vals.length - S.made;
-    $('bnew').textContent = left > 0 ? `n = crearNodo(${L.create.vals[S.made]})` : 'n = crearNodo()';
-    $('bnew').disabled = left <= 0;
-  }
-  $('bundo').disabled = !S.undo.length;
-}
-
-// ───────────────────────── código ─────────────────────────
-function addCode(txt, cls = '') {
-  S.code.push({ txt, cls });
-  renderCode(true);
-}
-function renderCode(fresh) {
-  const el = $('code');
-  el.innerHTML = S.code.map((l, i) => `<div class="${l.cls}${fresh && i === S.code.length - 1 && !/dim|goal/.test(l.cls) ? ' new' : ''}">${l.txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>`).join('');
-  el.scrollTop = el.scrollHeight;
-}
-function toast(text, bad) { S.toast = { text, t: 2.6, bad }; }
-function error(code, msg) {
-  S.errors++; addCode(code, 'err'); toast(msg, true); SFX.err(); vibrate([30, 40, 30]);
-  if (S.avatar) S.avatar.shake = 0.35;
-}
-
-// ───────────────────────── nombres: cómo llegar a un nodo en C ─────────────────────────
-// Devuelve una expresión C que vale `n`, con a lo más `maxArrows` flechas (->). p va primero.
-function orderedVars() { const v = S.vars.slice(); v.sort((a, b) => (b.name === 'p') - (a.name === 'p')); return v; }
-function nameOf(n, maxArrows = 2) {
-  if (!n) return 'NULL';
-  for (const v of orderedVars()) if (v.t === n) return v.name;
-  for (let d = 1; d <= maxArrows; d++) {
-    for (const v of orderedVars()) {
-      let m = v.t, ok = true;
-      for (let i = 0; i < d; i++) { if (!m || m.freed) { ok = false; break; } m = m.next; }
-      if (ok && m === n) return v.name + '->next'.repeat(d);
-    }
-  }
-  return null;
-}
-
-// ───────────────────────── ejecutar instrucciones ─────────────────────────
-function snapshot() {
-  const idx = n => n ? n.k : -1;
-  return { nodes: S.nodes.map(n => ({ next: idx(n.next), freed: n.freed, dead: n.dead, revealed: n.revealed, tray: n.tray })),
-           vars: S.vars.map(v => idx(v.t)), ops: S.ops, leaks: S.leaks, made: S.made, count: S.nodes.length, code: S.code.length };
-}
-function restore(s) {
-  S.nodes.length = s.count;
-  const at = k => k < 0 ? null : S.nodes[k];
-  s.nodes.forEach((o, i) => Object.assign(S.nodes[i], { next: at(o.next), freed: o.freed, dead: o.dead, revealed: o.revealed, tray: o.tray }));
-  s.vars.forEach((k, i) => S.vars[i].t = at(k));
-  S.ops = s.ops; S.leaks = s.leaks; S.made = s.made;
-  S.code.length = s.code; renderCode(false);
-}
-function exec(code, mutate, sfx = SFX.ok) {
-  if (S.state !== 'play') return;
-  S.undo.push(snapshot());
-  mutate(); S.ops++;
-  addCode(code);
-  sfx(); vibrate(12);
-  afterOp();
-}
-function afterOp() {
-  checkLeaks(); reveal(); placeAvatar(false); updateButtons(); checkWin();
-}
-function checkLeaks() {
-  const seen = new Set(), q = S.vars.map(v => v.t).filter(n => live(n) && !n.freed);
-  while (q.length) { const n = q.pop(); if (seen.has(n)) continue; seen.add(n); if (live(n.next) && !n.next.freed) q.push(n.next); }
-  for (const n of S.nodes) {
-    if (n.dead || n.freed || seen.has(n)) continue;
-    n.dead = true; n.tray = S.leaks++;
-    addCode(`// ⚠ fuga: el ${n.v} quedó sin referencias`, 'leak');
-    SFX.leak();
-    if (S.required.includes(n.v)) {
-      S.state = 'lost'; S.lostVal = n.v; vibrate(200);
-      { const cur = S; setTimeout(() => { if (S === cur && S.state === 'lost') showCard('lost'); }, 700); }
-    }
-  }
-}
-function reveal() {
-  if (!S.L.hidden) return;
-  const p = varNamed('p');
-  if (p && live(p.t)) { p.t.revealed = true; if (live(p.t.next)) p.t.next.revealed = true; }
-}
-function checkWin() {
-  if (S.state !== 'play') return;
-  const G = S.L.goal, p = varNamed('p');
-  let ok = false;
-  if (G.type === 'reach') ok = p && p.t && p.t.v === G.val;
-  else if (G.type === 'before') ok = p && p.t && p.t.next && p.t.next.v === G.val;
-  else {
-    const out = [], seen = new Set(); let n = varNamed('head').t;
-    while (n && !n.freed && !seen.has(n)) { seen.add(n); out.push(n.v); n = n.next; }
-    ok = !n && out.length === G.head.length && out.every((v, i) => v === G.head[i]);
-    if (ok && G.tail != null) { const t = varNamed('tail'); ok = t && t.t && !t.t.freed && t.t.v === G.tail; }
-    // y nada queda colgando fuera de la lista sin liberar (lo que sobra se libera con free)
-    if (ok) ok = S.nodes.every(m => m.dead || m.freed || seen.has(m));
-  }
-  if (ok) { S.state = 'won'; SFX.win(); vibrate([20, 60, 20]); { const cur = S; setTimeout(() => { if (S === cur && S.state === 'won') showCard('won'); }, 600); } }
-}
-
-// acciones de los botones
-function advance() {
-  const p = varNamed('p'); if (!p || S.state !== 'play') return;
-  if (!p.t) { error('p = p->next;  // Segmentation fault', 'p es NULL: no hay nodo del cual leer next'); return; }
-  if (p.t.freed) { error('p = p->next;  // ✗ uso después de free', 'p apunta a memoria liberada'); return; }
-  if (S.avatar) S.avatar.hop = 1;
-  exec('p = p->next;', () => { p.t = p.t.next; }, SFX.jump);
-}
-function goBack() {
-  if (S.state !== 'play') return;
-  error("p = p->prev;  // error: 'Nodo' no tiene un miembro llamado 'prev'",
-        'En una lista simple no hay vuelta atrás. Guarda el nodo en otra variable antes de avanzar, o vuelve a empezar con p = head.');
-}
-function createNode() {
-  const L = S.L; if (!L.create || S.state !== 'play') return;
-  const i = S.made; if (i >= L.create.vals.length) return;
-  const v = L.create.vals[i], [x, y] = L.create.at[i] || [X2, Y(i)];
-  const n = varNamed('n');
-  exec(`n = crearNodo(${v});`, () => {
-    const node = { k: S.nodes.length, v, x, y, px: x, py: y - 30, next: null, freed: false, dead: false, bug: false, revealed: true, tray: -1, wob: 0 };
-    S.nodes.push(node); n.t = node; S.made++;
-  });
-}
-
-// ───────────────────────── arrastrar y soltar ─────────────────────────
-function toLogical(e) {
-  const r = cv.getBoundingClientRect();
-  return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
-}
-const inRect = (pt, x, y, w, h, pad = 0) => pt.x >= x - pad && pt.x <= x + w + pad && pt.y >= y - pad && pt.y <= y + h + pad;
-function varAt(pt) { return S.vars.find(v => inRect(pt, v.x, v.y, PW, PH, 4)) || null; }
-function avatarAt(pt) { const a = S.avatar; return a && Math.hypot(pt.x - a.x, pt.y - a.y) < 16 ? varNamed('p') : null; }
-function nodeAt(pt, pad = 6) { return S.nodes.slice().reverse().find(n => live(n) && !n.freed && inRect(pt, n.x - NW / 2, n.y - NH / 2, NW, NH, pad)) || null; }
-function nextBoxAt(pt) { return S.nodes.find(n => live(n) && !n.freed && inRect(pt, n.x - NW / 2 + DW, n.y - NH / 2, NW - DW, NH, 7)) || null; }
-const onTrash = pt => Math.hypot(pt.x - TRASH.x, pt.y - TRASH.y) < TRASH.r + 6;
-
-function describeDrop(d) {
-  // devuelve { code, run } o { err, msg } o { noop }
-  const pt = d.pt;
-  let lhs, current;
-  if (d.kind === 'var') { lhs = d.v.name; current = d.v.t; }
-  else {
-    const base = nameOf(d.node, 1);
-    if (!base) return { err: '// ✗ ese nodo no tiene nombre', msg: 'Para cambiar el next de un nodo, primero apúntalo con una variable.' };
-    lhs = base + '->next'; current = d.node.next;
-  }
-  if (onTrash(pt)) {
-    if (d.kind !== 'var') return { err: '// ✗ free() recibe una variable', msg: 'Arrastra al basurero el post-it de una variable.' };
-    const v = d.v;
-    if (!v.t) return { code: `free(${v.name});  // free(NULL) no hace nada`, run: () => {} };
-    if (v.t.freed) return { err: `free(${v.name});  // ✗ double free`, msg: 'Ese nodo ya estaba liberado.' };
-    return { code: `free(${v.name});`, run: () => { v.t.freed = true; }, sfx: SFX.free };
-  }
-  const w = varAt(pt) || avatarAt(pt);
-  let target, rhs;
-  if (w) {
-    if (d.kind === 'var' && w === d.v) return { noop: true };
-    target = w.t; rhs = w.name;
-  } else {
-    const n = nodeAt(pt);
-    if (n) {
-      target = n; rhs = nameOf(n, 2);
-      if (!rhs) return { err: '// ✗ ese nodo no tiene nombre', msg: 'No hay una variable (ni var->next) que llegue a ese nodo. En C no se puede nombrar.' };
-    } else { target = null; rhs = 'NULL'; }
-  }
-  if (target === current && !(d.kind === 'var' && w)) return { noop: true, msg: `${lhs} ya apunta ahí` };
-  if (d.kind === 'var') return { code: `${lhs} = ${rhs};`, run: () => { d.v.t = target; }, sfx: d.v.name === 'p' ? SFX.jump : SFX.ok };
-  return { code: `${lhs} = ${rhs};`, run: () => { d.node.next = target; } };
-}
-
-cv.addEventListener('pointerdown', e => {
-  if (!S || S.state !== 'play') return;
-  const pt = toLogical(e);
-  let d = null;
-  const v = avatarAt(pt) || varAt(pt);
-  if (v) d = { kind: 'var', v, from: v === varNamed('p') && avatarAt(pt) ? { x: S.avatar.x, y: S.avatar.y } : { x: v.x + PW, y: v.y + PH / 2 } };
-  else { const n = nextBoxAt(pt); if (n) d = { kind: 'next', node: n, from: dotOf(n) }; }
-  if (!d) {
-    const n = nodeAt(pt, 0);
-    if (n) toast(n === (varNamed('p') || {}).t ? 'Arrastra desde la casilla next (●) para cambiar su flecha' : 'En C se llega a un nodo con una variable o con ->next', false);
-    return;
-  }
-  d.start = pt; d.pt = pt; d.moved = false; d.id = e.pointerId;
-  S.drag = d; cv.setPointerCapture(e.pointerId); e.preventDefault();
-});
-cv.addEventListener('pointermove', e => {
-  const d = S && S.drag; if (!d || e.pointerId !== d.id) return;
-  d.pt = toLogical(e);
-  if (Math.hypot(d.pt.x - d.start.x, d.pt.y - d.start.y) > 6) d.moved = true;
-  d.preview = d.moved ? describeDrop(d) : null;
-});
-function endDrag(e, cancel) {
-  const d = S && S.drag; if (!d || e.pointerId !== d.id) return;
-  S.drag = null;
-  if (cancel) return;
-  if (!d.moved) {   // un toque
-    if (d.kind === 'var') {
-      const p = varNamed('p');
-      if (!p) { toast('Arrastra el post-it para cambiar a dónde apunta ' + d.v.name, false); return; }
-      if (d.v === p) { toast('Arrastra a p hasta un nodo o un nombre', false); return; }
-      if (p.t === d.v.t) { toast(`p ya apunta a lo mismo que ${d.v.name}`, false); return; }
-      exec(`p = ${d.v.name};`, () => { p.t = d.v.t; }, SFX.jump);
-    } else toast('Arrastra desde aquí hasta un nodo o un nombre', false);
-    return;
-  }
-  const r = describeDrop(d);
-  if (r.err) error(r.err, r.msg);
-  else if (r.noop) { if (r.msg) toast(r.msg, false); }
-  else exec(r.code, r.run, r.sfx);
-}
-cv.addEventListener('pointerup', e => endDrag(e, false));
-cv.addEventListener('pointercancel', e => endDrag(e, true));
-
-// ───────────────────────── tarjetas ─────────────────────────
-function showCard(kind) {
-  const ov = $('ov');
-  if (!kind) { ov.hidden = true; ov.innerHTML = ''; return; }
-  ov.hidden = false;
-  const L = S.L;
-  if (kind === 'intro') {
-    ov.innerHTML = `<div class="card"><h2>${LVI + 1}. ${L.name}</h2><p>${L.intro}</p>
-      <p class="tally"><b>Objetivo:</b> <code>${goalText()}</code></p>
-      <div class="row"><button id="cgo">Empezar</button></div></div>`;
-    $('cgo').onclick = () => showCard(null); $('cgo').focus();
-  } else if (kind === 'won') {
-    const clean = S.errors === 0 && S.leaks === 0;
-    let stars = S.ops <= L.optimal ? 3 : S.ops <= L.optimal * 2 ? 2 : 1;
-    if (!clean) stars = Math.min(stars, 2);
-    const last = LVI === LEVELS.length - 1;
-    const notes = [];
-    if (S.leaks) notes.push(`Quedaron <b>${S.leaks}</b> nodo(s) perdidos en memoria. Faltó un <code>free</code>.`);
-    if (S.errors) notes.push(`Tuviste <b>${S.errors}</b> error(es).`);
-    if (S.ops < L.optimal) notes.push('¡Lo hiciste en menos pasos que nuestra solución!');
-    ov.innerHTML = `<div class="card"><h2>${S.leaks ? 'Funciona, pero…' : '¡Compila y funciona!'}</h2>
-      <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-      <p class="tally"><b>${S.ops}</b> ${S.ops === 1 ? 'instrucción' : 'instrucciones'} · nuestra solución usa <b>${L.optimal}</b></p>
-      ${notes.map(n => `<p>${n}</p>`).join('')}
-      ${last ? '<p>Terminaste el piloto. Lo siguiente sería: listas dobles (donde <code>p->prev</code> sí existe), insertar en orden y tablas hash.</p>' : ''}
-      <div class="row"><button id="cn">${last ? 'Volver al nivel 1' : 'Siguiente nivel'}</button><button class="sec" id="cr">Repetir</button></div></div>`;
-    $('cn').onclick = () => loadLevel(LVI + 1); $('cr').onclick = () => loadLevel(LVI); $('cn').focus();
-  } else if (kind === 'lost') {
-    ov.innerHTML = `<div class="card"><h2 style="color:var(--bad)">Fuga de memoria</h2>
-      <p>El nodo con el <b>${S.lostVal}</b> quedó sin ninguna variable ni flecha que lo apunte. En C ya no hay forma de volver a alcanzarlo, y lo necesitabas.</p>
-      <p>Pista: antes de cambiar una flecha, asegúrate de que lo que estaba al otro lado siga apuntado por algo.</p>
-      <div class="row"><button id="cu">↶ Deshacer</button><button class="sec" id="cr">Reiniciar</button></div></div>`;
-    $('cu').onclick = undo; $('cr').onclick = () => loadLevel(LVI); $('cu').focus();
-  } else if (kind === 'help') {
-    ov.innerHTML = `<div class="card"><h2>Cómo se juega</h2>
-      <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[dato | next]</code>.</p>
-      <p><b>Arrastra</b> desde un post-it o desde la casilla <code>next</code> (●) y suelta sobre un nodo, sobre un nombre o en el papel (<code>NULL</code>). Mientras arrastras ves la línea de C que vas a escribir.</p>
-      <p><b>Toca</b> un post-it para hacer <code>p = ese_nombre</code>.</p>
-      <p>Arrastra un post-it al <b>basurero</b> para hacer <code>free</code>.</p>
-      <p>Un nodo al que nada apunta es una <b>fuga</b>: se pierde para siempre.</p>
-      <div class="row"><button id="cg">Seguir</button></div></div>`;
-    $('cg').onclick = () => showCard(null); $('cg').focus();
-  }
-}
-function undo() {
-  if (!S.undo.length) return;
-  restore(S.undo.pop());
-  S.state = 'play'; showCard(null);
-  placeAvatar(false); updateButtons();
-}
-$('bnext1').onclick = advance;
-$('bprev1').onclick = goBack;
-$('bnew').onclick = createNode;
-$('bundo').onclick = undo;
-$('breset').onclick = () => loadLevel(LVI);
-$('bhelp').onclick = () => showCard('help');
-$('bprev').onclick = () => loadLevel(LVI - 1);
-$('bnext').onclick = () => loadLevel(LVI + 1);
-
 // ───────────────────────── dibujo ─────────────────────────
+const varPos = v => ({ x: 5, y: 12 + v.slot * 44 });
 function dotOf(n) { return { x: n.px + NW / 2 - (NW - DW) / 2, y: n.py }; }
-function varAnchor(v) { return { x: v.x + PW, y: v.y + PH / 2 }; }
-function placeAvatar(snap) {
-  const a = S.avatar; if (!a) return;
-  const p = varNamed('p');
-  a.tx = p.t && !p.t.dead ? p.t.x - NW / 2 - 2 : p.x + PW + 12;
-  a.ty = p.t && !p.t.dead ? p.t.y - NH / 2 - 8 : p.y + PH / 2 - 2;
-  if (snap) { a.x = a.tx; a.y = a.ty; }
-}
+function varAnchor(v) { const p = varPos(v); return { x: p.x + PW, y: p.y + PH / 2 }; }
 
 let paper = null;
 function buildPaper() {
-  paper = document.createElement('canvas'); paper.width = LW * SC * DPR; paper.height = LH * SC * DPR;
+  paper = document.createElement('canvas'); paper.width = Math.round(LW * SC * DPR); paper.height = Math.round(LH * SC * DPR);
   const g = paper.getContext('2d'); g.scale(SC * DPR, SC * DPR);
   g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, LW, LH);
   g.strokeStyle = '#c9dbeb'; g.lineWidth = 0.7;
@@ -598,38 +610,50 @@ function buildPaper() {
   for (let y = 0; y <= LH; y += 12.5) { g.beginPath(); g.moveTo(0, y); g.lineTo(LW, y); g.stroke(); }
   g.strokeStyle = '#e0726a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(MX, 0); g.lineTo(MX, LH); g.stroke();
   g.fillStyle = '#b6b0a6'; g.font = '13px "Patrick Hand", sans-serif'; g.textAlign = 'center';
-  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', (MX + LW) / 2, 12);
+  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', (MX + LW) / 2, LH - 48);
 }
-
-function drawVar(v, hot) {
-  ctx.save(); ctx.translate(v.x + PW / 2, v.y + PH / 2); ctx.rotate(-0.04 + (v.name.length % 3) * 0.02);
-  ctx.fillStyle = hot ? '#ffd23a' : '#ffe27a'; ctx.fillRect(-PW / 2, -PH / 2, PW, PH);
+function drawVar(v) {
+  const { x, y } = varPos(v);
+  ctx.save(); ctx.translate(x + PW / 2, y + PH / 2); ctx.rotate(-0.04 + (v.name.length % 3) * 0.02);
+  const isList = v.name.startsWith('l->');
+  ctx.fillStyle = isList ? '#ffd9a8' : '#ffe27a'; ctx.fillRect(-PW / 2, -PH / 2, PW, PH);
   ctx.fillStyle = 'rgba(0,0,0,.06)'; ctx.fillRect(-PW / 2, PH / 2 - 4, PW, 4);
-  ctx.strokeStyle = '#8a7420'; ctx.lineWidth = 1.1; rRect(-PW / 2, -PH / 2, PW, PH, v.name.charCodeAt(0) * 7, 0.6);
-  ctx.fillStyle = v.name === 'p' ? '#2350b8' : '#2e2c2a'; ctx.font = '17px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = '#8a7420'; ctx.lineWidth = 1.1; rRect(-PW / 2, -PH / 2, PW, PH, v.name.charCodeAt(v.name.length - 1) * 7, 0.6);
+  ctx.fillStyle = v.name === 'p' ? '#2350b8' : '#2e2c2a'; ctx.font = (v.name.length > 5 ? '14px' : '17px') + ' "Patrick Hand", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(v.name, -4, 1);
   ctx.restore();
   const a = varAnchor(v);
-  ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(a.x - 6, a.y, 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(a.x - 5, a.y, 2.4, 0, 7); ctx.fill();
 }
-function drawNull(x, y) {   // tierra eléctrica: el NULL de los diagramas
-  ctx.strokeStyle = '#6f6a62'; ctx.lineWidth = 1.4;
-  rLine(x, y, x + 6, y, 901, 0.4, 1);
-  rLine(x + 6, y - 6, x + 6, y + 6, 902, 0.4, 1); rLine(x + 9, y - 4, x + 9, y + 4, 903, 0.4, 1); rLine(x + 12, y - 2, x + 12, y + 2, 904, 0.4, 1);
+function drawNull(x, y, seed) {
+  ctx.strokeStyle = '#6f6a62'; ctx.lineWidth = 1.3;
+  rLine(x, y, x + 6, y, seed, 0.4, 1);
+  rLine(x + 6, y - 6, x + 6, y + 6, seed + 1, 0.4, 1); rLine(x + 9, y - 4, x + 9, y + 4, seed + 2, 0.4, 1); rLine(x + 12, y - 2, x + 12, y + 2, seed + 3, 0.4, 1);
 }
-function drawNode(n, hot) {
+function nodeLabel(n) {
+  if (S.L.kind !== 'search') return String(n.v);
+  if (n.known === 'eq' || (n.known && n.v === S.L.x)) return String(S.L.x);
+  if (n.known === 'neq') return '≠' + S.L.x;
+  return '?';
+}
+function drawNode(n) {
   const x = n.px, y = n.py, L = x - NW / 2, T = y - NH / 2;
   ctx.save();
-  if (n.dead) { ctx.globalAlpha = 0.5; }
+  if (n.dead) ctx.globalAlpha = 0.5;
   if (n.freed) { ctx.globalAlpha = 0.45; ctx.setLineDash([3, 3]); }
-  ctx.fillStyle = hot ? '#fff3c4' : '#fffdf6'; ctx.fillRect(L, T, NW, NH);
-  ctx.strokeStyle = n.bug ? '#c23a32' : '#2e2c2a'; ctx.lineWidth = 1.8;
+  const found = S.L.kind === 'search' && n.known === 'eq';
+  ctx.fillStyle = found ? '#e3f4e6' : '#fffdf6'; ctx.fillRect(L, T, NW, NH);
+  ctx.strokeStyle = n.bug ? '#c23a32' : found ? '#2f8a4c' : '#2e2c2a'; ctx.lineWidth = 1.8;
   rRect(L, T, NW, NH, n.k * 17 + 3);
   rLine(L + DW, T, L + DW, T + NH, n.k * 17 + 9, 0.6, 1);
   ctx.setLineDash([]);
-  ctx.fillStyle = n.bug ? '#c23a32' : '#2e2c2a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '22px "Patrick Hand", sans-serif';
-  ctx.fillText(n.revealed ? String(n.v) : '?', L + DW / 2, y + 1);
+  const label = nodeLabel(n);
+  ctx.fillStyle = n.bug ? '#c23a32' : label === '?' ? '#8a847b' : label.startsWith('≠') ? '#6f6a62' : found ? '#2f8a4c' : '#2e2c2a';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = (label.length > 2 ? '18px' : '22px') + ' "Patrick Hand", sans-serif';
+  ctx.fillText(label, L + DW / 2, y + 1);
+  ctx.fillStyle = '#2e2c2a';
   const d = dotOf(n);
   if (n.next) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, 7); ctx.fill(); }
   else { ctx.lineWidth = 1.4; rLine(L + DW + 3, T + NH - 4, L + NW - 3, T + 4, n.k * 5 + 1, 0.5, 1); }
@@ -638,18 +662,9 @@ function drawNode(n, hot) {
   if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('liberado', x, T - 7); }
   ctx.restore();
 }
-function drawTrash(hot) {
-  const { x, y } = TRASH;
-  ctx.strokeStyle = hot ? '#c23a32' : '#6f6a62'; ctx.lineWidth = 1.6;
-  ctx.fillStyle = hot ? '#fde2df' : 'rgba(0,0,0,0)';
-  if (hot) ctx.fillRect(x - 12, y - 10, 24, 26);
-  rLine(x - 12, y - 10, x - 9, y + 16, 701, 0.6); rLine(x + 12, y - 10, x + 9, y + 16, 702, 0.6); rLine(x - 9, y + 16, x + 9, y + 16, 703, 0.6);
-  rLine(x - 15, y - 13, x + 15, y - 13, 704, 0.6); rLine(x - 4, y - 17, x + 4, y - 17, 705, 0.6);
-  rLine(x - 4, y - 5, x - 3, y + 11, 706, 0.4, 1); rLine(x + 4, y - 5, x + 3, y + 11, 707, 0.4, 1);
-  ctx.fillStyle = '#6f6a62'; ctx.font = '12px "Cutive Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('free', x, y - 25);
-}
 function drawAvatar() {
-  const a = S.avatar; if (!a) return;
+  const a = S.avatar, pv = varNamed('p');
+  if (!pv || !pv.declared) return;
   const sh = a.shake ? Math.sin(a.shake * 70) * 3 : 0;
   const x = a.x + sh, y = a.y - Math.sin(Math.min(1, a.hop) * Math.PI) * 12 + Math.sin(S.t * 4) * 0.8;
   ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.8; rCircle(x, y, 11, 77, '#c9dbff');
@@ -661,20 +676,13 @@ function drawAvatar() {
   ctx.fillStyle = '#2350b8'; ctx.font = 'bold 12px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('p', x, y + 6);
 }
-function wrapText(text, maxW) {
-  const words = text.split(' '), lines = []; let cur = '';
-  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
-  if (cur) lines.push(cur); return lines;
-}
-function drawBubble(text, color, y, bg = '#fffdf6') {
-  ctx.font = '14px "Patrick Hand", sans-serif';
-  const lines = wrapText(text, LW - 30), h = lines.length * 16 + 10;
-  const w = Math.min(LW - 12, Math.max(...lines.map(l => ctx.measureText(l).width)) + 18);
-  const x = (LW - w) / 2;
-  ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = color; ctx.lineWidth = 1.3; rRect(x, y, w, h, 333, 0.6);
-  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  lines.forEach((l, i) => ctx.fillText(l, LW / 2, y + 13 + i * 16));
+function placeAvatar(snap) {
+  const a = S.avatar, p = varNamed('p');
+  if (!p || !p.declared) return;
+  const pos = varPos(p);
+  if (p.t && !p.t.dead) { a.tx = p.t.x - NW / 2 - 4; a.ty = p.t.y - NH / 2 - 8; }
+  else { a.tx = pos.x + PW + 20; a.ty = pos.y + PH / 2 - 14; }
+  if (snap || a.x === 0) { a.x = a.tx; a.y = a.ty; }
 }
 
 function draw() {
@@ -682,63 +690,34 @@ function draw() {
   if (!paper) buildPaper();
   ctx.drawImage(paper, 0, 0, LW, LH);
   if (!S) return;
-  const d = S.drag, pv = d && d.preview;
-  const dropVar = d && d.moved ? (varAt(d.pt) || avatarAt(d.pt)) : null;
-  const dropNode = d && d.moved && !dropVar ? nodeAt(d.pt) : null;
-  drawTrash(d && d.moved && d.kind === 'var' && onTrash(d.pt));
-
-  // memoria perdida
-  const lost = S.nodes.filter(n => n.dead);
-  if (lost.length) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 40); }
-
-  // flechas next
+  if (S.nodes.some(n => n.dead)) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 34); }
   for (const n of S.nodes) {
-    if (n.dead || !n.next || (d && d.kind === 'next' && d.node === n && d.moved)) continue;
+    if (n.dead || !n.next || n.next.dead) continue;
     const a = dotOf(n), t = n.next;
-    if (t.dead) continue;
-    const b = entry(a, { px: t.px, py: t.py }, -0.35);
-    rArrow(a, b, n.k * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, -0.35, t.freed ? [4, 4] : null);
+    rArrow(a, entry(a, t, -0.35), n.k * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, -0.35, t.freed ? [4, 4] : null);
   }
-  // flechas de variables
   for (const v of S.vars) {
-    if (d && d.kind === 'var' && d.v === v && d.moved) continue;
+    if (!v.declared) continue;
     const a = varAnchor(v);
-    if (!v.t) { drawNull(a.x - 4, a.y); continue; }
+    if (!v.t) { drawNull(a.x - 3, a.y, v.slot * 11 + 900); continue; }
     if (v.t.dead) continue;
-    const b = entry(a, { px: v.t.px, py: v.t.py }, 0.12);
-    rArrow(a, b, v.name.charCodeAt(0) * 31, v.t.freed ? '#c23a32' : (v.name === 'p' ? '#2350b8' : '#5d574f'), v.name === 'p' ? 1.7 : 1.3, 0.12, v.t.freed ? [4, 4] : [5, 3]);
+    const col = v.t.freed ? '#c23a32' : v.name === 'p' ? '#2350b8' : v.name.startsWith('l->') ? '#a0521d' : '#5d574f';
+    rArrow(a, entry(a, v.t, 0.12), v.slot * 31 + 7, col, v.name === 'p' ? 1.7 : 1.3, 0.12, v.t.freed ? [4, 4] : [5, 3]);
   }
-  for (const n of S.nodes) drawNode(n, n === dropNode);
-  for (const v of S.vars) drawVar(v, v === dropVar);
+  for (const n of S.nodes) drawNode(n);
+  for (const v of S.vars) if (v.declared) drawVar(v);
   drawAvatar();
-
-  // flecha en el dedo y vista previa del código
-  if (d && d.moved) {
-    let b = d.pt;
-    if (dropNode) b = entry(d.from, { px: dropNode.px, py: dropNode.py }, 0.2);
-    rArrow(d.from, b, 999, '#2350b8', 2.4, 0.2);
-    if (pv) {
-      if (pv.err) drawBubble(pv.msg, '#c23a32', 6, '#fff3f1');
-      else if (pv.code) drawBubble(pv.code, '#2350b8', 6, '#f2f6ff');
-    }
-  } else if (S.toast) {
-    ctx.globalAlpha = Math.min(1, S.toast.t * 2);
-    drawBubble(S.toast.text, S.toast.bad ? '#c23a32' : '#2e2c2a', 6, S.toast.bad ? '#fff3f1' : '#fffdf6');
-    ctx.globalAlpha = 1;
-  }
 }
-
 function update(dt) {
   S.t += dt;
-  if (S.toast) { S.toast.t -= dt; if (S.toast.t <= 0) S.toast = null; }
   for (const n of S.nodes) {
-    const tx = n.dead ? MX + 22 + n.tray * 30 : n.x, ty = n.dead ? LH - 18 : n.y;
+    const tx = n.dead ? MX + 24 + n.tray * 34 : n.x, ty = n.dead ? LH - 16 : n.y;
     n.px = lerp(n.px, tx, Math.min(1, dt * 7)); n.py = lerp(n.py, ty, Math.min(1, dt * 7));
   }
   const a = S.avatar;
   if (a) {
     placeAvatar(false);
-    a.x = lerp(a.x, a.tx, Math.min(1, dt * 10)); a.y = lerp(a.y, a.ty, Math.min(1, dt * 10));
+    if (a.tx != null) { a.x = lerp(a.x, a.tx, Math.min(1, dt * 10)); a.y = lerp(a.y, a.ty, Math.min(1, dt * 10)); }
     if (a.hop > 0) a.hop = Math.max(0, a.hop - dt * 3);
     if (a.shake) a.shake = Math.max(0, a.shake - dt);
   }
