@@ -15,9 +15,10 @@ class Encuentros(Mecanica):
     nombre = "encuentros"
     # enc[a][b] = por lado de b respecto de a (encima, arriba, derecha, abajo, izquierda), 3 números cada uno:
     # [juntos sin pasar nada, a desapareció estando b ahí, Σ Δpuntaje cuando desapareció]
-    estado = {"enc": (dict, "I>I>v")}
+    # intentos[b][t] = por lado, cuántas veces se fue a soltar un t sobre un b (pase lo que pase después)
+    estado = {"enc": (dict, "I>I>v"), "intentos": (dict, "I>I>v")}
     neutros = {"mata": False, "valor_encuentro": 0.0, "hipotesis": 1.0, "pruebas_encuentro": 0,
-               "lados_que_matan": [], "metas_encuentro": {}}
+               "lados_que_matan": [], "metas_encuentro": {}, "anotar_intento": None}
 
     def al_transicion(self, antes, ahora):
         K, W, N = self.K, ahora.W, len(ahora.masks)
@@ -122,7 +123,8 @@ class Encuentros(Mecanica):
         donde = {}
         for oid, (t, x, y) in st.objects.items():
             donde.setdefault(int(round(y)) * W + int(round(x)), []).append(t)
-        out = {}
+        out, fuente = {}, {}
+        cmd._caer_fuente = fuente
         for oid, (t, x, y) in st.objects.items():
             d = track.main_dir(t)
             if d is None or abs(x - round(x)) > 0.05 or abs(y - round(y)) > 0.05:
@@ -150,6 +152,7 @@ class Encuentros(Mecanica):
                         v = self._valor_caer(t, b, lad, st)
                         if v > out.get(r, 0.0):
                             out[r] = v
+                            fuente[r] = (t, b, lad)
                     break
                 if blocked[c] or st.masks[c] & ~(1 << t) & K.blocking_bits(getattr(st, "res", None)):
                     break
@@ -157,12 +160,20 @@ class Encuentros(Mecanica):
             cmd.stats["caer"] = cmd.stats.get("caer", 0) + 1
         return out
 
+    def anotar_intento(self, cmd, j):
+        """El alto nivel eligió ir a la casilla j para soltar algo: cuenta como prueba de esa hipótesis."""
+        f = getattr(cmd, "_caer_fuente", {}).get(j)
+        if f is not None:
+            t, b, lad = f
+            self.K.intentos.setdefault(b, {}).setdefault(t, [0] * 5)[lad] += 1
+
     def _valor_caer(self, t, b, lad, st):
         K = self.K
         r = K.enc.get(b, {}).get(t)
         if lad in self.lados_que_matan(t, b):
             return r[3 * lad + 2] / r[3 * lad + 1] if r[3 * lad + 1] else 0.0
-        n = r[3 * lad] + r[3 * lad + 1] if r else 0
+        # lo probado: encuentros vistos desde ese lado y veces que se fue a provocarlo (aunque no se viera nada)
+        n = (r[3 * lad] + r[3 * lad + 1] if r else 0) + K.intentos.get(b, {}).get(t, [0] * 5)[lad]
         if n >= 3:
             return 0.0                                       # ya se probó desde ese lado y no mata
         ds, dr, _, pd, _ = K.effect(b)

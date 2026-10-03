@@ -115,7 +115,8 @@ class Commander:
                 if c not in targets:
                     targets = targets + [c]
         # dejar caer algo sobre lo que importa (encuentros aprendidos o imaginados)
-        caer = K.metas_encuentro(self, st, info)
+        # (apagado por defecto: en la variante de Boulder Dash no rindió en 5 minutos; --hl '{"caer": true}')
+        caer = K.metas_encuentro(self, st, info) if self.P.get("caer", False) else {}
         best, choice = self.P["min_score"], None
         self._scores = {}
         for j, (t, H) in info.items():
@@ -376,6 +377,8 @@ class Commander:
         self._goal_blocked0 = self.know.blocked_cells(st)[j]      # ya bloqueada al elegirla (p. ej. una puerta)
         self.nav.deadline = st.tick + limit
         self.stats["orders"] += 1
+        if self.learn:
+            self.know.anotar_intento(self, j)              # si era ir a soltar algo: una prueba más
 
     def _valuable(self, st, j):
         """¿La casilla j tiene algún tipo con valor positivo? (False para una meta de exploración)."""

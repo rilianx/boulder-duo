@@ -214,3 +214,15 @@ Imaginar: un par que casi no se probó desde un lado es una hipótesis. Probarla
 - el medio «dejar caer»: cavar lo que sostiene un objeto que siempre cae en una dirección, cuando en su línea de caída hay algo con que encontrarse.
 
 En la variante `boulderdash_roca` (la roca que cae desde arriba mata a la mariposa, +2) se aprende "roca desde arriba mata mariposa" en 120 s de entrenamiento: 8 de 29 encuentros desde arriba, 0 de 1124 desde abajo. En los 10 juegos de desarrollo no cambia el promedio (63 % contra 64 %, dentro del ruido).
+
+Medio «dejar caer» en `boulderdash_roca` (5 minutos de entrenamiento, 3 semillas de entrenamiento, 10 partidas cada una):
+
+| versión | semilla 1 | semilla 2 | semilla 3 | promedio |
+|---|---|---|---|---|
+| sin `encuentros` | 60 | 50 | 50 | 53 |
+| con «dejar caer» | 70 | 70 | 0 | 47 |
+| con «dejar caer» y cada intento cuenta como prueba | 70 | 30 | 0 | 33 |
+
+No rinde todavía. La regla se aprende bien (la roca desde arriba mata en 6–11 de 28–38 encuentros), pero tratar de soltar rocas gasta práctica. Además, el resultado lo decide otra cosa: el umbral de diamantes aprendido para la salida. Sin `encuentros` se llega a la salida con 9 diamantes y se aprende que bastan 9. Con «dejar caer» se llega con 10, se aprende "hacen falta 10" y en los niveles de prueba se queda atascado. Por eso «dejar caer» queda **apagado por defecto** (`--hl '{"caer": true}'` lo enciende). El aprendizaje de encuentros sigue activo.
+
+Pendiente: que la plantilla de fin pruebe con menos recursos después de ganar (si ganó con 10, ¿bastan 9?).
