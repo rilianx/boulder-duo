@@ -112,11 +112,15 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 Ver [`rl/README.md`](rl/README.md).
 
+## Celular en vertical
+
+En el celular todo se juega en vertical y llenando la pantalla: el tablero se vuelve alto (unas 12 casillas de ancho y tantas filas como quepan) y el menú queda encima, con scroll si no cabe. De a dos en un mismo celular, cada uno tiene media pantalla (J2 dado vuelta, como antes). En el celular no aparecen GRAVEDAD REAL ni ENTRENAR PC (siguen en el computador). La app de Android queda fija en vertical.
+
 ## App de Android y dos celulares por Bluetooth
 
 En `app/` está el juego empaquetado como app de Android con [Capacitor](https://capacitorjs.com) (gratuito). La app es el mismo `index.html`, más un pequeño plugin propio (`BtLink.java`) que conecta dos celulares por Bluetooth.
 
 - **Cómo conseguir el APK:** cada vez que cambia el juego, GitHub Actions ("App de Android") lo compila. En la pestaña *Actions* del repositorio, abre la última ejecución y descarga el artefacto `boulder-duo-apk` (un zip con `boulder-duo.apk`). Para instalarlo hay que permitir apps de fuentes desconocidas. Todas las versiones van firmadas con la misma llave de prueba, así que una nueva se instala encima de la anterior.
-- **Jugar en dos celulares (versión básica):** la primera vez, emparejen los celulares en Ajustes › Bluetooth. Luego, en el menú, **DOS CELULARES (BLUETOOTH)**: uno toca **ABRIR PARTIDA** y el otro **UNIRSE** y elige el primero de la lista. El que abre es J1, elige cooperativo o versus y la cueva (la del menú), y corre el juego; el otro es J2 y ve su propio tablero en su pantalla. Se juega en horizontal.
-- Lo que va por Bluetooth: el celular que abre manda las casillas que cambian, lo que se movió, el estado de los niños y los sonidos (alrededor de 1 KB/s); el otro manda la dirección en que mueve a su niño. El que se une no ve algunos adornos (polvo, bichitos, gemas volando), y entre cuevas o en la pausa decide el que abrió.
+- **Jugar en dos celulares (versión básica):** la primera vez, emparejen los celulares en Ajustes › Bluetooth. Luego, en el menú, **DOS CELULARES (BLUETOOTH)**: uno toca **ABRIR PARTIDA** y el otro **UNIRSE** y elige el primero de la lista. El que abre es J1, elige cooperativo o versus y la cueva (la del menú), y corre el juego; el otro es J2 y ve su propio tablero en su pantalla.
+- Lo que va por Bluetooth: el celular que abre manda las casillas que cambian, lo que se movió, el estado de los niños y los sonidos (alrededor de 1 KB/s); el otro manda la dirección en que mueve a su niño. Cada uno ve su tablero en vertical, a pantalla completa. El que se une no ve algunos adornos (polvo, bichitos, gemas volando), y entre cuevas o en la pausa decide el que abrió.
 - Fuera de la app (en el navegador) no aparece la opción.

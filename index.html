@@ -123,6 +123,12 @@ button:disabled{opacity:.4;cursor:default}
 .touch[data-state="play"]{touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
 .touch button{touch-action:manipulation}
 .touch .legend{display:none}
+/* upright phone: one tall board (or two, one per half) filling the screen; the menu scrolls if it does not fit */
+.pmode .wrap{padding:4px max(4px, env(safe-area-inset-left)) 4px;gap:4px;min-height:100dvh;box-sizing:border-box;justify-content:flex-start}
+.pmode .views,.pmode .views.solo,.pmode .views.duo{width:100%;max-width:none;margin-inline:auto}
+.pmode .bar{font-size:14px;padding:3px 6px;gap:6px}
+.pmode .overlay{align-items:flex-start} .pmode .overlay .card{margin:auto} .pmode .card .long{display:none}
+.pmode .rotate{display:none!important}
 .overlay{overflow:auto}
 .rotate{display:none}
 /* Full screen (or opened from the home screen): no top bar, just one round button in the middle to pause */
@@ -1375,11 +1381,35 @@ const W = 40, H = 22, T = 16, TICK = 120;
    training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
 const CAVE_TICK = [170, 145, 120, 105, 92];
 let tickMs = TICK;
-const VW = 17, VH = 12;                 // tiles visible per player camera (the PC's view always stays this size)
+let VW = 17, VH = 12;                   // tiles visible per player camera; an upright phone gets a tall one (fitBoards)
+const AIW = 17, AIH = 12;               // the PC's view always stays this size
 /* ACERCAR: the camera zooms in by 1.25 (5 screen pixels per cave pixel, so tiles still meet without seams):
    about 13.6 x 9.6 tiles on screen, less to see ahead, harder. CW x CH is what the camera covers. */
 let zoomIn = false, ZOOM = 1, CW = VW, CH = VH;
 try { zoomIn = localStorage.getItem('boulder-duo-zoom') === '1'; } catch (e) {}
+/* Upright phone: the boards fill the screen. The view keeps tiles about 32 px wide (12 across on most phones)
+   and gets as many rows as fit under its bar (half the height each for two players on one phone). */
+function setShape(w, h){
+  if (w === VW && h === VH) return;
+  VW = w; VH = h;
+  CVS.forEach((c, k) => { c.width = Math.round(VW * T * SS); c.height = Math.round(VH * T * SS); const g = CTX[k]; g.setTransform(SS, 0, 0, SS, 0, 0); g.imageSmoothingEnabled = false; });
+  if (typeof DARK !== 'undefined') DARK.forEach(c => { c.width = Math.round(VW * T * SS); c.height = Math.round(VH * T * SS); });
+  applyZoom(); if (typeof grid !== 'undefined' && grid && players.length) snapCams();
+}
+function fitBoards(){
+  const up = document.body.classList.contains('touch') && innerHeight > innerWidth;
+  document.body.classList.toggle('pmode', up);
+  if (!up) return setShape(17, 12);
+  const views = $('views'), shown = [...views.querySelectorAll('.view')].filter(v => v.offsetParent);
+  if (!shown.length) return;
+  const n = shown.length, cw = shown[0].clientWidth, bar = shown[0].querySelector('.bar').offsetHeight;
+  if (!cw) return;
+  const cols = clamp(Math.round(cw / 32), 10, 17), tile = cw / cols;
+  const top = views.getBoundingClientRect().top + scrollY, gap = n > 1 ? 6 : 0;
+  const avail = (innerHeight - top - 6 - gap - n * (bar + 6)) / n;
+  setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
+}
+addEventListener('resize', () => requestAnimationFrame(fitBoards));
 function applyZoom(){ ZOOM = zoomIn && mode !== 'train' ? 1.25 : 1; CW = VW / ZOOM; CH = VH / ZOOM; }
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
@@ -2780,6 +2810,8 @@ function menu(){
   if (netRole === 'host' && state !== 'menu') netSend({ t: 'menu' });
   if (netRole === 'guest' && netLink) { netQuit(); return; }
   state = 'menu'; document.body.classList.remove('needland'); lockOrientation();
+  if (touchPref) { realGravity = false; $('views').classList.remove('duo', 'netguest'); $('views').classList.add('solo'); }   // phones: no real gravity, one board behind the menu
+  fitBoards();
   if (netRole === 'host' && netLink) return hostPick();   // connected: the next game is with the other phone
   if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
@@ -2792,14 +2824,14 @@ function menu(){
     </div>
     <div class="row">
       <button id="bpc" class="b2">CONTRA PC</button>
-      <button id="btrain">ENTRENAR PC</button>
+      ${touchPref ? '' : '<button id="btrain">ENTRENAR PC</button>'}
     </div>
     ${BT ? '<div class="row"><button id="bbt" class="b1">DOS CELULARES (BLUETOOTH)</button></div>' : ''}
     <div class="row">
       <button id="bpick">ELEGIR CUEVA · ${caveLabel(startN())}</button>
     </div>
     <div class="row sets">
-      <button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>
+      ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
       <button id="bzoom" class="${zoomIn ? 'on' : ''}">ACERCAR: ${zoomIn ? 'SÍ' : 'NO'}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
@@ -2809,13 +2841,13 @@ function menu(){
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
     </div>
-    <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega. Entrenar PC: el PC juega solo y puedes acelerar el tiempo.</p>
+    <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega.${touchPref ? '' : ' Entrenar PC: el PC juega solo y puedes acelerar el tiempo.'}</p>
   </div>`);
   $('bsolo').onclick = () => startGame('solo');
   $('bcoop').onclick = () => startGame('coop');
   $('bvs').onclick = () => startGame('versus');
   $('bpc').onclick = () => startGame('pc');
-  $('btrain').onclick = () => startGame('train');
+  if (!touchPref) $('btrain').onclick = () => startGame('train');
   if (BT) $('bbt').onclick = () => btMenu();
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
@@ -2823,7 +2855,7 @@ function menu(){
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
   $('bzoom').onclick = () => { zoomIn = !zoomIn; try { localStorage.setItem('boulder-duo-zoom', zoomIn ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
-  $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
+  if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
   onEnter = () => startGame('coop');
 }
@@ -2879,9 +2911,9 @@ function startGame(m){
   audioOn();
   const duo = (m === 'coop' || m === 'versus') && !netRole;   // two phones: each shows only its own kid, sideways
   document.body.classList.toggle('solomode', !duo);
-  document.body.classList.toggle('needland', !duo);
+  document.body.classList.toggle('needland', !duo && !touchPref);   // phones play everything upright
   $('views').classList.toggle('duo', duo);
-  if (touchPref && !duo) goLandscape();
+
   if (turbo) setTurbo(false);
   solo = m === 'solo'; mode = solo ? 'coop' : m;
   state = 'play'; lockOrientation();   // initLevel below sets play anyway; needed so the lock is not the menu's
@@ -2902,6 +2934,7 @@ function startGame(m){
   document.querySelector('#aipanel h3').textContent = hl ? 'EL PC APRENDE LA CUEVA · ELIGE QUÉ HACER (RL) Y EL A* LO LLEVA' : 'CEREBRO DEL PC · Q(λ) SOBRE SU PANTALLA 17×12';
   setSpeed(1);
   HL.cur = null; hlDied = false;
+  fitBoards();
   initLevel(mode === 'train' && !hlTrain() ? 1 : startN());
   drawAiPanel(true);
 }
@@ -3094,8 +3127,8 @@ function stepCat(p, i, d){
 }
 
 function aiWindow(p){
-  const x0 = clamp(p.x - (VW >> 1), 0, W - VW), y0 = clamp(p.y - (VH >> 1), 0, H - VH);
-  return [x0, y0, x0 + VW - 1, y0 + VH - 1];
+  const x0 = clamp(p.x - (AIW >> 1), 0, W - AIW), y0 = clamp(p.y - (AIH >> 1), 0, H - AIH);
+  return [x0, y0, x0 + AIW - 1, y0 + AIH - 1];
 }
 const bfsSeen = new Int32Array(W*H), bfsFirst = new Int8Array(W*H), bfsDist = new Int16Array(W*H), bfsQ = new Int32Array(W*H);
 let bfsStamp = 0;
@@ -3704,7 +3737,7 @@ function updateCams(){
     const f = camFocus(k); if (!f) return;
     // dead zone in the middle of the view, like the original scroller
     let tx = c.x, ty = c.y;
-    const mx = 5 / ZOOM, my = 3.5 / ZOOM;
+    const mx = CW * .3, my = CH * .29;   // 5 x 3.5 tiles on the 17 x 12 view
     if (f[0] - c.x < mx) tx = f[0] - mx; else if (f[0] - c.x > CW - 1 - mx) tx = f[0] - (CW - 1 - mx);
     if (f[1] - c.y < my) ty = f[1] - my; else if (f[1] - c.y > CH - 1 - my) ty = f[1] - (CH - 1 - my);
     tx = clamp(tx, 0, W - CW); ty = clamp(ty, 0, H - CH);
@@ -4054,6 +4087,7 @@ function setTouch(on){
   try { localStorage.setItem('boulder-duo-touch', on ? '1' : '0'); } catch (e) {}
   document.body.classList.toggle('touch', on);
   const b = $('btouch'); b.innerHTML = on ? 'TÁCTIL<br>ON' : 'TÁCTIL<br>OFF'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
+  fitBoards();
 }
 /* The whole screen is the pad, not only the boards: a touch steers the board nearest to it
    (above/below the boards in the table layout, left/right side by side), so fingers never cover the cave. */
@@ -4247,7 +4281,7 @@ function hostPick(){
 function lockOrientation(){
   const o = screen.orientation; if (!o || !o.lock || !touchPref || !fsEl()) return;
   if (state === 'menu') { try { o.unlock(); } catch (e) {} return; }
-  o.lock(!netRole && (mode === 'coop' && !solo || mode === 'versus') ? 'portrait' : 'landscape').catch(() => {});
+  o.lock('portrait').catch(() => {});   // phones play everything upright
 }
 function goLandscape(){
   const el = document.documentElement;
