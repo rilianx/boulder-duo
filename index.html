@@ -2127,7 +2127,7 @@ function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let 
 
 function newPlayer(id){
   return { id, cell: P1 + id, x:0, y:0, sx:0, sy:0, alive:false, exited:false, lives:3, gems:0, score:0, wins:0,
-           respawn:-1, immune:0, ohnoAt:-1e9, ohnoUntil:-1e9, face:0, walking:false, dig:-1, idle:0, actAt:-1e9, nextAt:0, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
+           respawn:-1, immune:0, doomed:false, ohnoAt:-1e9, ohnoUntil:-1e9, face:0, walking:false, dig:-1, idle:0, actAt:-1e9, nextAt:0, stepN:0, push:0, held:[], ai:false, pend:null, aiR:0, epGems:0, tr:[] };
 }
 
 function genLevel(n){
@@ -2319,12 +2319,12 @@ function genCave(n){
 function initLevel(n){
   if (HL.cur && HL.cur.cave !== hlCave()) HL.cur = null;
   if (HL.cur) hlEnd('t');
-  level = n; dust = []; critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
+  level = n; dust = []; pendingBooms = []; holdCell.fill(0); critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
   const spawns = (mode === 'train' && !hlTrain()) || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
-    p.gems = 0; p.exited = false; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
+    p.gems = 0; p.exited = false; p.doomed = false; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
     if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = 16; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
   });
@@ -2375,12 +2375,13 @@ function explode(cx, cy, toGem, now){
       const t = grid[(cy+dy)*W + cx+dx];
       if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !(friendly() && !rockBlast)) caught.push(p); }
     }
+    if (caught.length && caught.every(p => p.doomed)) return;   // already caught: the explosion is on its way
     if (caught.length) {
-      const t0 = performance.now(), hold = Math.max(450, tickMs * 3);
-      pendingBooms.push({ cx, cy, toGem, rock: rockBlast });
-      caught.forEach(p => { if (t0 >= p.ohnoUntil) p.ohnoAt = t0; p.ohnoUntil = t0 + hold + 350; });
-      if (!frozen()) sfx.ohno();
-      freezeWall = Math.max(freezeWall, t0 + hold);
+      const n = Math.max(3, Math.ceil(450 / tickMs));
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n });
+      for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) holdCell[(cy+dy)*W + cx+dx] = 1;   // what caught them waits too
+      caught.forEach(p => { p.doomed = true; p.walking = false; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
+      sfx.ohno();
       return;
     }
   }
@@ -2515,7 +2516,7 @@ function flyGem(p, j){
   a.onfinish = () => { el.remove(); icon.parentNode.classList.remove('bump'); void icon.offsetWidth; icon.parentNode.classList.add('bump'); };
 }
 function stepPlayer(p){
-  if (!p.alive) return;
+  if (!p.alive || p.doomed) return;
   const d = p.held[p.held.length-1];
   p.dig = -1;
   if (d === undefined) { p.walking = false; p.push = 0; p.idle++; return; }
@@ -2554,19 +2555,22 @@ function stepPlayer(p){
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
 
-/* "¡Oh no!": when a kid is caught, the whole game freezes for a moment (the time of a few ticks) with the kid
-   saying it, and only then the explosion goes off. Just playing in real time: training, turbo and the tests that
-   run the game by ticks explode at once (or on the next tick), so the rules stay the same as the Python copy. */
-let pendingBooms = [], freezeWall = 0;
-const frozen = () => performance.now() < freezeWall;
+/* "¡Oh no!": when a kid is caught, the kid and whatever caught them (the cells of the coming blast) stand still for
+   a few ticks (half a second at least) while the kid says it, and only then the explosion goes off. The rest of the
+   cave goes on. Only when playing in real time: training, turbo and the PC learning a cave explode at once, so the
+   rules stay the same as the Python copy. */
+let pendingBooms = [], holdCell = new Uint8Array(W*H);
 const deferDeaths = () => mode !== 'train' && speed === 1 && !turbo && !simHook && !hlTrain();
 function runPendingBooms(){
-  const b = pendingBooms; pendingBooms = [];
-  b.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
+  const due = pendingBooms.filter(e => e.at <= tickN); if (!due.length) return;
+  pendingBooms = pendingBooms.filter(e => e.at > tickN);
+  holdCell.fill(0); pendingBooms.forEach(e => { for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++) holdCell[(e.cy+dy)*W + e.cx+dx] = 1; });
+  due.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
+  players.forEach(p => { if (!p.alive) p.doomed = false; });
 }
 function drawOhNo(g, ox, oy){
   players.forEach(p => {
-    const now = performance.now();
+    const now = simT;
     if (now >= p.ohnoUntil || p.exited) return;
     const [gx, gy] = p.alive ? glidePos(p) : [p.x, p.y], q = (now - p.ohnoAt) / 160;
     const x = gx * T - ox + T / 2, y = gy * T - oy - 3 - Math.min(1, q) * 2, sc = Math.min(1, .4 + q * .6) + .05 * Math.sin(now / 50);
@@ -2682,7 +2686,7 @@ function tick(){
   const ord = scanOrder();
   for (let n = 0; n < ord.length; n++){
     const i = ord[n], x = i % W, y = i / W | 0;
-    if (moved[i]) continue;
+    if (moved[i] || holdCell[i]) continue;
     const t = grid[i];
     if (t === ROCK || t === GEM) fallObj(i, x, y);
     else if (t === FIRE || t === BUTT) enemy(i, x, y, t);
@@ -3971,17 +3975,15 @@ let last = performance.now(), acc = 0;
 function loop(now){
   const dt = Math.min(250, now - last); last = now;
   if (turbo || simHook) { acc = 0; if (turbo) { drawTurbo(); drawAiPanel(); } else render(); requestAnimationFrame(loop); return; }
-  // a kid was caught: everything stands still (the cave's clock too) until the explosion
-  if (state === 'play' && frozen()) { render(); requestAnimationFrame(loop); return; }
-  if (state === 'play') {
+    if (state === 'play') {
     simT += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
     let n = 0;
-    while (simT - worldT >= tickMs && state === 'play' && n < cap && !frozen()) { worldT += tickMs; nowT = worldT; tick(); n++; }
+    while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; }
     if (n >= cap) worldT = simT;
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
-      if (state !== 'play' || frozen() || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
+      if (state !== 'play' || p.doomed || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
       // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
       // noticed it, or each step would run late by part of a frame and the walk would pulse
       const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
