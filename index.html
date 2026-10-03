@@ -2353,9 +2353,7 @@ function move(i, j){
 const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === 'true';
 function killPlayer(p){
   if (!p.alive) return;
-  lastDeathTick = tickN; ohnoStats.deaths++; if (tickN - (p.dangerTick || -9) <= 2) ohnoStats.warned++;
-  if (simT >= p.ohnoUntil) p.ohnoAt = simT;   // caught by surprise: they still say it as they go
-  p.ohnoUntil = Math.max(p.ohnoUntil, simT + 1100);
+  lastDeathTick = tickN;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
@@ -2370,7 +2368,22 @@ function catchGem(p, i){
   if (p.ai) { p.aiR += 5; p.epGems++; }
   grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
 }
-function explode(cx, cy, toGem){
+function explode(cx, cy, toGem, now){
+  if (!now && deferDeaths()) {
+    const caught = [];
+    for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
+      const t = grid[(cy+dy)*W + cx+dx];
+      if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !(friendly() && !rockBlast)) caught.push(p); }
+    }
+    if (caught.length) {
+      const t0 = performance.now(), hold = Math.max(450, tickMs * 3);
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast });
+      caught.forEach(p => { if (t0 >= p.ohnoUntil) p.ohnoAt = t0; p.ohnoUntil = t0 + hold + 350; });
+      if (!frozen()) sfx.ohno();
+      freezeWall = Math.max(freezeWall, t0 + hold);
+      return;
+    }
+  }
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
     if (t === STEEL || t === EXIT || t === NEST || t === STAR) continue;
@@ -2541,43 +2554,22 @@ function stepPlayer(p){
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
 
-/* "¡Oh no!": a kid sees it coming a tick or two before dying (drawing and sound only, the game is the same):
-   a rock (or a gem, unless friendly) falling towards their head or about to drop on it, a firefly or butterfly
-   next to them or about to step next to them, or a rock about to fall on one of those right beside them. */
-function danger(p){
-  const i = p.y*W + p.x;
-  const hitFrom = (c, gemsToo) => {
-    if (gDir < 0) return false;
-    const far = realGravity && caveRules() ? 4 : 2;
-    for (let n = 1, j = c - GOFF; n <= far; n++, j -= GOFF){
-      const t = grid[j];
-      if (t === ROCK || (t === GEM && gemsToo)) return fall[j] || (n > 1 && aux[j]);
-      if (t !== E) return false;
-    }
-    return false;
-  };
-  if (hitFrom(i, !friendly())) return true;
-  if (friendly()) return false;
-  // where they stand, and where they are about to step (walking into a firefly's side counts too)
-  const hd = p.held[p.held.length - 1], nt = hd === undefined ? -1 : grid[i + OFF[hd]];
-  const at = [i]; if (nt === E || nt === DIRT || nt === GEM) at.push(i + OFF[hd]);
-  const near = j => at.some(c => Math.abs(j % W - c % W) + Math.abs((j / W | 0) - (c / W | 0)) === 1);
-  for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++){
-    const e = i + dy*W + dx, t = grid[e];
-    if (e < 0 || e >= W*H || (t !== FIRE && t !== BUTT)) continue;
-    if (near(e)) return true;
-    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && hitFrom(e, true)) return true;   // its blast would reach them
-    const d = dir[e], turn = t === FIRE ? (d + 3) % 4 : (d + 1) % 4;
-    const nx = grid[e + OFF[turn]] === E ? e + OFF[turn] : grid[e + OFF[d]] === E ? e + OFF[d] : e;
-    if (near(nx)) return true;
-  }
-  return false;
+/* "¡Oh no!": when a kid is caught, the whole game freezes for a moment (the time of a few ticks) with the kid
+   saying it, and only then the explosion goes off. Just playing in real time: training, turbo and the tests that
+   run the game by ticks explode at once (or on the next tick), so the rules stay the same as the Python copy. */
+let pendingBooms = [], freezeWall = 0;
+const frozen = () => performance.now() < freezeWall;
+const deferDeaths = () => mode !== 'train' && speed === 1 && !turbo && !simHook && !hlTrain();
+function runPendingBooms(){
+  const b = pendingBooms; pendingBooms = [];
+  b.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
 }
 function drawOhNo(g, ox, oy){
   players.forEach(p => {
-    if (simT >= p.ohnoUntil || p.exited) return;
-    const [gx, gy] = p.alive ? glidePos(p) : [p.x, p.y], q = (simT - p.ohnoAt) / 160;
-    const x = gx * T - ox + T / 2, y = gy * T - oy - 3 - Math.min(1, q) * 2, sc = Math.min(1, .4 + q * .6) + .05 * Math.sin(simT / 50);
+    const now = performance.now();
+    if (now >= p.ohnoUntil || p.exited) return;
+    const [gx, gy] = p.alive ? glidePos(p) : [p.x, p.y], q = (now - p.ohnoAt) / 160;
+    const x = gx * T - ox + T / 2, y = gy * T - oy - 3 - Math.min(1, q) * 2, sc = Math.min(1, .4 + q * .6) + .05 * Math.sin(now / 50);
     g.save(); g.translate(x, y); g.scale(sc, sc);
     g.font = '5px "Press Start 2P", monospace'; g.textAlign = 'center';
     const msg = '¡OH NO!', w = g.measureText(msg).width + 6;
@@ -2674,9 +2666,10 @@ function amoebaCell(i){
   }
 }
 
-let tickN = 0, lastDeathTick = -99, ohnoStats = { deaths: 0, warned: 0 };   // for tests: deaths that had their "¡oh no!" first
+let tickN = 0, lastDeathTick = -99;
 function tick(){
-  tickN++; moved.fill(0); landThisTick = false;
+  tickN++; moved.fill(0);
+  if (pendingBooms.length) runPendingBooms(); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
@@ -2722,12 +2715,6 @@ function tick(){
     }
   });
 
-  if (mode !== 'train' && speed === 1) players.forEach(p => {
-    if (!p.alive || p.exited || p.immune > 0 || !danger(p)) return;
-    p.dangerTick = tickN;
-    if (simT >= p.ohnoUntil) { sfx.ohno(); p.ohnoAt = simT; }
-    p.ohnoUntil = simT + Math.max(450, tickMs * 2.5);
-  });
   if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; exitOpenAt = nowT; sfx.open(); }
 
   // the clock runs with the cave's pace: a cave second is 1000 ms at the normal pace (cave 3's), longer in the
@@ -3984,15 +3971,17 @@ let last = performance.now(), acc = 0;
 function loop(now){
   const dt = Math.min(250, now - last); last = now;
   if (turbo || simHook) { acc = 0; if (turbo) { drawTurbo(); drawAiPanel(); } else render(); requestAnimationFrame(loop); return; }
+  // a kid was caught: everything stands still (the cave's clock too) until the explosion
+  if (state === 'play' && frozen()) { render(); requestAnimationFrame(loop); return; }
   if (state === 'play') {
     simT += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
     let n = 0;
-    while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; }
+    while (simT - worldT >= tickMs && state === 'play' && n < cap && !frozen()) { worldT += tickMs; nowT = worldT; tick(); n++; }
     if (n >= cap) worldT = simT;
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
-      if (state !== 'play' || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
+      if (state !== 'play' || frozen() || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
       // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
       // noticed it, or each step would run late by part of a frame and the walk would pulse
       const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
@@ -4209,7 +4198,7 @@ window.__sim = {
     const c = {}; grid.forEach(v => { c[v] = (c[v] || 0) + 1; });
     let unsettled = 0; if (GOFF) grid.forEach((v, i) => { if ((v === ROCK || v === GEM) && grid[i + GOFF] === E) unsettled++; });
     let rx = 0, ry = 0, rn = 0; grid.forEach((v, i) => { if (v === ROCK) { rx += i % W; ry += i / W | 0; rn++; } });
-    const r = { state, need, timeLeft, magicState, counts: c, hardHits, unsettled, ohno: ohnoStats, rocks: [+(rx / rn).toFixed(2), +(ry / rn).toFixed(2)] }; menu(); return r;
+    const r = { state, need, timeLeft, magicState, counts: c, hardHits, unsettled, rocks: [+(rx / rn).toFixed(2), +(ry / rn).toFixed(2)] }; menu(); return r;
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){
