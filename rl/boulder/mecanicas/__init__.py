@@ -167,6 +167,7 @@ from .usar import Usar                      # noqa: E402
 from .empujar import Empujar                # noqa: E402
 from .fin_conteo import FinConteo           # noqa: E402
 from .efectos import Efectos                # noqa: E402
+from .encuentros import Encuentros          # noqa: E402
 
 REGISTRO = [Tipos, Bloqueo, Giro, Teletransporte, EfectoToque, DireccionObjetos, MovimientoRelativo, Usar,
-            Empujar, FinConteo, Efectos]
+            Empujar, FinConteo, Efectos, Encuentros]

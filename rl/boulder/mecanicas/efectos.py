@@ -19,7 +19,8 @@ def observar(agente, K, st):
         tocado = [t for t in range(63) if pm[st.pos] >> t & 1 and t not in K.avatar_types] \
             if st.pos != pp and len(pm) == len(st.masks) else []
         K.emitir("conteos", antes=prev[0], ahora=ahora, tocado=tocado)
-    agente._prev_cnt = (ahora, list(st.masks), st.pos)
+        K.emitir("transicion", antes=prev[3], ahora=st)
+    agente._prev_cnt = (ahora, list(st.masks), st.pos, st)
 
 
 class Efectos(Mecanica):
@@ -66,6 +67,12 @@ class Efectos(Mecanica):
         for c, ys in K.co.items():
             k = ys.get(d, 0)
             if k and seguro(k, K.ven.get(c, 0) - k):
+                out.append((c, "desaparece"))
+        for c in K.co:                                     # tipos que se movieron alguna vez: ¿llegar a d lo quita?
+            if K.mata(c, d):
+                out.append((c, "desaparece"))
+        for c in K.enc:
+            if c not in K.co and K.mata(c, d):
                 out.append((c, "desaparece"))
         for c, ys in K.toco.items():
             k = ys.get(d, 0)

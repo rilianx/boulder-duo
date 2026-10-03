@@ -142,6 +142,8 @@ class Empujar(Mecanica):
 
         reach = flood(wall, st.pos)
         comp_t = {t: K.companeros(t) if quitar.get(t) else set() for t in set(boxes.values())}
+        comp_e = {t: {a for a in K.enc if K.mata(t, a)}
+                  for t in set(boxes.values())}
         ab = ~cmd._abits()
         lam, best = cmd.P["lam"], None
         for b0, t in boxes.items():
@@ -174,12 +176,17 @@ class Empujar(Mecanica):
                         # (visto al empujar, o donde está lo que desaparece junto con él: su hoyo) vale eso
                         bono = quitar.get(t, 0.0)
                         junto = bono > 0 and (self.push_vanishes(t, m) or any(m >> u & 1 for u in comp_t[t]))
-                        if not junto and not K.push_ok(t, m):
+                        # encuentros: llevar t adonde está algo que t hace desaparecer (y lo que eso rinde)
+                        golpe = max((K.valor_encuentro(t, u) for u in comp_e[t] if m >> u & 1), default=None)
+                        if not junto and golpe is None and not K.push_ok(t, m):
                             continue
                         v, tries = K.push_value(t, m)
                         if junto and bono > v:
                             v = bono
-                        cur = cmd.P["push_new"] / (1 + tries) if v <= 0 and tries < 2 else 0.0
+                        if golpe is not None:
+                            v = max(v, golpe, bono)
+                        # curiosidad, más fuerte si ahí hay algo relevante con que t casi no se encontró (imaginar)
+                        cur = cmd.P["push_new"] * K.hipotesis(t, m) / (1 + tries) if v <= 0 and tries < 2 else 0.0
                         steps = 0
                         s, chain = (b, lab), [(behind, d)]
                         while par[s] is not None:
