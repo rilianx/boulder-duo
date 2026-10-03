@@ -17,7 +17,7 @@ class Encuentros(Mecanica):
     # [juntos sin pasar nada, a desapareció estando b ahí, Σ Δpuntaje cuando desapareció]
     estado = {"enc": (dict, "I>I>v")}
     neutros = {"mata": False, "valor_encuentro": 0.0, "hipotesis": 1.0, "pruebas_encuentro": 0,
-               "lados_que_matan": []}
+               "lados_que_matan": [], "metas_encuentro": {}}
 
     def al_transicion(self, antes, ahora):
         K, W, N = self.K, ahora.W, len(ahora.masks)
@@ -106,6 +106,68 @@ class Encuentros(Mecanica):
                 (1.0 if ds > 0 or dr > 0 else 0.0)
             w = max(w, rel / (1 + n))
         return w
+
+    # ------------------------------------------------------------------ medio: dejar caer
+    def metas_encuentro(self, cmd, st, info):
+        """{casilla: valor}: dejar caer algo sobre otra cosa. Un objeto quieto que siempre se mueve en una dirección
+        (una roca que cae) y que tiene, en esa línea y tras una sola casilla que lo sostiene, a un objeto b con
+        camino libre entre ambos: ir a esa casilla (cavarla) lo suelta y cae sobre b. Vale lo que rinde el
+        encuentro si se sabe que mata desde ese lado; si casi no se probó y b importa, vale como curiosidad
+        (imaginar: "¿la roca le hace algo a la mariposa?")."""
+        K, W, H, N = self.K, st.W, st.H, len(st.masks)
+        if not st.objects:
+            return {}
+        track = cmd.nav.track
+        blocked = K.blocked_cells(st)
+        donde = {}
+        for oid, (t, x, y) in st.objects.items():
+            donde.setdefault(int(round(y)) * W + int(round(x)), []).append(t)
+        out = {}
+        for oid, (t, x, y) in st.objects.items():
+            d = track.main_dir(t)
+            if d is None or abs(x - round(x)) > 0.05 or abs(y - round(y)) > 0.05:
+                continue
+            vx, vy = track.velocity(oid)
+            if abs(vx) + abs(vy) > 0.01:
+                continue                                     # ya se está moviendo
+            lad = {(0, 1): 1, (0, -1): 3, (1, 0): 4, (-1, 0): 2}.get(tuple(d))
+            if lad is None:
+                continue
+            xx, yy = int(round(x)) + d[0], int(round(y)) + d[1]
+            if not (0 <= xx < W and 0 <= yy < H):
+                continue
+            r = yy * W + xx                                  # lo que lo sostiene: ahí hay que ir
+            if r not in info or r == st.pos or donde.get(r):
+                continue
+            for k in range(1, 5):                            # la línea de caída, hasta 4 casillas
+                cx, cy = xx + k * d[0], yy + k * d[1]
+                if not (0 <= cx < W and 0 <= cy < H):
+                    break
+                c = cy * W + cx
+                hay = [b for b in donde.get(c, []) if b != t and b not in K.avatar_types]
+                if hay:
+                    for b in hay:
+                        v = self._valor_caer(t, b, lad, st)
+                        if v > out.get(r, 0.0):
+                            out[r] = v
+                    break
+                if blocked[c] or st.masks[c] & ~(1 << t) & K.blocking_bits(getattr(st, "res", None)):
+                    break
+        if out:
+            cmd.stats["caer"] = cmd.stats.get("caer", 0) + 1
+        return out
+
+    def _valor_caer(self, t, b, lad, st):
+        K = self.K
+        r = K.enc.get(b, {}).get(t)
+        if lad in self.lados_que_matan(t, b):
+            return r[3 * lad + 2] / r[3 * lad + 1] if r[3 * lad + 1] else 0.0
+        n = r[3 * lad] + r[3 * lad + 1] if r else 0
+        if n >= 3:
+            return 0.0                                       # ya se probó desde ese lado y no mata
+        ds, dr, _, pd, _ = K.effect(b)
+        rel = (1.0 if pd > 0.05 else 0.0) + (1.0 if K.is_blocking(b) else 0.0) + (1.0 if ds > 0 or dr > 0 else 0.0)
+        return rel / (1 + n)                                 # imaginar: probarlo vale según cuánto importa b
 
 
 def lado(a, b):

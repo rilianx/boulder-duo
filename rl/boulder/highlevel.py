@@ -114,6 +114,8 @@ class Commander:
                 vals[c] = b
                 if c not in targets:
                     targets = targets + [c]
+        # dejar caer algo sobre lo que importa (encuentros aprendidos o imaginados)
+        caer = K.metas_encuentro(self, st, info)
         best, choice = self.P["min_score"], None
         self._scores = {}
         for j, (t, H) in info.items():
@@ -121,6 +123,8 @@ class Commander:
                 continue
             m = st.masks[j]
             v = max((vals[ty] for ty in targets if m >> ty & 1), default=0.0)
+            if j in caer:
+                v = max(v, caer[j])
             if v <= 0:
                 continue
             s = v * math.exp(-H) - self.P["lam"] * t
