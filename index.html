@@ -3155,6 +3155,19 @@ function hlCandidates(p, C, M){
     const b = i + W; if (g[b] === DIRT && reach(b)) extra.push({ k: 'u' + i, t: b, rock: i, c: M.best[b] + 2 });
   }
   extra.sort((a, b) => a.c - b.c); out.push(...extra.slice(0, 10));
+  // shafts: a rock with a column of dirt under it that ends over open space (often an enemy's den). Clearing the
+  // column from the bottom up, always stepping out sideways, lets the rock drop all the way down onto whatever is there.
+  const shafts = [];
+  for (let i = W; i < N - W; i++){
+    if (g[i] !== ROCK || fall[i]) continue;
+    const col = []; let j = i + W;
+    while (g[j] === DIRT && col.length < 12) { col.push(j); j += W; }
+    if (!col.length || !(g[j] === E || g[j] === BUTT || g[j] === FIRE)) continue;
+    let foe = 0; for (let k = j; k < N && k < j + 4 * W; k += W) for (const dx of [-1, 0, 1]) if (g[k + dx] === BUTT || g[k + dx] === FIRE) foe = 1;
+    const side = col.some(c => [c - 1, c + 1].some(sd => reach(sd)));
+    if (side) shafts.push({ k: 'd' + i, rock: i, col, foe, t: col[col.length - 1], c: Math.min(...col.map(c => Math.min(M.best[c - 1], M.best[c + 1]))) - (foe ? 30 : 0) });
+  }
+  shafts.sort((a, b) => a.c - b.c); out.push(...shafts.slice(0, 6));
   out.push({ k: 'w', c: 0 });
   return out;
 }
@@ -3162,7 +3175,8 @@ function hlDefault(p, cands){
   // what the plain expert would do: the exit if open (unless a gem is within `detour`), else the cheapest gem
   const x = cands.find(o => o.k === 'x'), g = cands.filter(o => o.k[0] === 'g');
   if (x) return g.length && g[0].c <= ASTAR_P.detour ? g[0] : x;
-  return g[0] || null;
+  // no gem within reach: rather than stand still, drop a rock on an enemy (gems come out of butterflies)
+  return g[0] || cands.find(o => o.k[0] === 'd' && o.foe) || null;
 }
 function hlChoose(p){
   const C = astarCosts(), M = astarSearch(p, C, null), cands = hlCandidates(p, C, M), e = HL.cur;
@@ -3177,7 +3191,8 @@ function hlChoose(p){
   }
   if (!pick) {                                                            // …and after that, the best known choice
     let bv = -Infinity;
-    for (const o of cands) { const q = HL.Q.get(s + '|' + o.k); if (q && q[0] > bv) { bv = q[0]; pick = o; } }
+    // not conservative: with nothing obvious to do, an untried move counts as promising and gets tried before waiting
+    for (const o of cands) { const q = HL.Q.get(s + '|' + o.k), v = q ? q[0] : (!def && o.k !== 'w' ? 2 - o.c * .01 : -Infinity); if (v > bv) { bv = v; pick = o; } }
     const dq = def && HL.Q.get(s + '|' + def.k);
     if (def && !dq) pick = def;                       // the expert's choice until it has been scored
     if (!pick) pick = def || cands[cands.length - 1];
@@ -3194,6 +3209,22 @@ function hlStep(p){
   if (o.k[0] === 'p') {
     if (grid[o.rock] !== ROCK) return -1;
     if (me === o.t) return o.d;                       // keep pushing
+  }
+  if (o.k[0] === 'd') {
+    if (grid[o.rock] !== ROCK && !o.col.includes(me)) return -1;
+    if (o.phase === 1) {
+      for (const d of [1, 3]) { const j = me + OFF[d]; if (grid[j] === E || grid[j] === DIRT || grid[j] === GEM) { o.phase = 0; return d; } }
+      return -1;
+    }
+    const left = o.col.filter(c => grid[c] === DIRT);
+    if (!left.length) return -1;
+    const tgt = left[left.length - 1];                // lowest dirt cell first, the one under the rock last
+    if (me === tgt) { o.phase = 1; return hlStep(p); }
+    // walk into it from the side, never along the column
+    const goals = new Set([tgt - 1, tgt + 1].filter(c => astarCosts().cost[c] < Infinity || c === me));
+    if (goals.has(me)) return grid[tgt - 1] === P2 || me === tgt - 1 ? 1 : 3;
+    const r = astarSearch(p, astarCosts(), goals);
+    return r ? r[1] : -1;
   }
   if (o.k[0] === 'u') {
     if (o.phase === 1) {
@@ -3217,6 +3248,9 @@ function hlThink(p){
   }
   const e = HL.cur;
   if (p.gems > e.gems) { e.ret += 5 * (p.gems - e.gems); e.gems = p.gems; }
+  let foes = 0; for (let i = 0; i < W * H; i++) if (grid[i] === BUTT || grid[i] === FIRE) foes++;
+  if (e.foes != null && foes < e.foes) e.ret += 8 * (e.foes - foes);        // an enemy squashed: good sign
+  e.foes = foes;
   e.ret -= .05;
   let a = -1;
   for (let k = 0; k < 3 && a < 0; k++) { if (!e.opt) e.opt = hlChoose(p); a = hlStep(p); if (a < 0) e.opt = null; }
@@ -3363,7 +3397,7 @@ function hookHover(cv, redraw){
 
 let aiPanelTick = 0;
 const OPT_TXT = o => !o ? '—' : o.k === 'x' ? 'va a la salida' : o.k === 'w' ? 'espera un momento' : o.k[0] === 'g' ? 'va por una gema' :
-  o.k[0] === 'p' ? 'empuja una roca hacia la ' + (o.d === 1 ? 'derecha' : 'izquierda') : 'cava bajo una roca para soltarla';
+  o.k[0] === 'p' ? 'empuja una roca hacia la ' + (o.d === 1 ? 'derecha' : 'izquierda') : o.k[0] === 'd' ? 'cava un pozo bajo una roca para dejarla caer hasta el fondo' : 'cava bajo una roca para soltarla';
 function drawHl(){
   const k = hlCave(), h = HL.hist[k] || [], last = h.slice(-20), n = HL.runs[k] || 0;
   $('hl-cave').textContent = caveLabel(level); $('hl-n').textContent = n;
@@ -4033,6 +4067,17 @@ window.__sim = {
     let guard = 0;
     while ((HL.runs[key] || 0) < h0 + k && guard++ < 2e6) { nowT = simT = worldT += tickMs; tick(); }
     const h = HL.hist[key].slice(-k); menu(); return h;
+  },
+  // tests: why the PC stands still — sample the options it considers
+  hlWhy(n, k){
+    simHook = false; mode = 'pc'; aiKind = 'astar'; players = [newPlayer(0), newPlayer(1)]; players[1].ai = true; players[0].lives = 0;
+    HL.cur = null; initLevel(n); state = 'play'; const log = [];
+    for (let t = 0; t < k && state === 'play'; t++) {
+      nowT = simT = worldT += tickMs; tick();
+      if (t % 25 === 0) { const p = players[1], C = astarCosts(), M = astarSearch(p, C, null), c = hlCandidates(p, C, M);
+        log.push(t + ' @' + p.x + ',' + p.y + ' g' + p.gems + ' opt=' + (HL.cur && HL.cur.opt ? HL.cur.opt.k : '-') + ' cands=' + c.map(o => o.k + (o.foe ? '*' : '')).join(' ')); }
+    }
+    menu(); return log;
   },
   pos(){ return players[0] ? players[0].x + ',' + players[0].y : ''; },   // for tests
   butts(){ const c = document.createElement('canvas'); c.width = 8 * 96; c.height = 2 * 96; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); BUTT_T.forEach((f, k) => g.drawImage(f[0], (k % 8) * 96, (k / 8 | 0) * 96, 96, 96)); return c.toDataURL(); },
