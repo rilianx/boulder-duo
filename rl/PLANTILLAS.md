@@ -203,3 +203,14 @@ Regresión en los 10 juegos de desarrollo (práctica de 40 partidas desde cero, 
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | probabilidades (C = 0,8) | 100 | 93 | 100 | 53 | 23 | 13 | 0 | 89 | 84 | 55 | 61 |
 | + efectos causales | 100 | 100 | 100 | 63 | 27 | 17 | 0 | 95 | 83 | 57 | 64 |
+| + encuentros y «dejar caer» | 100 | 93 | 100 | 50 | 23 | 17 | 0 | 97 | 87 | 59 | 63 |
+
+### Encuentros e imaginación
+
+Plantilla `encuentros`: por par de tipos (a, b) y por lado de b (encima, arriba, derecha, abajo, izquierda) cuenta cuántas veces estuvieron juntos sin pasar nada y cuántas a desapareció (con el Δpuntaje). "b mata a a desde ese lado" si P(tasa > 0,2) ≥ C.
+
+Imaginar: un par que casi no se probó desde un lado es una hipótesis. Probarla vale según cuánto importa b (mata, bloquea o vale). Eso lo usan:
+- la curiosidad del plan de empujes;
+- el medio «dejar caer»: cavar lo que sostiene un objeto que siempre cae en una dirección, cuando en su línea de caída hay algo con que encontrarse.
+
+En la variante `boulderdash_roca` (la roca que cae desde arriba mata a la mariposa, +2) se aprende "roca desde arriba mata mariposa" en 120 s de entrenamiento: 8 de 29 encuentros desde arriba, 0 de 1124 desde abajo. En los 10 juegos de desarrollo no cambia el promedio (63 % contra 64 %, dentro del ruido).
