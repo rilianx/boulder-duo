@@ -1384,6 +1384,28 @@ const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9,
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
 const OFF = [-W, 1, W, -1];            // up, right, down, left
+/* Hidden option: which way things fall (G key on a computer; on a phone, hold the pause button).
+   gDir is an OFF index (2 = down, the normal game) or -1 for no gravity at all. Rocks and gems fall towards it and
+   roll to its sides, and the kids push rocks across it; without gravity nothing falls and rocks go any way.
+   Training always plays with normal gravity (the Python simulator knows only that one). */
+let gDirSet = 2, gDir = 2, GOFF = W, gFlashAt = -1e9;
+const G_CYCLE = [2, 3, 0, 1, -1], G_NAME = { 2: 'GRAVEDAD ↓ ABAJO', 3: 'GRAVEDAD ← IZQUIERDA', 0: 'GRAVEDAD ↑ ARRIBA', 1: 'GRAVEDAD → DERECHA', '-1': 'SIN GRAVEDAD' };
+function applyGravity(){ gDir = mode === 'train' ? 2 : gDirSet; GOFF = gDir < 0 ? 0 : OFF[gDir]; }
+function cycleGravity(){
+  gDirSet = G_CYCLE[(G_CYCLE.indexOf(gDirSet) + 1) % G_CYCLE.length]; applyGravity(); gFlashAt = frame;
+  if (grid) for (let i = 0; i < W*H; i++) if (grid[i] === ROCK || grid[i] === GEM) { fall[i] = 0; aux[i] = 0; }   // everything starts from rest the new way
+}
+const canPush = d => gDir < 0 || (d & 1) !== (gDir & 1);
+const SCAN = {};   // cell order of a tick: from the "top" (against gravity) to the "bottom", like the original
+function scanOrder(){
+  const g = gDir < 0 ? 2 : gDir; if (SCAN[g]) return SCAN[g];
+  const o = [];
+  if (g === 2) { for (let y = 1; y < H-1; y++) for (let x = 1; x < W-1; x++) o.push(y*W + x); }
+  else if (g === 0) { for (let y = H-2; y >= 1; y--) for (let x = 1; x < W-1; x++) o.push(y*W + x); }
+  else if (g === 1) { for (let x = 1; x < W-1; x++) for (let y = 1; y < H-1; y++) o.push(y*W + x); }
+  else { for (let x = W-2; x >= 1; x--) for (let y = 1; y < H-1; y++) o.push(y*W + x); }
+  return SCAN[g] = Int32Array.from(o);
+}
 const DXY = [[0,-1],[1,0],[0,1],[-1,0]];
 
 const CVS = [0,1].map(k => document.getElementById('cv' + k));
@@ -2060,7 +2082,7 @@ function glideEase(i, k){
   const t = grid[i];
   // first cell of a fall: starts from rest and ends at exactly the speed of the cells that follow (2p²−p³ has
   // slope 0 at the start and 1 at the end), so it does not look like it brakes after speeding up. Rocks and gems only.
-  if (from === i - W && fallN[i] === 0 && (t === ROCK || t === GEM)) { const p = 1 - k; return 1 - (2 * p * p - p * p * p); }
+  if (from === i - GOFF && GOFF && fallN[i] === 0 && (t === ROCK || t === GEM)) { const p = 1 - k; return 1 - (2 * p * p - p * p * p); }
   return k;
 }
 function drawThing(g, s, i, px, py, k, big){
@@ -2307,7 +2329,7 @@ function initLevel(n){
   });
   for (let i=0; i<W*H; i++) untouched[i] = grid[i] === ROCK ? 1 : 0;
   buttBase = 0; for (let i=0; i<W*H; i++) if (grid[i] === BUTT) buttBase++;
-  timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; snapCams();
+  timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; applyGravity(); snapCams();
   state = 'play'; hideOverlay(); updateHud();
 }
 
@@ -2319,7 +2341,7 @@ function exitVisiblyOpen(){ return mode === 'coop' ? exitOpenFor(players[0]) : p
 
 function move(i, j){
   // drawing only: how many cells it has been falling, and how far a rock has rolled (it turns as it goes)
-  fallN[j] = j === i + W ? (fall[i] ? Math.min(250, fallN[i] + 1) : 0) : 0;
+  fallN[j] = GOFF && j === i + GOFF ? (fall[i] ? Math.min(250, fallN[i] + 1) : 0) : 0;
   rot[j] = rot[i] + (j === i + 1 ? 1 : j === i - 1 ? -1 : 0) * Math.PI / 2;
   fallT[j] = 0; untouched[i] = untouched[j] = 0; boss[j] = boss[i]; boss[i] = 0;   // a rock that has moved once has nothing left under it
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
@@ -2331,7 +2353,7 @@ const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === '
 function killPlayer(p){
   if (!p.alive) return;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
-  if (p.ai && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
+  if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
   p.alive = false; p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
@@ -2503,36 +2525,38 @@ function stepPlayer(p){
     if (p.ai && aiKind !== 'astar') { AI.exits++; aiTerminal(p, 60, 'x'); }
     if (mode === 'versus' || mode === 'pc') roundWin(p);
   }
-  else if (t === ROCK && dy === 0 && grid[j + OFF[d]] === E && caveRules()) {
+  else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && caveRules()) {
     // original caves: each tick of pushing moves the rock with probability 1/2, so on average it takes two ticks,
     // as long as a rock takes to start falling and drop one cell; with luck it goes at once, even while falling
     if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; go(); p.push = 0; if (first) critterFromRock(j + OFF[d], d, p); }
     else p.push++;
   }
-  else if (t === ROCK && dy === 0 && grid[j + OFF[d]] === E && !fall[j]) {
+  else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && !fall[j]) {
     if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; go(); p.push = 0; }
   }
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
 
 function fallObj(i, x, y){
-  const b = i + W, bt = grid[b];
+  if (gDir < 0) { fall[i] = 0; aux[i] = 0; return; }
+  const G = GOFF, b = i + G, bt = grid[b], bx = b % W, by = b / W | 0;
+  const SA = OFF[(gDir + 1) % 4], SB = OFF[(gDir + 3) % 4];   // its two sides: left then right when falling down
   // A resting rock or gem waits one tick before it starts to fall (aux marks it), so you can step out from under it.
   if (bt === E) {
     if (!(fall[i] || aux[i])) { aux[i] = 1; return; }
     const steps = realGravity && caveRules() && fall[i] ? Math.min(3, 1 + fallT[i]) : 1, ft = fall[i] ? fallT[i] + 1 : 0;
     let cur = i;
     let k = 0;
-    for (; k < steps && grid[cur + W] === E; k++){ move(cur, cur + W); cur += W; fall[cur] = 1; }
+    for (; k < steps && grid[cur + G] === E; k++){ move(cur, cur + G); cur += G; fall[cur] = 1; }
     fallT[cur] = Math.min(250, ft);
-    if (cur !== i + W) { src[cur] = i; fallN[cur] = Math.max(1, fallN[cur]); }   // glide the whole drop of this tick
+    if (cur !== i + G) { src[cur] = i; fallN[cur] = Math.max(1, fallN[cur]); }   // glide the whole drop of this tick
     // real gravity: still carrying speed when it reaches someone below, it hits them now, not a tick later
     // (otherwise a kid digging down would always stay one step ahead of a rock that falls faster than they walk)
     if (k < steps) {
-      const nb = grid[cur + W], cx = cur % W, cy = cur / W | 0;
+      const nb = grid[cur + G], cx = (cur + G) % W, cy = (cur + G) / W | 0;
       if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
-      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; explode(cx, cy + 1, false); rockBlast = false; }
-      else if (nb === FIRE || nb === BUTT) explode(cx, cy + 1, nb === BUTT);
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; explode(cx, cy, false); rockBlast = false; }
+      else if (nb === FIRE || nb === BUTT) explode(cx, cy, nb === BUTT);
     }
     return;
   }
@@ -2540,21 +2564,21 @@ function fallObj(i, x, y){
   // magic wall: a falling rock goes through as a gem and a gem as a rock, while the wall runs
   if (bt === MAGIC && fall[i] && magicState !== 2) {
     if (magicState === 0) { magicState = 1; magicLeft = magicTime * 1000; }
-    const c = b + W, t = grid[i];
+    const c = b + G, t = grid[i];
     grid[i] = E; fall[i] = 0;
     if (grid[c] === E) { grid[c] = t === ROCK ? GEM : ROCK; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; srcAt[c] = nowT; vari[c] = vari[i]; }
     return;
   }
   // slime: rocks and gems seep through it now and then
-  if (bt === SLIME && grid[b + W] === E && slimePerm > 0 && crng() < slimePerm) {
-    const c = b + W; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; srcAt[c] = nowT; vari[c] = vari[i]; grid[i] = E; fall[i] = 0;
+  if (bt === SLIME && grid[b + G] === E && slimePerm > 0 && crng() < slimePerm) {
+    const c = b + G; grid[c] = grid[i]; fall[c] = 1; aux[c] = 0; moved[c] = 1; src[c] = i; srcAt[c] = nowT; vari[c] = vari[i]; grid[i] = E; fall[i] = 0;
     return;
   }
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
-      if (players[bt-P1].immune <= 0) { rockBlast = true; explode(x, y+1, false); rockBlast = false; return; }
-    } else if (bt === FIRE || bt === BUTT) { explode(x, y+1, bt === BUTT); return; }
+      if (players[bt-P1].immune <= 0) { rockBlast = true; explode(bx, by, false); rockBlast = false; return; }
+    } else if (bt === FIRE || bt === BUTT) { explode(bx, by, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
   // and crumbles into dirt that fills that hole. Steel, the exit and diamonds hold.
@@ -2562,12 +2586,12 @@ function fallObj(i, x, y){
       (bt === DIRT || bt === WALL || bt === ROCK || bt === EXPW || bt === MAGIC)) {
     grid[b] = DIRT; fall[b] = 0; aux[b] = 0; src[b] = -1; fallT[b] = 0;   // the rock crumbles into the hole it broke
     grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
-    dust.push({ x, y, at: nowT }); shakeAt = nowT; sfx.crash(); hardHits++;
+    dust.push({ x: bx, y: by - 1, at: nowT }); shakeAt = nowT; sfx.crash(); hardHits++;
     return;
   }
   if (bt === ROCK || bt === GEM || bt === WALL) {
-    if (grid[i-1] === E && grid[b-1] === E) { move(i, i-1); fall[i-1] = 1; return; }
-    if (grid[i+1] === E && grid[b+1] === E) { move(i, i+1); fall[i+1] = 1; return; }
+    if (grid[i+SA] === E && grid[b+SA] === E) { move(i, i+SA); fall[i+SA] = 1; return; }
+    if (grid[i+SB] === E && grid[b+SB] === E) { move(i, i+SB); fall[i+SB] = 1; return; }
   }
   if (fall[i]) { landThisTick = true; landAt[i] = nowT; }
   fall[i] = 0; fallT[i] = 0;
@@ -2609,8 +2633,9 @@ function tick(){
   if (state !== 'play') return;
   amoebaN = 0; amoebaCan = false;
   buttCount = 0; for (let i = 0; i < W*H; i++) if (grid[i] === BUTT) buttCount++;
-  for (let y=1; y<H-1; y++) for (let x=1; x<W-1; x++){
-    const i = y*W + x;
+  const ord = scanOrder();
+  for (let n = 0; n < ord.length; n++){
+    const i = ord[n], x = i % W, y = i / W | 0;
     if (moved[i]) continue;
     const t = grid[i];
     if (t === ROCK || t === GEM) fallObj(i, x, y);
@@ -3841,6 +3866,14 @@ function renderView(k){
       g.fillStyle = k ? '#ff8a4c' : '#5fb4ff'; g.fillText(msg, VW*T/2, 20);
     }
     if (open && !p.exited && !p.ai) drawExitHint(g, k, ox, oy);
+    if (gDir !== 2) {
+      // the gravity is not the normal one: its name for a moment, then a small arrow in the corner
+      const msg = G_NAME[gDir], fl = frame - gFlashAt < 120;
+      g.font = (fl ? 8 : 7) + 'px "Press Start 2P", monospace'; g.textAlign = 'center';
+      const txt = fl ? msg : msg.split(' ').slice(0, 2).join(' '), w = g.measureText(txt).width + 10, cx = fl ? VW*T/2 : VW*T - w/2 - 4, cy = VH*T - (fl ? 26 : 8);
+      g.fillStyle = 'rgba(0,0,0,.7)'; g.fillRect(cx - w/2, cy - 11, w, 15);
+      g.fillStyle = '#c9a0ff'; g.fillText(txt, cx, cy);
+    }
     if (frame - caveShownAt < 150) {
       const msg = caveLabel(level), sub = caveTitle(level);
       g.font = '12px "Press Start 2P", monospace'; g.textAlign = 'center';
@@ -3930,6 +3963,7 @@ window.addEventListener('keydown', e => {
   } else if (e.code === 'KeyP' || e.code === 'Escape') { if (turbo) setTurbo(false); else togglePause(); }
   else if (e.code === 'KeyR' && state === 'play') { initLevel(level); }
   else if (e.code === 'KeyM') { toggleSound(); }
+  else if (e.code === 'KeyG') { cycleGravity(); }
   else if (e.code === 'KeyC') { toggleCrt(); }
   else if (e.code === 'Space' && state === 'play') e.preventDefault();
 });
@@ -4045,6 +4079,14 @@ function toggleCrt(){ const on = $('views').classList.toggle('crt'); const b = $
 $('bsnd').onclick = () => { audioOn(); toggleSound(); };
 $('bcrt').onclick = toggleCrt;
 $('bpause').onclick = () => { if (state === 'play' || state === 'pause') togglePause(); };
+/* Hidden on phones: holding the pause button (here or the middle one) for a moment turns the gravity, like G. */
+['bpause', 'bmid'].forEach(id => {
+  const b = $(id); let hold = null, fired = false;
+  b.addEventListener('pointerdown', () => { fired = false; clearTimeout(hold); hold = setTimeout(() => { if (state === 'play' || state === 'pause') { fired = true; cycleGravity(); if (navigator.vibrate) navigator.vibrate(30); } }, 700); });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => b.addEventListener(t, () => clearTimeout(hold)));
+  b.addEventListener('click', e => { if (fired) { fired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 $('bsnd').classList.add('on');
 function setSpeed(v){ speed = v; document.querySelectorAll('#speeds button').forEach(b => b.classList.toggle('on', +b.dataset.s === v)); }
 document.querySelectorAll('#speeds button').forEach(b => b.onclick = () => setSpeed(+b.dataset.s));
@@ -4089,13 +4131,17 @@ window.__sim = {
   },
   step(a){ const p = players[1]; p.held = a < 4 ? [a] : []; tick(); return this.hash(); },
   // runs cave n for k ticks with nobody moving (for tests); returns how many cells of each type are left
+  // hidden gravity for tests: 2 down, 3 left, 0 up, 1 right, -1 none
+  gravity(d){ let n = 0; while (gDirSet !== d && n++ < 5) cycleGravity(); return gDirSet; },
   playCave(n, k){
     if (turbo) setTurbo(false);
     simHook = false; mode = 'coop'; players = [newPlayer(0), newPlayer(1)];
     initLevel(n); state = 'play';
     for (let t=0; t<k && state === 'play'; t++) tick();
     const c = {}; grid.forEach(v => { c[v] = (c[v] || 0) + 1; });
-    const r = { state, need, timeLeft, magicState, counts: c, hardHits }; menu(); return r;
+    let unsettled = 0; if (GOFF) grid.forEach((v, i) => { if ((v === ROCK || v === GEM) && grid[i + GOFF] === E) unsettled++; });
+    let rx = 0, ry = 0, rn = 0; grid.forEach((v, i) => { if (v === ROCK) { rx += i % W; ry += i / W | 0; rn++; } });
+    const r = { state, need, timeLeft, magicState, counts: c, hardHits, unsettled, rocks: [+(rx / rn).toFixed(2), +(ry / rn).toFixed(2)] }; menu(); return r;
   },
   // sprite sheet of the kids and objects (for docs and checks)
   sheet(){

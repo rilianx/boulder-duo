@@ -74,6 +74,7 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 - **Diamantes que vuelan** al contador al recogerlos, y anillos dorados cuando se abre la salida.
 - **Cueva viva:** hongos que brillan en el suelo, raíces colgando del techo y gotas que caen y salpican (solo dibujo).
 - **ACERCAR** (botón del menú): la cámara se acerca un 25 %: los dibujos se ven más grandes pero ves unas 13½ × 9½ casillas en vez de 17 × 12, así que hay menos tiempo para ver venir las rocas y los enemigos. Más difícil. (El PC sigue viendo lo mismo de siempre.)
+- **Gravedad cambiada** (opción oculta): en el computador, la tecla **G**; en el celular, **mantener presionado el botón de pausa** un momento (vibra). Cada vez la gravedad pasa a izquierda → arriba → derecha → sin gravedad → abajo (la normal). Las rocas y gemas caen y ruedan hacia ese lado, y se empujan de lado respecto a esa gravedad (con la gravedad a la izquierda se empujan hacia arriba o abajo); **sin gravedad nada cae y las rocas se empujan en cualquier dirección**. Un letrero muestra la dirección, y mientras no sea la normal queda una flechita en la esquina. El entrenamiento del PC siempre usa la gravedad normal.
 - **OSCURIDAD** (botón del menú): la cueva queda a oscuras y solo se ve lo que alumbra la linterna de los niños, las luciérnagas, los diamantes, los hongos, la salida abierta y las explosiones.
 
 ![Cueva M*](docs/cueva-mstar.png) ![Oscuridad](docs/oscuridad.png)
