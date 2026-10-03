@@ -6,9 +6,9 @@ Abre `index.html` en un navegador. No necesita instalar nada.
 
 ## Jugar con celular
 
-Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular. Si dices que sí, te mueves **deslizando el dedo sobre tu propio tablero**: lo apoyas en cualquier parte y lo arrastras hacia abajo, la izquierda, arriba o la derecha; mientras no lo levantes el minero sigue caminando, y para girar basta con arrastrar hacia el otro lado. Un círculo marca dónde pusiste el dedo y la flecha, la dirección. El botón **TÁCTIL** de arriba lo activa o desactiva y la elección se recuerda.
+Al abrirlo en un celular o tablet, el juego pregunta si quieres jugar con celular. Si dices que sí, te mueves **deslizando el dedo**: lo apoyas en cualquier parte de la pantalla (sobre tu tablero o fuera de él, arriba, abajo o a los lados, para no taparte la cueva) y lo arrastras hacia abajo, la izquierda, arriba o la derecha; mientras no lo levantes el minero sigue caminando, y para girar basta con arrastrar hacia el otro lado. Un círculo marca dónde pusiste el dedo y la flecha, la dirección. El botón **TÁCTIL** de arriba lo activa o desactiva y la elección se recuerda.
 
-Solo o contra el PC se juega en **horizontal** (si el celular está en vertical, el juego pide girarlo). **De a dos (cooperativo o versus) se juega con el celular sobre la mesa, en vertical:** J1 tiene su tablero abajo y J2 arriba, dado vuelta para que lo vea derecho desde el otro lado de la mesa; cada uno desliza en su tablero y para J2 las direcciones también van al revés. En horizontal también se puede, con los tableros lado a lado.
+Solo o contra el PC se juega en **horizontal** (si el celular está en vertical, el juego pide girarlo). **De a dos (cooperativo o versus) se juega con el celular sobre la mesa, en vertical:** J1 tiene su tablero abajo y J2 arriba, dado vuelta para que lo vea derecho desde el otro lado de la mesa; cada uno desliza en su mitad de la pantalla (el dedo maneja el tablero más cercano, así que el borde de la mesa también sirve) y para J2 las direcciones también van al revés. En horizontal también se puede, con los tableros lado a lado.
 
 ![De a dos en la mesa](docs/mesa.png)
 
@@ -73,6 +73,7 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
   ![Jefe con corona](docs/jefe.png) ![Estrella](docs/estrella.png)
 - **Diamantes que vuelan** al contador al recogerlos, y anillos dorados cuando se abre la salida.
 - **Cueva viva:** hongos que brillan en el suelo, raíces colgando del techo y gotas que caen y salpican (solo dibujo).
+- **ACERCAR** (botón del menú): la cámara se acerca un 25 %: los dibujos se ven más grandes pero ves unas 13½ × 9½ casillas en vez de 17 × 12, así que hay menos tiempo para ver venir las rocas y los enemigos. Más difícil. (El PC sigue viendo lo mismo de siempre.)
 - **OSCURIDAD** (botón del menú): la cueva queda a oscuras y solo se ve lo que alumbra la linterna de los niños, las luciérnagas, los diamantes, los hongos, la salida abierta y las explosiones.
 
 ![Cueva M*](docs/cueva-mstar.png) ![Oscuridad](docs/oscuridad.png)

@@ -117,8 +117,9 @@ button:disabled{opacity:.4;cursor:default}
 }
 /* Touch: each player drags on their own board; a ring marks where the finger landed and the arrow shows the direction. */
 .touch .view{touch-action:none;user-select:none;-webkit-user-select:none}
-.swipe{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:2px solid rgba(255,255,255,.6);pointer-events:none;z-index:1;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:18px;color:#ffd24a;text-shadow:0 0 3px #000,0 0 3px #000}
-.p1v .swipe{border-color:rgba(95,180,255,.8)} .p2v .swipe{border-color:rgba(255,138,76,.8)}
+.swipe{position:fixed;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;border:2px solid rgba(255,255,255,.6);pointer-events:none;z-index:8;display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:18px;color:#ffd24a;text-shadow:0 0 3px #000,0 0 3px #000}
+.swipe.p1s{border-color:rgba(95,180,255,.8)} .swipe.p2s{border-color:rgba(255,138,76,.8)} .swipe.flip{transform:rotate(180deg)}
+.touch[data-state="play"]{touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
 .touch button{touch-action:manipulation}
 .touch .legend{display:none}
 .overlay{overflow:auto}
@@ -1373,7 +1374,12 @@ const W = 40, H = 22, T = 16, TICK = 120;
    training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
 const CAVE_TICK = [170, 145, 120, 105, 92];
 let tickMs = TICK;
-const VW = 17, VH = 12;                 // tiles visible per player camera
+const VW = 17, VH = 12;                 // tiles visible per player camera (the PC's view always stays this size)
+/* ACERCAR: the camera zooms in by 1.25 (5 screen pixels per cave pixel, so tiles still meet without seams):
+   about 13.6 x 9.6 tiles on screen, less to see ahead, harder. CW x CH is what the camera covers. */
+let zoomIn = false, ZOOM = 1, CW = VW, CH = VH;
+try { zoomIn = localStorage.getItem('boulder-duo-zoom') === '1'; } catch (e) {}
+function applyZoom(){ ZOOM = zoomIn && mode !== 'train' ? 1.25 : 1; CW = VW / ZOOM; CH = VH / ZOOM; }
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
@@ -1957,7 +1963,7 @@ let src = new Int32Array(W*H).fill(-1), srcAt = new Float64Array(W*H), dugAt = n
    now and then a water drop that forms on a ceiling, falls and splashes on the floor. Chosen per cell by a hash. */
 const shroomAt = i => grid[i] === E && grid[i + W] === DIRT && hash(i * 31 + 5) < .07;
 function drawAmbient(g, ox, oy, x0, y0){
-  for (let y = Math.max(1, y0); y <= Math.min(H - 2, y0 + VH); y++) for (let x = Math.max(1, x0); x <= Math.min(W - 2, x0 + VW); x++){
+  for (let y = Math.max(1, y0); y <= Math.min(H - 2, y0 + Math.ceil(CH)); y++) for (let x = Math.max(1, x0); x <= Math.min(W - 2, x0 + Math.ceil(CW)); x++){
     const i = y*W + x; if (grid[i] !== E) continue;
     const px = x*T - ox, py = y*T - oy;
     if (shroomAt(i)) {
@@ -2001,8 +2007,8 @@ try { darkCaves = localStorage.getItem('boulder-duo-dark') === '1'; } catch (e) 
 const DARK = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = VW * T * SS; c.height = VH * T * SS; return c; });
 function drawDark(g, k, ox, oy, x0, y0){
   const dc = DARK[k], d = dc.getContext('2d');
-  d.setTransform(SS, 0, 0, SS, 0, 0); d.globalCompositeOperation = 'source-over';
-  d.fillStyle = 'rgba(3,2,8,.95)'; d.fillRect(0, 0, VW * T, VH * T);
+  d.setTransform(SS * ZOOM, 0, 0, SS * ZOOM, 0, 0); d.globalCompositeOperation = 'source-over';
+  d.fillStyle = 'rgba(3,2,8,.95)'; d.fillRect(0, 0, CW * T, CH * T);
   d.globalCompositeOperation = 'destination-out';
   const lights = [], warm = [];
   const light = (x, y, r, a = 1) => { lights.push([x, y, r, a]); };
@@ -2011,7 +2017,7 @@ function drawDark(g, k, ox, oy, x0, y0){
     const [gx, gy] = glidePos(p), r = T * (3.4 + .12 * Math.sin(simT / 140) + .06 * Math.sin(simT / 47));
     light(gx * T - ox + T/2, gy * T - oy + T * .45, r); warm.push([gx * T - ox + T/2, gy * T - oy + T * .45, r]);
   });
-  for (let y = Math.max(0, y0 - 1); y <= Math.min(H - 1, y0 + VH + 1); y++) for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x0 + VW + 1); x++){
+  for (let y = Math.max(0, y0 - 1); y <= Math.min(H - 1, y0 + Math.ceil(CH) + 1); y++) for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x0 + Math.ceil(CW) + 1); x++){
     const i = y*W + x, t = grid[i], cx = x*T - ox + T/2, cy = y*T - oy + T/2;
     if (t === FIRE) { light(cx, cy, T * 1.7); warm.push([cx, cy, T * 1.7]); }
     else if (boss[i]) light(cx, cy, T * 1.2);
@@ -2027,13 +2033,13 @@ function drawDark(g, k, ox, oy, x0, y0){
     const gr = d.createRadialGradient(x, y, r * .15, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(.6, `rgba(0,0,0,${a * .75})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
     d.fillStyle = gr; d.fillRect(x - r, y - r, r * 2, r * 2);
   });
-  g.drawImage(dc, 0, 0, VW * T, VH * T);
+  g.drawImage(dc, 0, 0, CW * T, CH * T);
   g.save(); g.globalCompositeOperation = 'lighter';
   warm.forEach(([x, y, r]) => { const gr = g.createRadialGradient(x, y, 0, x, y, r * .8); gr.addColorStop(0, 'rgba(255,170,60,.16)'); gr.addColorStop(1, 'rgba(255,140,40,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); });
   g.restore();
 }
 function drawCrowns(g, ox, oy, x0, y0){
-  for (let y = Math.max(1, y0 - 1); y <= Math.min(H - 2, y0 + VH + 1); y++) for (let x = Math.max(1, x0 - 1); x <= Math.min(W - 2, x0 + VW + 1); x++){
+  for (let y = Math.max(1, y0 - 1); y <= Math.min(H - 2, y0 + Math.ceil(CH) + 1); y++) for (let x = Math.max(1, x0 - 1); x <= Math.min(W - 2, x0 + Math.ceil(CW) + 1); x++){
     const i = y*W + x; if (!boss[i] || (grid[i] !== FIRE && grid[i] !== BUTT)) continue;
     const k = glideK(i), f = src[i] >= 0 ? src[i] : i;
     const px = (x + (f % W - x) * k) * T - ox + T / 2, py = (y + ((f / W | 0) - y) * k) * T - oy;
@@ -2455,7 +2461,7 @@ function flyGem(p, j){
   if (mode === 'train' || speed > 1 || typeof document === 'undefined') return;
   const k = solo ? 0 : p.id, cv = CVS[k], icon = document.querySelector('#g' + k);
   if (!cv || !icon || !cv.offsetParent) return;
-  const r = cv.getBoundingClientRect(), sc = r.width / (VW * T), c = cams[k];
+  const r = cv.getBoundingClientRect(), sc = r.width / (VW * T) * ZOOM, c = cams[k];
   const x0 = r.left + ((j % W) - c.x + .5) * T * sc, y0 = r.top + ((j / W | 0) - c.y + .5) * T * sc;
   const tg = icon.previousElementSibling.getBoundingClientRect(), x1 = tg.left + tg.width / 2, y1 = tg.top + tg.height / 2;
   const col = GEM_COLS[vari[j] % GEM_COLS.length], el = document.createElement('div');
@@ -2705,6 +2711,7 @@ function menu(){
     </div>
     <div class="row sets">
       <button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>
+      <button id="bzoom" class="${zoomIn ? 'on' : ''}">ACERCAR: ${zoomIn ? 'SÍ' : 'NO'}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
@@ -2724,6 +2731,7 @@ function menu(){
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
+  $('bzoom').onclick = () => { zoomIn = !zoomIn; try { localStorage.setItem('boulder-duo-zoom', zoomIn ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
@@ -3591,21 +3599,23 @@ function camFocus(k){
   return [p.x, p.y];
 }
 function snapCams(){
+  applyZoom();
   cams.forEach((c, k) => {
     const f = camFocus(k); if (!f) return;
-    c.x = clamp(f[0] - (VW-1)/2, 0, W - VW);
-    c.y = clamp(f[1] - (VH-1)/2, 0, H - VH);
+    c.x = clamp(f[0] - (CW-1)/2, 0, W - CW);
+    c.y = clamp(f[1] - (CH-1)/2, 0, H - CH);
   });
 }
 function updateCams(){
+  applyZoom();
   cams.forEach((c, k) => {
     const f = camFocus(k); if (!f) return;
     // dead zone in the middle of the view, like the original scroller
     let tx = c.x, ty = c.y;
-    const mx = 5, my = 3.5;
-    if (f[0] - c.x < mx) tx = f[0] - mx; else if (f[0] - c.x > VW - 1 - mx) tx = f[0] - (VW - 1 - mx);
-    if (f[1] - c.y < my) ty = f[1] - my; else if (f[1] - c.y > VH - 1 - my) ty = f[1] - (VH - 1 - my);
-    tx = clamp(tx, 0, W - VW); ty = clamp(ty, 0, H - VH);
+    const mx = 5 / ZOOM, my = 3.5 / ZOOM;
+    if (f[0] - c.x < mx) tx = f[0] - mx; else if (f[0] - c.x > CW - 1 - mx) tx = f[0] - (CW - 1 - mx);
+    if (f[1] - c.y < my) ty = f[1] - my; else if (f[1] - c.y > CH - 1 - my) ty = f[1] - (CH - 1 - my);
+    tx = clamp(tx, 0, W - CW); ty = clamp(ty, 0, H - CH);
     c.x += (tx - c.x) * .14; c.y += (ty - c.y) * .14;
     if (Math.abs(tx - c.x) < .01) c.x = tx;
     if (Math.abs(ty - c.y) < .01) c.y = ty;
@@ -3682,15 +3692,17 @@ function renderOverview(g){
 }
 function renderView(k){
   const g = CTX[k], c = cams[k];
+  g.setTransform(SS, 0, 0, SS, 0, 0);
   g.fillStyle = '#000'; g.fillRect(0, 0, VW*T, VH*T);
   if (!grid) return;
   if (k === 0 && mode === 'train' && state !== 'menu') return renderOverview(g);
-  const sh = (simT - shakeAt) / 220, shk = sh >= 0 && sh < 1 ? (1 - sh) * 1.6 : 0;
-  const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * SS) / SS, oy = Math.round((c.y * T + Math.cos(simT * .11) * shk) * SS) / SS;
+  const sh = (simT - shakeAt) / 220, shk = sh >= 0 && sh < 1 ? (1 - sh) * 1.6 : 0, zs = SS * ZOOM;
+  g.setTransform(zs, 0, 0, zs, 0, 0);       // the cave is drawn zoomed; the texts on top are not
+  const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * zs) / zs, oy = Math.round((c.y * T + Math.cos(simT * .11) * shk) * zs) / zs;
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   const glide = [];
-  for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + VH + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + VW + 2); x++){
+  for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + Math.ceil(CW) + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
     if (isOpenCell(grid[i]) && x > 0 && y > 0 && x < W-1 && y < H-1) {
       // round the corners of the hole where two dirt sides meet
@@ -3720,7 +3732,7 @@ function renderView(k){
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   drawAmbient(g, ox, oy, x0, y0);
-  glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * SS) / SS, Math.round(py * SS) / SS, T, T); });
+  glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * zs) / zs, Math.round(py * zs) / zs, T, T); });
   drawCrowns(g, ox, oy, x0, y0);
   if (darkCaves && mode !== 'train' && state !== 'menu') drawDark(g, k, ox, oy, x0, y0);
   drawCritters(g, ox, oy);
@@ -3815,6 +3827,7 @@ function renderView(k){
     g.save(); g.strokeStyle = '#ff8a4c'; g.lineWidth = 1; g.setLineDash([3, 2]); g.lineDashOffset = -frame / 4;
     g.strokeRect(wx0*T - ox + .5, wy0*T - oy + .5, (wx1-wx0+1)*T - 1, (wy1-wy0+1)*T - 1); g.restore();
   }
+  g.setTransform(SS, 0, 0, SS, 0, 0);
   const p = players[k];
   if (p && state !== 'menu') {
     let msg = null;
@@ -3843,7 +3856,7 @@ function renderView(k){
 function drawExitHint(g, k, ox, oy){
   if (exitSeen[k] < 0) exitSeen[k] = frame;
   const i = grid.indexOf(EXIT); if (i < 0) return;
-  const ex = (i % W) * T + T/2 - ox, ey = Math.floor(i / W) * T + T/2 - oy, vw = VW*T, vh = VH*T;
+  const ex = ((i % W) * T + T/2 - ox) * ZOOM, ey = (Math.floor(i / W) * T + T/2 - oy) * ZOOM, vw = VW*T, vh = VH*T;
   g.save(); g.font = '8px "Press Start 2P", monospace'; g.textAlign = 'center';
   if (frame - exitSeen[k] < 200) {
     const msg = '¡SALIDA ABIERTA!', w = g.measureText(msg).width + 12;
@@ -3937,31 +3950,50 @@ function setTouch(on){
   document.body.classList.toggle('touch', on);
   const b = $('btouch'); b.innerHTML = on ? 'TÁCTIL<br>ON' : 'TÁCTIL<br>OFF'; b.setAttribute('aria-pressed', String(on)); b.classList.toggle('on', on);
 }
-document.querySelectorAll('.view').forEach((view, k) => {
-  const ring = document.createElement('div'); ring.className = 'swipe'; ring.hidden = true; view.appendChild(ring);
-  let pid = null, ax = 0, ay = 0, d = -1;
-  const who = () => { const p = players[k]; return p && !p.ai ? p : players[0] && !players[0].ai && players[1] && players[1].ai ? players[0] : null; };
-  // J2's board is upside down in the table layout: flip the swipe and the ring with it
-  const flipped = () => k === 1 && $('views').classList.contains('duo') && getComputedStyle(view).transform !== 'none';
-  const put = () => { const r = view.getBoundingClientRect(), f = flipped(); ring.style.left = (f ? r.right - ax : ax - r.left) + 'px'; ring.style.top = (f ? r.bottom - ay : ay - r.top) + 'px'; };
-  const set = nd => { d = nd; const p = who(); if (p) p.held = d < 0 ? [] : [d]; ring.textContent = d < 0 ? '' : '▲▶▼◀'[d]; };
-  view.addEventListener('pointerdown', e => {
-    if (!document.body.classList.contains('touch') || pid !== null || !ov.hidden || !who()) return;
-    e.preventDefault(); audioOn(); pid = e.pointerId; view.setPointerCapture(pid);
-    ax = e.clientX; ay = e.clientY; put(); ring.hidden = false; set(-1);
+/* The whole screen is the pad, not only the boards: a touch steers the board nearest to it
+   (above/below the boards in the table layout, left/right side by side), so fingers never cover the cave. */
+const VIEWS = [...document.querySelectorAll('.view')];
+const swipes = new Map();                 // pointerId -> {k, ax, ay, d, ring}
+const swipeWho = k => { const p = players[k]; return p && !p.ai ? p : players[0] && !players[0].ai && players[1] && players[1].ai ? players[0] : null; };
+// J2's board is upside down in the table layout: flip the swipe and the ring with it
+const swipeFlipped = k => k === 1 && $('views').classList.contains('duo') && getComputedStyle(VIEWS[1]).transform !== 'none';
+function swipeBoard(x, y){
+  let best = -1, bd = Infinity;
+  VIEWS.forEach((v, k) => {
+    const r = v.getBoundingClientRect(); if (!r.width || !swipeWho(k)) return;
+    const dx = Math.max(r.left - x, 0, x - r.right), dy = Math.max(r.top - y, 0, y - r.bottom), dd = dx * dx + dy * dy;
+    if (dd < bd) { bd = dd; best = k; }
   });
-  view.addEventListener('pointermove', e => {
-    if (e.pointerId !== pid) return;
-    let dx = e.clientX - ax, dy = e.clientY - ay; const dist = Math.hypot(dx, dy);
-    if (dist < 14) return;
-    const s = flipped() ? -1 : 1;
-    set(Math.abs(dx) > Math.abs(dy) ? (dx * s > 0 ? 1 : 3) : (dy * s > 0 ? 2 : 0));
-    if (dist > 36) { ax = e.clientX - dx / dist * 36; ay = e.clientY - dy / dist * 36; put(); }
-  });
-  const end = e => { if (e.pointerId !== pid) return; pid = null; ring.hidden = true; set(-1); };
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => view.addEventListener(t, end));
-  view.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch')) e.preventDefault(); });
+  return best;
+}
+function swipeHeld(sw){
+  const p = swipeWho(sw.k); if (!p) return;
+  let d = -1; for (const o of swipes.values()) if (o.k === sw.k && o.d >= 0) d = o.d;   // the latest finger on that board wins
+  p.held = d < 0 ? [] : [d];
+}
+function swipePut(sw){ sw.ring.style.left = sw.ax + 'px'; sw.ring.style.top = sw.ay + 'px'; }
+document.addEventListener('pointerdown', e => {
+  if (!document.body.classList.contains('touch') || state !== 'play' || !ov.hidden) return;
+  if (e.target.closest('button, a, input, select, label, .overlay, .rotate')) return;
+  const k = swipeBoard(e.clientX, e.clientY); if (k < 0) return;
+  e.preventDefault(); audioOn();
+  const ring = document.createElement('div'); ring.className = 'swipe p' + (k + 1) + 's' + (swipeFlipped(k) ? ' flip' : '');
+  document.body.appendChild(ring);
+  const sw = { k, ax: e.clientX, ay: e.clientY, d: -1, ring }; swipes.set(e.pointerId, sw); swipePut(sw);
+  try { document.documentElement.setPointerCapture(e.pointerId); } catch (err) {}
+}, { passive: false });
+document.addEventListener('pointermove', e => {
+  const sw = swipes.get(e.pointerId); if (!sw) return;
+  const dx = e.clientX - sw.ax, dy = e.clientY - sw.ay, dist = Math.hypot(dx, dy);
+  if (dist < 14) return;
+  const s = swipeFlipped(sw.k) ? -1 : 1;
+  sw.d = Math.abs(dx) > Math.abs(dy) ? (dx * s > 0 ? 1 : 3) : (dy * s > 0 ? 2 : 0);
+  sw.ring.textContent = '▲▶▼◀'[sw.d]; swipes.delete(e.pointerId); swipes.set(e.pointerId, sw); swipeHeld(sw);
+  if (dist > 36) { sw.ax = e.clientX - dx / dist * 36; sw.ay = e.clientY - dy / dist * 36; swipePut(sw); }
 });
+const swipeEnd = e => { const sw = swipes.get(e.pointerId); if (!sw) return; swipes.delete(e.pointerId); sw.ring.remove(); swipeHeld(sw); };
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => document.addEventListener(t, swipeEnd));
+document.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch') && state === 'play') e.preventDefault(); });
 /* Best effort: Android Chrome can go fullscreen and lock landscape; elsewhere the "gira el celular" screen asks for it. */
 /* In full screen the phone is held the way the game is played: upright on the table for two players
    (cooperative and versus), sideways for one player, against the PC or training. Nothing is locked on the menu. */
