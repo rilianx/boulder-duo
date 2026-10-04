@@ -161,8 +161,8 @@ const NAMES = ['head', 'p', 'q', 'nuevo', 'aux', 'sig', 'ant'];
 let M = null;
 function newMem() { return { nodes: {}, lists: {}, globals: [], frames: [], nextId: 1, nextList: 1 }; }
 const listOf = id => M.lists[id];
-const LX = 104;   // columna de las cajas Lista, entre el margen y los nodos
-function newList() { const id = 'L' + M.nextList++; M.lists[id] = { id, head: null, x: LX, y: Y(Object.keys(M.lists).length) }; return id; }
+const LISTY = 30;   // las cajas Lista van en su propio nivel, arriba; los nodos, más abajo
+function newList() { const id = 'L' + M.nextList++; const i = Object.keys(M.lists).length; M.lists[id] = { id, head: null, x: COLS[Math.min(i, COLS.length - 1)], y: LISTY }; return id; }
 const nodeOf = id => M.nodes[id];
 const liveIds = () => Object.keys(M.nodes).map(Number);
 
@@ -1089,8 +1089,8 @@ const LW = 400, LH = 250;
 const MX = 70;
 const NW = 62, NH = 30, DW = 40;
 const PW = 60, PH = 24;
-const COLS = [178, 260, 342], ROWS = 3;   // a la izquierda queda la columna de las cajas Lista (LX)
-const Y = i => 46 + i * 76;
+const COLS = [116, 198, 280, 362], ROWS = 3;
+const Y = i => 86 + i * 66;   // filas de nodos, bajo el nivel de las listas
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cv = $('cv'), ctx = cv.getContext('2d');
 let SC = 1, DPR = 1, boil = 0, T = 0;
@@ -1152,7 +1152,7 @@ function arrowGeo(a, n, opts) {
   const L = n.x - NW / 2, mid = n.x - 6;
   if (opts.fromVar && !opts.toList) {   // a un nodo: la flecha llega por arriba, sin cruzar la caja Lista ni otros nodos
     const b = { x: mid + opts.lane, y: n.y - NH / 2 - 1 };
-    return { a, b, c1: { x: a.x + 40, y: Math.min(a.y, b.y - 30) }, c2: { x: b.x, y: b.y - 30 } };
+    return { a, b, c1: { x: a.x + 40, y: Math.min(a.y, b.y - 22) }, c2: { x: b.x, y: b.y - 22 } };
   }
   if (opts.fromVar) { const b = { x: L - 1, y: n.y + opts.lane }; return { a, b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } }; }
   if (opts.self) { const b = { x: mid, y: n.y - NH / 2 - 1 }; return { a, b, c1: { x: a.x + 42, y: a.y - 4 }, c2: { x: mid + 4, y: b.y - 46 } }; }
@@ -1220,6 +1220,12 @@ function drawNull(x, y, seed) {
 function drawGarbage(x, y, seed) {   // puntero sin inicializar: un garabato que no llega a ninguna parte
   ctx.strokeStyle = '#c23a32'; ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(x, y);
+  if (x + 34 > LW) {   // en el borde derecho, el garabato baja en vez de salirse del dibujo
+    for (let i = 1; i <= 6; i++) ctx.lineTo(x + (i % 2 ? -4 : 4) + J(seed + i, 1), y + i * 3.2);
+    ctx.stroke();
+    ctx.fillStyle = '#c23a32'; ctx.font = '12px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('¿?', x, y + 30);
+    return;
+  }
   for (let i = 1; i <= 6; i++) ctx.lineTo(x + i * 3.2, y + (i % 2 ? -4 : 4) + J(seed + i, 1));
   ctx.stroke();
   ctx.fillStyle = '#c23a32'; ctx.font = '12px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('¿?', x + 21, y + 4);
@@ -1237,6 +1243,7 @@ function buildPaper() {
   g.strokeStyle = '#e0726a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(MX, 0); g.lineTo(MX, LH); g.stroke();
   g.fillStyle = '#b6b0a6'; g.font = '13px "Patrick Hand", sans-serif'; g.textAlign = 'center';
   g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', LW - 22, 12);
+  g.strokeStyle = 'rgba(47,107,69,.25)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(MX + 6, 50); g.lineTo(LW - 6, 50); g.stroke(); g.setLineDash([]);
 }
 
 // posiciones de las variables: primero las de main, luego cada marco de función bajo su nombre
@@ -1424,7 +1431,7 @@ new ResizeObserver(fit).observe(document.querySelector('.build'));
    Sin línea en curso, tocar un puntero empieza su asignación.
    ════════════════════════════════════════════════════════════════════ */
 function hitTest(pt) {
-  for (const it of varLayout()) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1)) && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
+  for (const it of varLayout()) if (it.v && (!it.frame || it.frame === M.frames.at(-1)) && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
   for (const L of Object.values(M.lists)) {
     const l = L.x - NW / 2, Tp = L.y - NH / 2;
     if (pt.y >= Tp - 6 && pt.y <= Tp + NH + 6 && pt.x >= l - 4 && pt.x <= l + NW + 6) return { kind: pt.x >= l + DW - 2 ? 'lhead' : 'list', lid: L.id };
@@ -1465,6 +1472,11 @@ function tapBoard(e) {
   const type = holeType();
   if (BUILD && type === 'new') return;
   hideFb();
+  if (h.kind === 'var' && h.v.kind === 'int') {   // un int (como v): sirve donde la línea pide un número
+    if (BUILD && type === 'num') { tapFx(h); fill(h.v.name); return; }
+    hint(h.v.name + ' = ' + h.v.val, `${h.v.name} es un int, no un puntero: se usa donde la línea pide un número (por ejemplo nuevo->value = ${h.v.name};).`);
+    return;
+  }
   if (h.kind === 'var') {
     if (BUILD && type === 'num') return;
     tapFx(h);
@@ -1506,9 +1518,18 @@ function renderPathBar(box) {
   const val = pathValue(PATH.expr);
   const isList = val && val.list;
   if (BUILD) { if (!isList || holeType() === 'list') g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath)); }
-  else if (!isList) {
-    g.appendChild(mkChip(PATH.expr + ' = _;', 'fn', () => startFromPath('§e = §ptr;')));
-    if (val !== null && val !== undefined && val !== G) g.appendChild(mkChip(PATH.expr + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
+  else if (isList) g.appendChild(mkChip(PATH.expr + '->head = _;', 'fn', () => startFromPath('§e->head = §ptr;')));
+  else {
+    const E = PATH.expr, toNode = val !== null && val !== undefined && val !== G;
+    g.appendChild(mkChip(E + ' = _;', 'fn', () => startFromPath('§e = §ptr;')));
+    if (toNode) {   // los componentes del nodo al que apunta
+      g.appendChild(mkChip(E + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
+      g.appendChild(mkChip(E + '->next = _;', 'fn', () => startFromPath('§e->next = §ptr;')));
+      g.appendChild(mkChip(`if (${E}->value == _)`, '', () => startFromPath('if (§e->value == §num)')));
+      g.appendChild(mkChip(`printf("%d", ${E}->value);`, '', () => { const t = `printf("%d", ${E}->value);`; PATH = null; guardRun(t); }));
+      g.appendChild(mkChip(`free(${E});`, '', () => { const t = `free(${E});`; PATH = null; guardRun(t); }));
+    }
+    g.appendChild(mkChip(`if (${E} == NULL)`, '', () => { const t = `if (${E} == NULL)`; PATH = null; guardRun(t); }));
   }
   const tail = PATH.expr.match(/->(next|head)$/);
   if (tail) g.appendChild(mkChip('⌫ quitar ->' + tail[1], '', () => { PATH.expr = PATH.expr.slice(0, -tail[0].length); renderBuilder(); }));
@@ -1540,6 +1561,7 @@ function drawTapHints(layout) {
     for (const it of layout) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1))) glow(it.x, it.y, PW, PH, a * 0.6);
   } else if (want && BUILD) {
     if (type !== 'num') for (const it of layout) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1))) glow(it.x, it.y, PW, PH, a);
+    if (type === 'num') for (const it of layout) if (it.v && it.v.kind === 'int' && (!it.frame || it.frame === M.frames.at(-1))) glow(it.x, it.y, PW, PH, a);
     if (type === 'num') for (const id of liveIds()) {
       const n = nodeOf(id), P = POS[id]; if (n.dead || n.freed || !P || n.v === null) continue;
       glow(P.x - NW / 2, P.y - NH / 2, DW, NH, a);
