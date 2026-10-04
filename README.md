@@ -115,7 +115,9 @@ Ver [`rl/README.md`](rl/README.md).
 ## Vidas, reaparecer y reiniciar
 
 - **VIDAS ∞ (COOPERATIVO)** (botón del menú): en cooperativo (y con 1 jugador) las vidas no se acaban; el marcador muestra ∞.
-- Al morir, el niño o la niña **reaparece donde murió** (o en la casilla libre más cercana, si ahí quedó algo), no al comienzo de la cueva. El PC sí vuelve a su inicio.
+- **Con 1 jugador**, al morir la cueva **empieza de nuevo** (como en el original), con una vida menos.
+- **De a dos o contra el PC**, quien muere (también el PC) **reaparece donde murió** (o en la casilla libre más cercana, si ahí quedó algo), y mientras espera su cámara se queda ahí mismo.
+- En cooperativo, si se acaban las vidas, la pantalla de fin trae **JUGAR DE NUEVO ESTA CUEVA** (con las vidas llenas).
 - En la pausa está **REINICIAR CUEVA**: empieza la misma cueva de nuevo, con las vidas que cada uno tiene (en el computador también con la tecla R).
 
 ## Celular en vertical

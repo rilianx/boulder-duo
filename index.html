@@ -2394,8 +2394,8 @@ const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === '
 let infLives = false;
 try { infLives = localStorage.getItem('boulder-duo-inflives') === '1'; } catch (e) {}
 const endless = p => infLives && mode === 'coop' && !p.ai;
-// a kid comes back where they died: that cell if it is free (or dirt), else the nearest free one close by,
-// else at the start of the cave (the PC always goes back to its start)
+// a kid (or the PC) comes back where they died: that cell if it is free (or dirt), else the nearest free one close
+// by, else at the start of the cave. Alone, the whole cave starts over instead; training keeps the start.
 function backAt(p){
   if (p.dieX === undefined) return p.sy*W + p.sx;
   const ok = i => grid[i] === E || grid[i] === DIRT;
@@ -2776,15 +2776,18 @@ function tick(){
   if (magicState === 1 && (magicLeft -= tickMs) <= 0) magicState = 2;
   if (landThisTick) sfx.land();
 
+  let soloAgain = false;
   players.forEach(p => {
     if (p.immune > 0) p.immune--;
     if (!p.alive && !p.exited && p.respawn > 0 && --p.respawn === 0){
-      const j = p.ai ? p.sy*W + p.sx : backAt(p), t = grid[j];
+      if (solo) { soloAgain = true; return; }   // one player: the cave starts over, as in the original
+      const j = mode === 'train' ? p.sy*W + p.sx : backAt(p), t = grid[j];
       if (t === P1 || t === P2 || t === BOOM) p.respawn = 1;
       else { grid[j] = p.cell; fall[j] = 0; p.x = j % W; p.y = j / W | 0; p.alive = true; p.immune = 24; p.push = 0; }
     }
   });
 
+  if (soloAgain) { initLevel(level); return; }
   if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; exitOpenAt = nowT; sfx.open(); netFxEv(['e']); }
 
   // the clock runs with the cave's pace: a cave second is 1000 ms at the normal pace (cave 3's), longer in the
@@ -3000,8 +3003,13 @@ function gameOver(msg){
   state = 'between';
   showOverlay(`<div class="card"><h2>FIN DEL JUEGO</h2><p>${msg}</p>
     <p>Llegaron hasta: ${caveLabel(level)}. Puntos del equipo: ${players[0].score + players[1].score}</p>
-    <div class="row"><button id="bmenu">VOLVER AL MENÚ</button></div></div>`);
+    <div class="row">${mode === 'coop' ? '<button id="bagain" class="b1">JUGAR DE NUEVO ESTA CUEVA</button>' : ''}<button id="bmenu">VOLVER AL MENÚ</button></div></div>`);
   $('bmenu').onclick = menu; onEnter = menu;
+  if (mode === 'coop') {
+    // the same cave again with full lives (whoever was playing it)
+    const again = () => { players.forEach(p => { if (!(solo && p.id === 1)) p.lives = 3; }); initLevel(level); };
+    $('bagain').onclick = again; onEnter = again;
+  }
 }
 function roundWin(p){
   state = 'between'; p.wins++; updateHud();
@@ -3753,7 +3761,7 @@ function camFocus(k){
   const p = players[k], o = players[1-k];
   if (!p) return null;
   if (p.alive) return glidePos(p);
-  if (!p.exited && p.respawn > 0) return [p.sx, p.sy];
+  if (!p.exited && p.respawn > 0) return p.dieX !== undefined && mode !== 'train' ? [p.dieX, p.dieY] : [p.sx, p.sy];   // the camera waits where they fell
   if (o && o.alive) return glidePos(o);
   return [p.x, p.y];
 }
