@@ -124,13 +124,13 @@ button:disabled{opacity:.4;cursor:default}
 .touch button{touch-action:manipulation}
 .touch .legend{display:none}
 /* upright phone: one tall board (or two, one per half) filling the screen; the menu scrolls if it does not fit */
-.pmode .wrap{padding:4px max(4px, env(safe-area-inset-left)) 4px;gap:4px;min-height:100dvh;box-sizing:border-box;justify-content:flex-start}
+body.pmode .wrap{padding:4px max(4px, env(safe-area-inset-left)) 4px;gap:4px;min-height:100dvh;box-sizing:border-box;justify-content:flex-start}
 .pmode .views,.pmode .views.solo,.pmode .views.duo{width:100%;max-width:none;margin-inline:auto}
 .pmode .bar{font-size:14px;padding:3px 6px;gap:6px}
 .pmode .overlay{align-items:flex-start} .pmode .overlay .card{margin:auto} .pmode .card .long{display:none}
 .pmode .rotate,.lmode .rotate{display:none!important}
 /* sideways phone: the boards side by side, filling the screen */
-.lmode .wrap{padding:2px max(4px, env(safe-area-inset-left)) 2px;gap:2px;min-height:100dvh;box-sizing:border-box;max-width:none}
+body.lmode .wrap{justify-content:flex-start;padding:2px max(4px, env(safe-area-inset-left)) 2px;gap:2px;min-height:100dvh;box-sizing:border-box;max-width:none}
 body.lmode .views{width:100%!important;max-width:none!important;margin-inline:0;gap:4px}
 .lmode .bar{font-size:13px;padding:2px 6px;gap:6px}
 .lmode .overlay{align-items:flex-start} .lmode .overlay .card{margin:auto} .lmode .card .long{display:none}
@@ -142,7 +142,7 @@ body.lmode .views{width:100%!important;max-width:none!important;margin-inline:0;
 .fs .bmid{display:flex;align-items:center;justify-content:center;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;
   width:44px;height:44px;padding:0;border-radius:50%;background:rgba(233,138,28,.85);border:2px solid #b25f08;color:#fff;font-size:12px;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
 .fs[data-state="pause"] .bmid,.fs[data-state="between"] .bmid{display:none}
-.fs[data-state="menu"] .bmid{font-size:16px}
+.fs[data-state="menu"] .bmid{font-size:16px} .native[data-state="menu"] .bmid{display:none}
 .fs.solomode .bmid,.fs[data-state="menu"] .bmid{position:fixed;top:6px;transform:translateX(-50%);width:36px;height:36px}
 @media (orientation:portrait){ .fs.touch .views.duo{width:min(100%, calc((100dvh - 24px) / 1.47))} }
 @media (orientation:landscape) and (max-height:600px){ .fs.touch .views{width:min(100%, calc((100dvh - 14px) * 2.75))} .fs.touch .views.solo{width:min(100%, calc((100dvh - 14px) * 1.36))} }
@@ -1426,6 +1426,8 @@ function fitBoards(){
     // upright: about 12 tiles across, as many rows as fit (half the height each for two boards)
     const cols = clamp(Math.round(cw / 32), 10, 17), tile = cw / cols, gap = n > 1 ? 6 : 0;
     const avail = (innerHeight - top - 6 - gap - n * (bar + 6)) / n;
+    // a tall screen that would show more rows than the cave has (22): bigger tiles instead, so it still fills it
+    if (avail / tile > 22) return setShape(Math.floor(cw / (avail / 22) * 16) / 16, 22);
     return setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
   }
   // sideways: the boards side by side, as tall as the screen, about 32 px tiles
@@ -4405,7 +4407,10 @@ function goLandscape(){
 }
 /* Fullscreen button: real fullscreen where the browser allows it (Android, computers); iPhone only allows it from the home screen. */
 const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
-const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+// the Android app is always full screen (Android hides its bars) and always played by touch
+const nativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone || nativeApp;
+if (nativeApp) { document.body.classList.add('native'); if (touchPref !== true) setTouch(true); }
 function toggleFull(){
   const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
   if (fsEl()) return (document.exitFullscreen || document.webkitExitFullscreen).call(document);
@@ -4425,7 +4430,7 @@ function iosFullHelp(back){
     <div class="row"><button id="bfok">ENTENDIDO</button></div></div>`);
   $('bfok').onclick = back; onEnter = back;
 }
-function syncFull(){ const on = !!fsEl(); document.body.classList.toggle('fs', on || !!standalone); const b = $('bfull'); b.innerHTML = on ? 'SALIR<br>COMPLETA' : 'PANT.<br>COMPLETA'; b.classList.toggle('on', on); }
+function syncFull(){ const on = !!fsEl(); document.body.classList.toggle('fs', on || !!standalone); const b = $('bfull'); b.innerHTML = on ? 'SALIR<br>COMPLETA' : 'PANT.<br>COMPLETA'; b.classList.toggle('on', on); requestAnimationFrame(fitBoards); }   // the top bar comes and goes: refit the boards
 $('bfull').onclick = toggleFull;
 // the middle button: pause while playing; on the menu (no top bar there) it leaves full screen
 $('bmid').onclick = () => { if (state === 'play' || state === 'pause') togglePause(); else if (fsEl()) toggleFull(); };

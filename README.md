@@ -122,7 +122,7 @@ Ver [`rl/README.md`](rl/README.md).
 
 ## Celular (vertical u horizontal)
 
-En el celular se juega llenando la pantalla, **en vertical o en horizontal**: al girar el celular, el tablero gira con él (en horizontal muestra unas 10 filas y tantas columnas como quepan; de a dos, lado a lado). En vertical: el tablero se vuelve alto (unas 12 casillas de ancho y tantas filas como quepan) y el menú queda encima, con scroll si no cabe. De a dos en un mismo celular, cada uno tiene media pantalla (J2 dado vuelta, como antes). En el celular no aparecen GRAVEDAD REAL ni ENTRENAR PC (siguen en el computador). La app de Android sigue el giro del celular (incluso dado vuelta).
+En el celular se juega llenando la pantalla, **en vertical o en horizontal**: al girar el celular, el tablero gira con él (en horizontal muestra unas 10 filas y tantas columnas como quepan; de a dos, lado a lado). En vertical: el tablero se vuelve alto (unas 12 casillas de ancho y tantas filas como quepan) y el menú queda encima, con scroll si no cabe. De a dos en un mismo celular, cada uno tiene media pantalla (J2 dado vuelta, como antes). En el celular no aparecen GRAVEDAD REAL ni ENTRENAR PC (siguen en el computador). La app de Android sigue el giro del celular (incluso dado vuelta). La app usa la pantalla completa: Android esconde la barra de la hora y los botones de abajo (deslizando desde el borde aparecen un momento), y el juego no muestra su barra de arriba; la pausa es el botón redondo del medio (y ahí está el sonido).
 
 ## App de Android y dos celulares por Bluetooth
 
