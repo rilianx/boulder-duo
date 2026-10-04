@@ -64,8 +64,11 @@ canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px soli
 .line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
   border-bottom:1.5px dashed var(--soft);padding:2px 2px 4px}
 .line .txt{flex:1;min-width:0;overflow-wrap:anywhere}
-.line .hole{display:inline-block;min-width:1.6em;border-bottom:2px solid var(--lock);color:var(--lock)}
-.line .hole.cur{border-color:var(--ink);color:var(--ink);background:#eef3ff}
+.hole{display:inline-block;min-width:1.6em;border-bottom:2px solid var(--lock);color:var(--lock)}
+.hole.cur{border-color:var(--ink);color:var(--ink);background:#eef3ff;animation:blink 1.1s ease-in-out infinite}
+@keyframes blink{50%{background:#d3e0ff}}
+.code .ln.draft{border:1.5px dashed var(--ink);border-radius:4px;background:#f6f9ff;padding:1px 4px;margin-top:2px}
+@media (prefers-reduced-motion:reduce){ .hole.cur{animation:none} }
 .line .hint{font-family:var(--body);color:var(--soft);font-size:15px}
 .line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
 .chips{display:flex;flex-direction:column;gap:5px;max-height:36vh;overflow-y:auto}
@@ -325,7 +328,6 @@ async function execStmt(text, ctx) {
     if (rhs === m[1] || rhs.startsWith(m[1] + '->')) throw new CErr(`error: '${m[1]}' se usa en su propia declaración, antes de tener un valor.`, 'compile');
     const val = await evalPtr(rhs, ctx);
     scope().push({ name: m[1], kind: 'ptr', t: val });
-    if (top && m[1] === 'p') hop();
     return;
   }
   if ((m = /^(.+)->value$/.exec(lhs))) {
@@ -351,7 +353,6 @@ async function execStmt(text, ctx) {
     const val = await evalPtr(rhs, ctx);
     v.t = val;
     if (top && old !== null && old !== G && val !== null && val !== G && val !== old && nodeOf(val) && nodeOf(val).next === old) unlock('insertarInicio');
-    if (top && lhs === 'p') hop();
     if (top && rhs === lhs + '->next') unlock('avanzar');
     return;
   }
@@ -573,6 +574,7 @@ function mkChip(label, cls, onclick) {
   b.className = 'chip ' + (cls || ''); b.textContent = label; b.onclick = onclick; return b;
 }
 function renderBuilder() {
+  renderCode();   // el cuaderno muestra la línea en construcción (o deja de mostrarla)
   const box = $('chips'); box.innerHTML = '';
   $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
   if (REPLAY) { renderReplayBar(box); return; }
@@ -628,7 +630,7 @@ function renderBuilder() {
     }
     return;
   }
-  $('ltxt').innerHTML = holeHTML(BUILD); $('bx').hidden = false;
+  $('ltxt').innerHTML = '<span class="hint">Completando la línea en el cuaderno ↑</span>'; $('bx').hidden = false;
   const ht = HOLE.exec(BUILD)[1];
   if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num') {
     const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
@@ -689,6 +691,7 @@ function renderCode() {
   const tag = (list, pre) => list.forEach((e, i) => { e._path = pre + i; if (e.sub) tag(e.sub, pre + i + '.'); });
   tag(PROG, '');
   walk(PROG, 0);
+  if (BUILD && !REPLAY) lines.push(`<div class="ln draft">  ${holeHTML(BUILD)}</div>`);   // la línea que se está armando
   el.innerHTML = lines.join('');
   el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
     ev.stopPropagation();
@@ -818,7 +821,7 @@ const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cv = $('cv'), ctx = cv.getContext('2d');
 let SC = 1, DPR = 1, boil = 0, T = 0;
 const POS = {};     // id → posición dibujada (se anima hacia x,y)
-const FX = { flash: {}, shake: 0, hop: 0, avatar: null };
+const FX = { flash: {}, shake: 0 };
 const AR = {};      // geometría animada de cada flecha
 
 function freeSlot() {
@@ -829,7 +832,6 @@ function freeSlot() {
 function spawnFx(id) { const n = nodeOf(id); POS[id] = { x: n.x, y: n.y - 34 }; }
 function flash(id, ok) { FX.flash[id] = { t: 1, ok }; }
 function shake() { FX.shake = 0.4; }
-function hop() { FX.hop = 1; }
 
 // Ordenar: las listas que salen de cada variable, en orden, columna por columna. Lo liberado sin referencias se borra.
 function sortDrawing() {
@@ -1012,25 +1014,6 @@ function drawNode(n) {
   if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.fillText('liberado', x, Tp - 7); }
   ctx.restore();
 }
-function drawAvatar(layout) {
-  const it = layout.find(o => o.v && o.v.name === 'p' && !o.frame);
-  if (!it) { FX.avatar = null; return; }
-  const v = it.v; let tx, ty;
-  if (v.t !== null && v.t !== G && nodeOf(v.t)) { const P = POS[v.t]; tx = P.x - NW / 2 - 4; ty = P.y - NH / 2 - 8; }
-  else { tx = it.x + PW + 20; ty = it.y + PH / 2 - 14; }
-  if (!FX.avatar) FX.avatar = { x: tx, y: ty };
-  const A = FX.avatar; A.x = lerp(A.x, tx, 0.2); A.y = lerp(A.y, ty, 0.2);
-  const sh = FX.shake ? Math.sin(FX.shake * 70) * 3 : 0;
-  const x = A.x + sh, y = A.y - Math.sin(Math.min(1, FX.hop) * Math.PI) * 12 + Math.sin(T * 4) * 0.8;
-  ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.8; rCircle(x, y, 11, 77, '#c9dbff');
-  for (const s of [-1, 1]) {
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(x + s * 4, y - 2, 3, 3.6, 0, 0, 7); ctx.fill();
-    ctx.lineWidth = 0.9; ctx.stroke();
-    ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + s * 4 + 1, y - 1.5, 1.4, 0, 7); ctx.fill();
-  }
-  ctx.fillStyle = '#2350b8'; ctx.font = 'bold 12px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('p', x, y + 6);
-}
 
 function draw(dt) {
   ctx.setTransform(SC * DPR, 0, 0, SC * DPR, 0, 0);
@@ -1092,7 +1075,6 @@ function draw(dt) {
   ctx.fillStyle = '#2e2c2a';
   for (const id of liveIds()) { const n = nodeOf(id); if (n.next !== null && !n.dead) { const P = POS[id]; ctx.beginPath(); ctx.arc(P.x + NW / 2 - (NW - DW) / 2, P.y, 3, 0, 7); ctx.fill(); } }
   for (const it of layout) if (it.v && it.v.kind === 'ptr') { ctx.beginPath(); ctx.arc(it.x + PW - 5, it.y + PH / 2, 2.6, 0, 7); ctx.fill(); }
-  drawAvatar(layout);
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1218,7 +1200,6 @@ function frame(now) {
   boil = REDUCED ? 0 : Math.floor(now / 220) % 5;
   for (const id in FX.flash) { FX.flash[id].t -= dt * 0.8; if (FX.flash[id].t <= 0) delete FX.flash[id]; }
   if (FX.shake) FX.shake = Math.max(0, FX.shake - dt);
-  if (FX.hop) FX.hop = Math.max(0, FX.hop - dt * 3);
   draw(dt);
   requestAnimationFrame(frame);
 }

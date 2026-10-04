@@ -48,6 +48,7 @@ Ver [`rl/README.md`](rl/README.md).
 - **Memoria:** variables en el stack y nodos con dirección en el heap. Un puntero vale un nodo, `NULL` o basura.
 - **Intérprete:** ejecuta un subconjunto de C. Comandos simples: `Nodo *x = …;`, `x = …;`, `x->next = …;`, `x->value = n;`, `malloc(sizeof(Nodo))` (con campos basura), `free`, `if (x->value == n)`, `if (x == NULL)` y `printf`. Bloquea los errores de compilación, los segfault, el uso después de `free` y el *double free*, y marca las fugas.
 - **Funciones compuestas** (`crearNodo`, `insertarInicio`, `insertarDespues`, `eliminarSiguiente`): están escritas con los mismos comandos simples y se desbloquean al hacer a mano lo mismo que hacen. Al llamarlas se ve su marco en el stack, con los parámetros copiados, y en el código se puede abrir la línea para ver cada paso.
+- **La línea se arma en el cuaderno:** mientras eliges las piezas, la línea en construcción aparece al final del código con el hueco que falta resaltado.
 - **Declarar en un toque:** la pestaña Variables muestra directamente `Nodo *p = _;` para cada nombre libre y `p = _;` para cada variable declarada.
 - **Atajos:** `p = p->next;` se desbloquea la primera vez que el alumno avanza un puntero a mano. Desde ahí, avanzar cualquier puntero es un toque en la pestaña «Atajos».
 - **Advertencia de saltos:** antes de ejecutar una línea con dos o más `->next` seguidos (por ejemplo `head->next->next`), el motor avisa y deja escribirla igual o cancelar.
