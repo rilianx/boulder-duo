@@ -46,9 +46,12 @@ canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px soli
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
   padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 .code .ln{white-space:pre-wrap}
-.code .ln.fn{cursor:pointer}
-.code .ln.fn::before{content:"▸ ";color:var(--ink)}
-.code .ln.fn.open::before{content:"▾ "}
+.code .ln.jump{cursor:pointer}
+.code .ln.jump:active{background:#eef3ff}
+.code .tg{color:var(--ink);cursor:pointer;padding:0 4px 0 0;display:inline-block;min-width:1.2em}
+.code .ln.cur{background:#dfe8ff;box-shadow:inset 3px 0 0 var(--ink)}
+.code .ln.cur::after{content:"  ◀ próxima";color:var(--ink);font-family:var(--body);font-size:13px}
+.code .ln.fut{opacity:.42}
 .code .sub{border-left:1.5px dashed var(--lock);margin-left:6px;padding-left:6px;color:var(--soft)}
 .code .dim{color:var(--soft)}
 .code .err{color:var(--bad)}
@@ -247,7 +250,7 @@ function evalInt(e) {
 async function callFn(name, args, ctx, wantValue) {
   const F = FUNCS[name];
   if (!F) throw new CErr(`error: la función '${name}' no existe.`, 'compile');
-  if (ctx.depth === 0 && !UNLOCKED.has(name)) throw new CErr(`error: '${name}' todavía no está definida. ${F.unlock}`, 'compile');
+  if (ctx.depth === 0 && !ctx.replay && !UNLOCKED.has(name)) throw new CErr(`error: '${name}' todavía no está definida. ${F.unlock}`, 'compile');
   if (wantValue && !F.returns) throw new CErr(`error: ${name}() es void, no devuelve un puntero.`, 'compile');
   if (args.length !== F.params.length) throw new CErr(`error: ${name}() recibe ${F.params.length} argumento(s).`, 'compile');
   // los argumentos se evalúan en quien llama y se COPIAN a las variables locales de la función
@@ -260,14 +263,16 @@ async function callFn(name, args, ctx, wantValue) {
   M.frames.push({ fn: name, locals });
   let ret;
   try {
+    let j = 0;
     for (const line of F.body) {
-      await sleep(STEP_MS);
-      const entry = { text: line, sub: [] };
-      ctx.sub.push(entry); renderCode();
-      const r = await execStmt(line, { depth: ctx.depth + 1, sub: entry.sub });
+      const path = ctx.path + '.' + j++;
+      let sub = null;
+      if (!ctx.replay) { const entry = { text: line, sub: [] }; ctx.sub.push(entry); sub = entry.sub; }
+      await pace(path);
+      const r = await execStmt(line, { depth: ctx.depth + 1, sub, path, replay: ctx.replay });
       if (r && 'ret' in r) { ret = r.ret; break; }
     }
-    await sleep(STEP_MS * 0.6);
+    if (!REPLAY || REPLAY.mode === 'play') await sleep(STEP_MS * 0.6);
   } finally { M.frames.pop(); }
   return ret;
 }
@@ -375,9 +380,9 @@ async function run(text) {
   if (BUSY) return;
   BUSY = true; hideFb(); renderBuilder();
   const snap = JSON.stringify(M);
-  const entry = { text, sub: [], cls: 'new' };
+  const entry = { text, src: text, sub: [], cls: 'new' };
   PROG.push(entry); renderCode();
-  const ctx = { depth: 0, sub: entry.sub };
+  const ctx = { depth: 0, sub: entry.sub, path: String(PROG.length - 1) };
   try {
     await execStmt(text, ctx);
   } catch (e) {
@@ -390,7 +395,8 @@ async function run(text) {
     beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
     BUSY = false; renderBuilder(); return;
   }
-  UNDO.push({ mem: snap, prog: PROG.length - 1 });
+  UNDO.push({ mem: snap, prog: PROG.indexOf(entry) });
+  entry.before = snap;
   if (entry.sub.length) entry.open = false;   // las funciones quedan plegadas; se abren tocándolas
   if (ctx.note) entry.text += ctx.note;
   if (ctx.out != null) PROG.push({ text: '// salida: ' + ctx.out, cls: 'out' });
@@ -412,16 +418,108 @@ async function run(text) {
   if (PENDING_UNLOCK.length) showUnlock(PENDING_UNLOCK.shift());
 }
 function undo() {
-  if (BUSY || !UNDO.length) return;
+  if (BUSY || REPLAY || !UNDO.length) return;
   const u = UNDO.pop();
   M = JSON.parse(u.mem); PROG.length = u.prog; renderCode();
   hideFb(); renderBuilder();
 }
 const PENDING_UNLOCK = [];
 function unlock(name) {
-  if (UNLOCKED.has(name)) return;
+  if (REPLAY || UNLOCKED.has(name)) return;
   UNLOCKED.add(name); saveUnlocks();
   if (!PENDING_UNLOCK.includes(name)) PENDING_UNLOCK.push(name);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   4b. VOLVER A UNA LÍNEA Y REPETIR
+   Tocar una línea del código restaura la memoria de justo antes y deja todo en pausa.
+   Desde ahí se avanza paso a paso (entrando a las funciones), se reproduce o se salta al final.
+   Como el intérprete es determinista, repetir una línea da exactamente el mismo resultado.
+   ════════════════════════════════════════════════════════════════════ */
+let REPLAY = null;   // { mode: 'pause'|'play'|'fast', target, cur, gate, abort, next }
+class Abort {}
+// Marca el ritmo antes de cada paso: espera normal, o una pausa que suelta el botón «siguiente».
+async function pace(path) {
+  if (!REPLAY) { await sleep(STEP_MS); return; }
+  REPLAY.cur = path;
+  if (REPLAY.mode === 'fast') {
+    if (path !== REPLAY.target) { if (REPLAY.abort) throw new Abort(); return; }
+    REPLAY.mode = 'pause';
+  }
+  openPath(path); renderCode(); renderBuilder();
+  if (REPLAY.mode === 'play') { await sleep(STEP_MS); }
+  else await new Promise(r => { REPLAY.gate = r; });
+  REPLAY.gate = null;
+  if (REPLAY.abort) throw new Abort();
+}
+function openPath(path) {   // abre las funciones que contienen el paso actual
+  const ks = path.split('.').map(Number); let list = PROG;
+  for (let i = 0; i < ks.length - 1; i++) { const e = list[ks[i]]; if (!e) return; e.open = true; list = e.sub; }
+}
+function travel(path) {
+  const top = +path.split('.')[0];
+  const e = PROG[top];
+  if (!e || !e.before) return;
+  if (REPLAY) { REPLAY.abort = true; REPLAY.next = path; if (REPLAY.gate) REPLAY.gate(); return; }
+  if (BUSY) return;
+  replayFrom(top, path);
+}
+async function replayFrom(top, target) {
+  BUSY = true; BUILD = null; hideFb(); closeCard();
+  REPLAY = { mode: 'fast', target, cur: null, gate: null, abort: false, next: null };
+  M = JSON.parse(PROG[top].before);
+  for (const k in AR) delete AR[k];
+  let stopAt = null;
+  try {
+    for (let k = top; k < PROG.length; k++) {
+      const e = PROG[k];
+      if (!e.before) continue;            // errores, salidas y avisos no se ejecutan
+      await pace(String(k));
+      if (REPLAY.write) { stopAt = k; break; }
+      await execStmt(e.src, { depth: 0, sub: null, path: String(k), replay: true });
+      checkLeaks();
+    }
+  } catch (err) {
+    if (!(err instanceof Abort)) { console.error(err); }
+  }
+  const next = REPLAY.next;
+  REPLAY = null; BUSY = false;
+  if (stopAt !== null) {   // escribir desde aquí: se descarta lo que venía después
+    PROG = PROG.slice(0, stopAt);
+    UNDO = UNDO.filter(u => u.prog < stopAt);
+  }
+  renderCode(); renderBuilder();
+  if (next != null) travel(next);
+}
+function replayStep() { if (REPLAY && REPLAY.gate) { REPLAY.mode = 'pause'; REPLAY.gate(); } }
+function replayPlay() { if (!REPLAY) return; REPLAY.mode = 'play'; if (REPLAY.gate) REPLAY.gate(); renderBuilder(); }
+function replayPause() { if (REPLAY) { REPLAY.mode = 'pause'; renderBuilder(); } }
+function replayEnd() { if (!REPLAY) return; REPLAY.mode = 'fast'; REPLAY.target = null; if (REPLAY.gate) REPLAY.gate(); }
+function replayWrite() { if (REPLAY && REPLAY.gate && !REPLAY.cur.includes('.')) { REPLAY.write = true; REPLAY.gate(); } }
+function renderReplayBar(box) {
+  const atTop = REPLAY.cur && !REPLAY.cur.includes('.');
+  const k = REPLAY.cur ? +REPLAY.cur.split('.')[0] : 0;
+  const where = !REPLAY.cur ? '' : atTop ? `antes de la línea ${visibleLine(k)}` : `dentro de ${FUNC_NAME_AT(REPLAY.cur)}()`;
+  $('ltxt').innerHTML = REPLAY.mode === 'play' ? `<span class="hint">▶ reproduciendo… ${where}</span>` : `<span class="hint">⏸ en pausa ${where}. La línea resaltada es la próxima.</span>`;
+  $('bx').hidden = true;
+  const g = document.createElement('div'); g.className = 'grp';
+  const paused = REPLAY.mode !== 'play';
+  g.appendChild(mkChip('⏭ siguiente', 'fn', replayStep));
+  g.appendChild(paused ? mkChip('▶ reproducir', 'fn', replayPlay) : mkChip('⏸ pausa', 'fn', replayPause));
+  g.appendChild(mkChip('⏩ ir al final', '', replayEnd));
+  const w = mkChip('✎ escribir desde aquí', 'decl', replayWrite);
+  if (!(paused && atTop)) { w.disabled = true; w.style.opacity = .4; }
+  g.appendChild(w);
+  box.appendChild(g);
+  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
+  tip.textContent = paused && !atTop ? 'Para escribir desde aquí, avanza hasta salir de la función.' : 'Toca cualquier línea del código para saltar a ese momento.';
+  box.appendChild(tip);
+}
+function visibleLine(k) { return PROG.slice(0, k + 1).filter(e => e.before || e.cls === 'err').length; }
+function FUNC_NAME_AT(path) {
+  const ks = path.split('.').map(Number); let list = PROG, e = null;
+  for (let i = 0; i < ks.length - 1; i++) { e = list[ks[i]]; list = e.sub; }
+  const m = e && /(\w+)\(/.exec(e.src || e.text); return m ? m[1] : 'la función';
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -476,7 +574,8 @@ function mkChip(label, cls, onclick) {
 }
 function renderBuilder() {
   const box = $('chips'); box.innerHTML = '';
-  $('bundo').disabled = BUSY || !UNDO.length;
+  $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
+  if (REPLAY) { renderReplayBar(box); return; }
   if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
   if (!BUILD) {
     $('ltxt').innerHTML = '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
@@ -565,11 +664,20 @@ function lockedHint(fn) {
 function renderCode() {
   const el = $('code');
   const lines = ['<div class="ln dim">// Nodo: int value; Nodo *next;</div>', '<div class="ln dim">int main(void) {</div>'];
+  const cur = REPLAY && REPLAY.cur ? REPLAY.cur.split('.').map(Number) : null;
+  const order = path => {   // -1 ya pasó · 0 es el paso actual · 1 viene después · 2 contiene al actual
+    if (!cur) return -1;
+    const p = path.split('.').map(Number);
+    for (let i = 0; i < Math.min(p.length, cur.length); i++) if (p[i] !== cur[i]) return p[i] < cur[i] ? -1 : 1;
+    return p.length === cur.length ? 0 : p.length < cur.length ? 2 : 1;
+  };
   const walk = (list, depth) => {
     for (const e of list) {
       const isFn = e.sub && e.sub.length;
-      const cls = ['ln', e.cls || '', isFn ? 'fn' : '', isFn && e.open !== false ? 'open' : ''].join(' ');
-      lines.push(`<div class="${cls}" data-path="${e._path}">${'  '.repeat(depth ? 0 : 1)}${esc(e.text)}</div>`);
+      const o = order(e._path);
+      const cls = ['ln', e.cls || '', isFn ? 'fn' : '', isFn && e.open !== false ? 'open' : '', o === 0 ? 'cur' : o === 1 ? 'fut' : '', (e.before || depth) ? 'jump' : ''].join(' ');
+      const tg = isFn ? `<span class="tg">${e.open !== false ? '▾' : '▸'}</span>` : '';
+      lines.push(`<div class="${cls}" data-path="${e._path}">${tg}${'  '.repeat(depth ? 0 : 1)}${esc(e.text)}</div>`);
       if (isFn && e.open !== false) { lines.push('<div class="sub">'); walk(e.sub, depth + 1); lines.push('</div>'); }
     }
   };
@@ -577,13 +685,16 @@ function renderCode() {
   tag(PROG, '');
   walk(PROG, 0);
   el.innerHTML = lines.join('');
-  el.querySelectorAll('.ln.fn').forEach(d => d.onclick = () => {
+  el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
+    ev.stopPropagation();
     let e = null, list = PROG;
-    for (const k of d.dataset.path.split('.')) { e = list[+k]; list = e.sub; }
+    for (const k of t.parentElement.dataset.path.split('.')) { e = list[+k]; list = e.sub; }
     e.open = e.open === false; renderCode();
   });
+  el.querySelectorAll('.ln.jump').forEach(d => d.onclick = () => travel(d.dataset.path));
   PROG.forEach(e => { if (e.cls === 'new') setTimeout(() => { if (e.cls === 'new') e.cls = ''; }, 1600); });
-  el.scrollTop = el.scrollHeight;
+  const c = el.querySelector('.ln.cur');
+  if (c) c.scrollIntoView({ block: 'nearest' }); else if (!REPLAY) el.scrollTop = el.scrollHeight;
 }
 function showFb(kind, code, why, buttons) {
   const fb = $('fb'); fb.hidden = false; $('chips').hidden = true; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
@@ -660,7 +771,7 @@ $('bhelp').onclick = () => {
   });
 };
 $('bundo').onclick = undo;
-$('breset').onclick = () => { if (BUSY) return; M = newMem(); PROG = []; UNDO = []; BUILD = null; hideFb(); renderCode(); renderBuilder(); };
+$('breset').onclick = () => { if (BUSY || REPLAY) return; M = newMem(); PROG = []; UNDO = []; BUILD = null; hideFb(); renderCode(); renderBuilder(); };
 $('bsort').onclick = () => { if (!BUSY) sortDrawing(); };
 
 /* ════════════════════════════════════════════════════════════════════

@@ -51,4 +51,5 @@ Ver [`rl/README.md`](rl/README.md).
 - **Atajos:** `p = p->next;` se desbloquea la primera vez que el alumno avanza un puntero a mano. Desde ahí, avanzar cualquier puntero es un toque en la pestaña «Atajos».
 - **Advertencia de saltos:** antes de ejecutar una línea con dos o más `->next` seguidos (por ejemplo `head->next->next`), el motor avisa y deja escribirla igual o cancelar.
 - **Tocar el dibujo:** tocar un post-it, la casilla `next` de un nodo o el cuerpo de un nodo pone su expresión en la línea que se está armando (`head`, `head->next`, o el nombre más corto del nodo). Si no hay ninguna línea en curso, empieza su asignación.
+- **Volver a una línea:** tocar una línea del código restaura la memoria de justo antes y deja todo en pausa. Desde ahí se puede avanzar paso a paso (también dentro de las funciones, incluidas las anidadas), reproducir, saltar al final o «escribir desde aquí», que descarta lo que venía después. Tocar un paso dentro de una función expandida lleva directo a ese paso.
 - **Herramientas:** deshacer, ordenar el dibujo y exportar el programa completo como un `.c` que compila.
