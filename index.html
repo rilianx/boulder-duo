@@ -2762,7 +2762,7 @@ function tick(){
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
-    if (!ownClock(p)) return stepPlayer(p);
+    if (!ownClock(p)) return netRole === 'host' && p.id === 1 ? undefined : stepPlayer(p);
     if (!p.held.length) { p.idle++; p.walking = false; p.push = 0; }   // standing still: count the idle time
   });
   if (state !== 'play') return;
@@ -4109,7 +4109,7 @@ function loop(now){
     if (n >= cap) worldT = simT;
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
-      if (state !== 'play' || p.doomed || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
+      if (state !== 'play' || p.doomed || (netRole === 'host' && p.id === 1) || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
       // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
       // noticed it, or each step would run late by part of a frame and the walk would pulse
       const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
@@ -4245,6 +4245,7 @@ const BT = (() => {
 })();
 let netRole = null, netPeer = '', netLink = false;
 let netSentG = new Uint8Array(W*H), netSentV = new Uint8Array(W*H), netSentD = new Uint8Array(W*H);
+let netAG = new Uint8Array(W*H), netPend = [], netSeqN = 0, netPred = [];   // guest: the host's cells, its own steps not yet confirmed
 let netSentB = new Uint8Array(W*H), netMovedAt = new Float64Array(W*H).fill(-1e9), netEv = [];
 let netSrcAt = new Float64Array(W*H), netDugAt = new Float64Array(W*H), netKey = '', netSt = '', netFull = true, netFx = [], netHeld = -2;
 const b64 = a => { let t = ''; for (let i = 0; i < a.length; i++) t += String.fromCharCode(a[i]); return btoa(t); };
@@ -4263,7 +4264,7 @@ function netFrame(){
     if (src[j] >= 0 && srcAt[j] !== netSrcAt[j]) { m.push(j, src[j]); netSrcAt[j] = srcAt[j]; }
     if (dugAt[j] !== netDugAt[j]) { if (dugAt[j] > 0) dg.push(j); netDugAt[j] = dugAt[j]; }
   }
-  const P = players.map(p => [p.x, p.y, p.face, p.walking ? 1 : 0, p.dig, p.stepN, p.alive ? 1 : 0, p.exited ? 1 : 0, p.respawn, p.immune, p.gems, p.lives, p.score, p.doomed ? 1 : 0, p.wins || 0, p.idle]);
+  const P = players.map(p => [p.x, p.y, p.face, p.walking ? 1 : 0, p.dig, p.stepN, p.alive ? 1 : 0, p.exited ? 1 : 0, p.respawn, p.immune, p.gems, p.lives, p.score, p.doomed ? 1 : 0, p.wins || 0, p.idle, p.netSeq || 0]);
   const key = JSON.stringify(P) + state + timeLeft + level + magicState;
   if (!full && !c.length && !m.length && !dg.length && !netFx.length && !netEv.length && key === netKey) return;
   const msg = { t: 's', lv: level, st: state, tl: timeLeft, ms: magicState, P, m, dg, fx: netFx.splice(0), ev: netEv.splice(0) };
@@ -4273,6 +4274,15 @@ function netFrame(){
 }
 function netGot(o){
   if (o.t === 'in' && netRole === 'host') { const p = players[1]; if (p && !p.ai) p.held = o.d < 0 ? [] : [o.d]; return; }
+  if (o.t === 'mv' && netRole === 'host') {
+    // a step the guest already took on its screen: take it here now (this phone still decides what really happens)
+    const p = players[1]; if (!p || p.ai || state !== 'play') return;
+    const f0 = netFx.length, e0 = netEv.length;
+    p.held = [o.d]; nowT = simT; stepPlayer(p); p.nextAt = simT + tickMs; p.netSeq = o.s;
+    netFx.splice(f0);   // its sounds already played over there
+    netEv.splice(e0, netEv.length - e0, ...netEv.slice(e0).filter(e => !(e[0] === 'f' && e[1] === 1)));
+    checkEnd(); return;
+  }
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
@@ -4281,19 +4291,46 @@ function netGot(o){
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
   if (o.t !== 's' || !players.length) return;
-  if (o.lv !== level) initLevel(o.lv);   // the cave's look comes from its own file; its cells come next
-  if (o.g) { grid.set(unb64(o.g)); vari.set(unb64(o.v)); dir.set(unb64(o.d)); if (o.b) boss.set(unb64(o.b)); src.fill(-1); }
-  if (o.c) for (let k = 0; k < o.c.length; k += 5){ const j = o.c[k]; grid[j] = o.c[k+1]; vari[j] = o.c[k+2]; dir[j] = o.c[k+3]; boss[j] = o.c[k+4]; }
+  if (o.lv !== level) { initLevel(o.lv); netPend = []; netPred = []; }   // the cave's look comes from its own file; its cells come next
+  if (o.g) { netAG.set(unb64(o.g)); vari.set(unb64(o.v)); dir.set(unb64(o.d)); if (o.b) boss.set(unb64(o.b)); src.fill(-1); netPend = []; }
+  if (o.c) for (let k = 0; k < o.c.length; k += 5){ const j = o.c[k]; netAG[j] = o.c[k+1]; vari[j] = o.c[k+2]; dir[j] = o.c[k+3]; boss[j] = o.c[k+4]; }
+  // the host's cave, then this phone's own steps it has not confirmed yet on top (dropped if they no longer fit)
+  const me = players[1], ack = o.P[1] ? o.P[1][16] || 0 : 0, hostDoomed = o.P[1] && (!o.P[1][6] || o.P[1][13]);
+  netPend = hostDoomed ? [] : netPend.filter(m => m.s > ack);
+  grid.set(netAG);
+  for (let k = 0; k < netPend.length; k++){
+    const m = netPend[k], t = grid[m.to];
+    if (grid[m.from] !== me.cell || !(t === E || t === DIRT || t === GEM)) { netPend.length = k; break; }
+    grid[m.from] = E; grid[m.to] = me.cell;
+  }
+  netPred = netPred.filter(q => simT - q.at < 2000);
+  const mine = (j, f) => netPred.some(q => q.to === j && (f === undefined || q.from === f));
   for (let k = 0; k < o.m.length; k += 2){
-    const j = o.m[k], f = o.m[k+1]; src[j] = f; srcAt[j] = simT;
+    const j = o.m[k], f = o.m[k+1];
+    if (mine(j, f)) continue;   // its own step: already gliding here
+    src[j] = f; srcAt[j] = simT;
     // rocks turn as they roll and ease into a fall, worked out here from how they move
     fallN[j] = GOFF && j === f + GOFF && simT - netMovedAt[f] < tickMs * 1.6 ? Math.min(250, fallN[f] + 1) : 0;
     rot[j] = rot[f] + (j === f + 1 ? 1 : j === f - 1 ? -1 : 0) * Math.PI / 2; netMovedAt[j] = simT;
   }
-  o.dg.forEach(j => { dugAt[j] = simT; });
+  o.dg.forEach(j => { if (!mine(j)) dugAt[j] = simT; });
   o.P.forEach((a, k) => {
     const p = players[k]; if (!p) return;
     const was = p.doomed;
+    if (k === 1 && netPend.length) {
+      // still ahead of the host: keep its own position and walk, take the rest
+      p.alive = !!a[6]; p.exited = !!a[7]; p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.wins = a[14];
+      return;
+    }
+    if (k === 1) {
+      // confirmed: the host's word, keeping its own walk going unless the host put it somewhere else
+      const moved = a[0] !== p.x || a[1] !== p.y;
+      [p.x, p.y, p.face] = a; p.walking = !!a[3]; p.alive = !!a[6]; p.exited = !!a[7];
+      p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.doomed = !!a[13]; p.wins = a[14]; p.idle = a[15] || 0;
+      if (moved) { p.stepN = a[5]; p.actAt = simT; p.dig = a[4]; }
+      if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; }
+      return;
+    }
     if (a[5] !== p.stepN) p.actAt = simT;   // a step just started: its walk frames run from now
     [p.x, p.y, p.face] = a; p.walking = !!a[3]; p.dig = a[4]; p.stepN = a[5]; p.alive = !!a[6]; p.exited = !!a[7];
     p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.doomed = !!a[13]; p.wins = a[14]; p.idle = a[15] || 0;
@@ -4304,7 +4341,7 @@ function netGot(o){
     if (e[0] === 'd') { dust.push({ x: e[1], y: e[2], at: simT }); shakeAt = simT; }
     else if (e[0] === 'l') landAt[e[1]] = simT;
     else if (e[0] === 'c') critterFromRock(e[1], e[2], players[e[3]]);
-    else if (e[0] === 'f') flyGem(players[e[1]], e[2]);
+    else if (e[0] === 'f') { if (e[1] !== 1) flyGem(players[e[1]], e[2]); }   // its own gems flew when it took them
     else if (e[0] === 's') starFlash = { at: simT, x: e[1], y: e[2], drop: e[3] };
     else if (e[0] === 'n') nestPuff.push({ i: e[1], at: simT });
     else if (e[0] === 'e') exitOpenAt = simT;
@@ -4327,6 +4364,18 @@ function netInput(){
   const p = players[1]; if (netRole !== 'guest' || !p) return;
   const d = p.held.length ? p.held[p.held.length - 1] : -1;
   if (d !== netHeld) { netHeld = d; netSend({ t: 'in', d }); }
+  // its own kid moves on this screen at once (same pace as on the host); the step goes to the host, which confirms it
+  if (state !== 'play' || d < 0 || !p.alive || p.doomed || p.exited || simT < p.nextAt) return;
+  const t0 = simT - p.nextAt < 50 ? p.nextAt : simT; p.nextAt = t0 + tickMs;
+  const [dx, dy] = DXY[d], i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
+  netSend({ t: 'mv', d, s: ++netSeqN });
+  if (dx) p.face = dx < 0 ? 1 : 0;
+  if (!(t === E || t === DIRT || t === GEM)) return;   // pushing a rock, the exit, a star: the host's answer shows it
+  netPend.push({ s: netSeqN, from: i, to: j }); netPred.push({ from: i, to: j, at: simT });
+  grid[i] = E; grid[j] = p.cell; src[j] = i; srcAt[j] = simT; src[i] = -1;
+  p.x += dx; p.y += dy; p.walking = true; p.stepN++; p.actAt = simT; p.idle = 0; p.dig = -1;
+  if (t === DIRT) { dugAt[j] = simT; p.dig = d; sfx.step(); }
+  if (t === GEM) { sfx.gem(); flyGem(p, j); }
 }
 function netQuit(){
   netRole = null; netLink = false; if (BT) BT.close().catch(() => {});
