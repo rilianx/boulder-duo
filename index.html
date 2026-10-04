@@ -4257,16 +4257,16 @@ const BT = (() => {
 })();
 let netRole = null, netPeer = '', netLink = false, netFull = true, netSt = '', netKeyP = '', netSyncAt = 0;
 let netT0 = null, netOffs = [], netBoomIn = false;
-const NET_SYNC = 300, NET_R = 2;   // ms between cave comparisons; the remote kid's own patch: cells this close to it
+const NET_BEAT = 1000;   // ms between the host's clock beats (they keep the ticks of both phones together)
 const b64 = a => { let t = ''; for (let i = 0; i < a.length; i++) t += String.fromCharCode(a[i]); return btoa(t); };
 const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
 function netFxEv(){}   // each phone's own engine makes its effects
 function netSend(o){ if (BT && netLink) BT.send({ data: JSON.stringify(o) }).catch(() => {}); }
 /* Each phone runs the whole cave with its own engine, at the same ticks and with the same chance (the seed and the
    tick number), so most of the time both see the same without being told. Each one is the boss of its own kid: it
-   moves it, decides if it dies, and tells the other, where that kid is a puppet that only moves as told. Every
-   0.3 s they compare: the host's cave counts everywhere except the cells around the guest's kid, where the
-   guest's counts. Explosions that kill a kid are sent too, since the other engine does not touch that kid. */
+   moves it, decides if it dies, and tells the other, where that kid is a puppet that only moves as told; rocks it
+   pushes and explosions that kill it go along too. Nothing else is sent: a beat of the host's clock each second,
+   and a copy of the cave when one starts (both build it the same way anyway). */
 const isRemote = p => !!(netRole && p && (netRole === 'host' ? p.id === 1 : p.id === 0));
 const netMe = () => players[netRole === 'host' ? 0 : 1];
 function netPState(p){ return { id: p.id, x: p.x, y: p.y, f: p.face, s: p.stepN, d: p.dig, w: p.walking ? 1 : 0, al: p.alive ? 1 : 0, ex: p.exited ? 1 : 0, g: p.gems, l: p.lives, r: p.respawn, im: p.immune, dm: p.doomed ? 1 : 0, i: p.idle, sc: p.score, wi: p.wins || 0 }; }
@@ -4290,20 +4290,14 @@ function netFrame(){
   }
   if (netRole === 'host') {
     if (state !== netSt) { netSt = state; netSend({ t: 'st', st: state, ov: state === 'play' || state === 'menu' ? '' : [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300) }); }
-    if (state === 'play' && (netFull || now - netSyncAt >= NET_SYNC)) {
-      netSyncAt = now;
-      netSend({ t: 'sy', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), lv: level, tl: timeLeft, ms: magicState, full: netFull ? 1 : 0,
+    if (state === 'play' && netFull) {
+      netFull = false; netSyncAt = now;
+      netSend({ t: 'sy', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), lv: level, tl: timeLeft, ms: magicState,
                 g: b64(grid), f: b64(fall), a: b64(aux), d: b64(dir), v: b64(vari) });
-      netFull = false;
+    } else if (state === 'play' && now - netSyncAt >= NET_BEAT) {
+      netSyncAt = now;
+      netSend({ t: 'tk', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), tl: timeLeft });
     }
-  } else if (state === 'play' && now - netSyncAt >= NET_SYNC && me && me.alive && !me.exited) {
-    netSyncAt = now;
-    const c = [];
-    for (let y = me.y - NET_R; y <= me.y + NET_R; y++) for (let x = me.x - NET_R; x <= me.x + NET_R; x++){
-      if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
-      const j = y*W + x; c.push(j, grid[j], fall[j], aux[j], dir[j], vari[j]);
-    }
-    netSend({ t: 'gs', c });
   }
 }
 const isKidCell = v => v === P1 || v === P2;
@@ -4339,17 +4333,6 @@ function netGot(o){
     if (!grid || state !== 'play') return;
     netBoomIn = true; explode(o.cx, o.cy, !!o.g, false); netBoomIn = false; return;
   }
-  if (o.t === 'gs' && netRole === 'host') {
-    // the cells around the guest's kid are as the guest sees them, unless that would touch this phone's kid
-    const me = netMe(), c = o.c;
-    for (let k = 0; k < c.length; k += 6){
-      const j = c[k];
-      if (me.alive && Math.max(Math.abs(j % W - me.x), Math.abs((j / W | 0) - me.y)) <= 1) continue;
-      if (isKidCell(grid[j]) || isKidCell(c[k+1])) continue;
-      netSetCell(j, c[k+1], c[k+2], c[k+3], c[k+4], c[k+5]);
-    }
-    return;
-  }
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
@@ -4368,17 +4351,16 @@ function netGot(o){
     else if (state !== 'menu') guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
     return;
   }
-  if (o.t !== 'sy' || !players.length || !grid) return;
-  netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph };
-  if (o.lv !== level) return;
-  // the host's cave counts everywhere except around this phone's own kid
-  const G = unb64(o.g), F = unb64(o.f), A = unb64(o.a), D = unb64(o.d), V = unb64(o.v), me = netMe();
-  const mine = j => !o.full && me.alive && !me.exited && Math.max(Math.abs(j % W - me.x), Math.abs((j / W | 0) - me.y)) <= NET_R;
+  if ((o.t !== 'sy' && o.t !== 'tk') || !players.length || !grid) return;
+  netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph }; timeLeft = o.tl;
+  if (o.t === 'tk' || o.lv !== level) return;
+  // a new cave: the host's copy, in case anything differs (the kids stay as each phone has them)
+  const G = unb64(o.g), F = unb64(o.f), A = unb64(o.a), D = unb64(o.d), V = unb64(o.v);
   for (let j = 0; j < W*H; j++){
-    if (mine(j) || isKidCell(G[j]) || isKidCell(grid[j])) continue;
+    if (isKidCell(G[j]) || isKidCell(grid[j])) continue;
     netSetCell(j, G[j], F[j], A[j], D[j], V[j]);
   }
-  timeLeft = o.tl; magicState = o.ms;
+  magicState = o.ms;
 }
 function guestWait(text){
   showOverlay(`<div class="card"><h2>DOS CELULARES</h2><p style="white-space:pre-line">${text.replace(/[<&]/g, ch => ch === '<' ? '&lt;' : '&amp;')}</p>
