@@ -2003,6 +2003,7 @@ function audioOn(){
   if (ac && ac.state === 'suspended') ac.resume().catch(()=>{});
 }
 function beep(f, d, type='square', vol=.05, slide=0, delay=0){
+  if (typeof netReplaying !== 'undefined' && netReplaying) return;
   if (!ac || muted || speed > 1) return;
   const t = ac.currentTime + delay, o = ac.createOscillator(), g = ac.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t);
@@ -2389,8 +2390,8 @@ function initLevel(n){
   for (let i=0; i<W*H; i++) untouched[i] = grid[i] === ROCK ? 1 : 0;
   buttBase = 0; for (let i=0; i<W*H; i++) if (grid[i] === BUTT) buttBase++;
   timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; applyGravity(); snapCams();
-  state = 'play'; hideOverlay(); updateHud(); netFull = true;
-  if (netRole === 'host' && netLink) netSend({ t: 'lv', lv: level, tk: tickN, L: players.map(p => p.lives) });
+  state = 'play'; hideOverlay(); updateHud();
+  if (netRole === 'host' && netLink) { netSend({ t: 'lv', lv: level, tk: tickN, L: players.map(p => p.lives) }); netNewCave(); }
 }
 
 /* ---------- rules ---------- */
@@ -2428,7 +2429,6 @@ function backAt(p){
 }
 function killPlayer(p){
   if (!p.alive) return;
-  if (isRemote(p)) { p.alive = false; p.walking = false; p.doomed = false; return; }   // its own phone counts the lives
   lastDeathTick = tickN; p.dieX = p.x; p.dieY = p.y;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
@@ -2445,18 +2445,17 @@ function catchGem(p, i){
   grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
 }
 function explode(cx, cy, toGem, now){
-  let boomLocal = false;
   if (!now && deferDeaths()) {
     const caught = [];
     for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
       const t = grid[(cy+dy)*W + cx+dx];
-      if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !isRemote(p) && !(friendly() && !rockBlast)) caught.push(p); }
+      if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !(friendly() && !rockBlast)) caught.push(p); }
     }
     if (caught.length && caught.every(p => p.doomed)) return;   // already caught: the explosion is on its way
     if (caught.length) {
       // the kid on the other phone gets longer: a step it took there before seeing this can still save it
       const n = Math.max(3, Math.ceil(450 / tickMs));
-      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy, net: netBoomIn });
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy });
       holdKiller(pendingBooms[pendingBooms.length - 1]);   // what caught them waits too; nothing else does
       caught.forEach(p => { p.doomed = true; p.walking = false; p.held = []; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
       sfx.ohno();
@@ -2466,16 +2465,11 @@ function explode(cx, cy, toGem, now){
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
     if (t === STEEL || t === EXIT || t === NEST || t === STAR) continue;
-    if (t === P1 || t === P2){
-      const p = players[t-P1];
-      if (isRemote(p)) { if (!netBoomIn) continue; killPlayer(p); }   // the other phone's kid dies only when that phone says so
-      else { if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); boomLocal = true; }
-    }
+    if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); }
     if (boss[j]) { boss[j] = 0; starPending = j; }
     grid[j] = BOOM; aux[j] = 0; dir[j] = toGem ? 1 : 0; fall[j] = 0; moved[j] = 1; src[j] = -1;
   }
   sfx.boom();
-  if (boomLocal && netRole && netLink) netSend({ t: 'bm', cx, cy, g: toGem ? 1 : 0 });   // the other phone blows it up too
 }
 
 // rules of the original caves (not the random training levels, which must match the Python copy in rl/)
@@ -2495,6 +2489,7 @@ let critters = [];
 let fxSeed = 1;
 const fxRng = (...k) => rng(k.reduce((h, v) => Math.imul(h ^ (v | 0), 0x9E3779B1) ^ (h >>> 15), fxSeed | 0));
 function critterFromRock(r, d, p, force){
+  if (netReplaying) return;
   const rnd = fxRng(r, d, level, 1);
   if (!force && (rnd() > .5 || mode === 'train')) return;
   const kind = force || ['mole', 'soot', 'worm'][Math.floor(rnd() * 3)], rx = r % W, ry = r / W | 0, dx = d === 1 ? 1 : -1;
@@ -2586,7 +2581,7 @@ function drawCritters(g, ox, oy){
 
 /* A picked-up gem flies from the kid to the gem counter of that player's bar, which gives a little bounce. */
 function flyGem(p, j){
-  netFxEv(['f', p.id, j]);
+  if (netReplaying) return;
   if (mode === 'train' || speed > 1 || typeof document === 'undefined') return;
   const k = solo ? 0 : p.id, cv = CVS[k], icon = document.querySelector('#g' + k);
   if (!cv || !icon || !cv.offsetParent) return;
@@ -2616,7 +2611,7 @@ function stepPlayer(p){
   const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; p.actAt = nowT; p.x += dx; p.y += dy; p.walking = true; p.stepN++; };
   if (t === E || t === DIRT) { go(); p.push = 0; if (t === DIRT) { sfx.step(); p.dig = d; dugAt[j] = nowT; } }
   else if (t === STAR) {
-    go(); p.push = 0; sfx.open(); starFlash = { at: nowT, x: p.x, y: p.y }; netFxEv(['s', p.x, p.y, 0]);
+    go(); p.push = 0; sfx.open(); if (!netReplaying) starFlash = { at: nowT, x: p.x, y: p.y };
     if (starIsGem) { starIsGem = false; p.gems++; p.score += gemVal; if (p.ai) { p.aiR += 5; p.epGems++; } }
     const k = starKey(level); if (!starsGot[k]) { starsGot[k] = 1; try { localStorage.setItem('boulder-duo-stars', JSON.stringify(starsGot)); } catch (e) {} }
   }
@@ -2635,11 +2630,11 @@ function stepPlayer(p){
   else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && caveRules()) {
     // original caves: each tick of pushing moves the rock with probability 1/2, so on average it takes two ticks,
     // as long as a rock takes to start falling and drop one cell; with luck it goes at once, even while falling
-    if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; p.netPush = [j, j + OFF[d]]; go(); p.push = 0; if (first) { critterFromRock(j + OFF[d], d, p); netFxEv(['c', j + OFF[d], d, p.id]); } }
+    if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; go(); p.push = 0; if (first) critterFromRock(j + OFF[d], d, p); }
     else p.push++;
   }
   else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && !fall[j]) {
-    if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; p.netPush = [j, j + OFF[d]]; go(); p.push = 0; }
+    if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; go(); p.push = 0; }
   }
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
@@ -2659,7 +2654,7 @@ function runPendingBooms(){
   const due = pendingBooms.filter(e => e.at <= tickN); if (!due.length) return;
   pendingBooms = pendingBooms.filter(e => e.at > tickN);
   holdCell.fill(0); pendingBooms.forEach(holdKiller);
-  due.forEach(e => { rockBlast = e.rock; netBoomIn = !!e.net; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; netBoomIn = false; });
+  due.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
   players.forEach(p => { if (!p.alive) p.doomed = false; });
 }
 function drawOhNo(g, ox, oy){
@@ -2697,7 +2692,7 @@ function fallObj(i, x, y){
     if (k < steps) {
       const nb = grid[cur + G], cx = (cur + G) % W, cy = (cur + G) / W | 0;
       if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
-      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0 && !isRemote(players[nb - P1])) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy, nb === BUTT);
     }
     return;
@@ -2719,7 +2714,7 @@ function fallObj(i, x, y){
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
-      if (players[bt-P1].immune <= 0 && !isRemote(players[bt-P1])) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
+      if (players[bt-P1].immune <= 0) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(bx, by, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
@@ -2728,21 +2723,21 @@ function fallObj(i, x, y){
       (bt === DIRT || bt === WALL || bt === ROCK || bt === EXPW || bt === MAGIC)) {
     grid[b] = DIRT; fall[b] = 0; aux[b] = 0; src[b] = -1; fallT[b] = 0;   // the rock crumbles into the hole it broke
     grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
-    dust.push({ x: bx, y: by - 1, at: nowT }); shakeAt = nowT; sfx.crash(); hardHits++; netFxEv(['d', bx, by - 1]);
+    if (!netReplaying) { dust.push({ x: bx, y: by - 1, at: nowT }); shakeAt = nowT; } sfx.crash(); hardHits++;
     return;
   }
   if (bt === ROCK || bt === GEM || bt === WALL) {
     if (grid[i+SA] === E && grid[b+SA] === E) { move(i, i+SA); fall[i+SA] = 1; return; }
     if (grid[i+SB] === E && grid[b+SB] === E) { move(i, i+SB); fall[i+SB] = 1; return; }
   }
-  if (fall[i]) { landThisTick = true; landAt[i] = nowT; netFxEv(['l', i]); }
+  if (fall[i]) { landThisTick = true; landAt[i] = nowT; }
   fall[i] = 0; fallT[i] = 0;
 }
 
 function enemy(i, x, y, t){
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly() && !isRemote(players[n-P1])) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
     if (n === AMOEBA) { explode(x, y, t === BUTT); return; }
   }
   const d = dir[i];
@@ -2767,12 +2762,11 @@ function amoebaCell(i){
 let tickN = 0, lastDeathTick = -99;
 function tick(){
   tickN++; moved.fill(0);
-  if (netRole) crng = rng(Math.imul(fxSeed ^ tickN, 0x9E3779B1) ^ level);   // two phones: the same chance at the same tick
+  if (netRole) { netRngS = Math.imul(fxSeed ^ tickN, 0x9E3779B1) ^ level; crng = netRng; }   // two phones: the same chance at the same tick
   if (pendingBooms.length) runPendingBooms(); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
-  const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
+  const order = (netRole ? tickN : frame) & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
-    if (isRemote(p)) return;   // the other phone moves it
     if (!ownClock(p)) return stepPlayer(p);
     if (!p.held.length) { p.idle++; p.walking = false; p.push = 0; }   // standing still: count the idle time
   });
@@ -2786,12 +2780,12 @@ function tick(){
     const t = grid[i];
     if (t === ROCK || t === GEM) fallObj(i, x, y);
     else if (t === FIRE || t === BUTT) enemy(i, x, y, t);
-    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = i === starPending ? STAR : dir[i] ? GEM : E; if (i === starPending) { starPending = -1; starIsGem = !!dir[i]; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; netFxEv(['s', i % W, i / W | 0, 1]); } dir[i] = 0; fall[i] = 0; } }
+    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = i === starPending ? STAR : dir[i] ? GEM : E; if (i === starPending) { starPending = -1; starIsGem = !!dir[i]; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; } dir[i] = 0; fall[i] = 0; } }
     else if (t === AMOEBA) amoebaCell(i);
     else if (t === NEST) {
       // a butterfly comes out every few seconds while it has fewer than 8 of its own about
       if (++aux[i] >= Math.round(3000 / tickMs) && buttCount < buttBase + 8) {
-        for (const k of [0, 3, 1, 2]) { const j = i + OFF[k]; if (grid[j] === E) { grid[j] = BUTT; dir[j] = Math.floor(crng() * 4); moved[j] = 1; vari[j] = Math.floor(crng() * 240); src[j] = -1; aux[i] = 0; nestPuff.push({ i: j, at: nowT }); netFxEv(['n', j]); break; } }
+        for (const k of [0, 3, 1, 2]) { const j = i + OFF[k]; if (grid[j] === E) { grid[j] = BUTT; dir[j] = Math.floor(crng() * 4); moved[j] = 1; vari[j] = Math.floor(crng() * 240); src[j] = -1; aux[i] = 0; if (!netReplaying) nestPuff.push({ i: j, at: nowT }); break; } }
       }
     }
     else if (t === STAR) {}
@@ -2808,7 +2802,6 @@ function tick(){
 
   let soloAgain = false;
   players.forEach(p => {
-    if (isRemote(p)) return;
     if (p.immune > 0) p.immune--;
     if (!p.alive && !p.exited && p.respawn > 0 && --p.respawn === 0){
       if (solo) { soloAgain = true; return; }   // one player: the cave starts over, as in the original
@@ -2819,7 +2812,7 @@ function tick(){
   });
 
   if (soloAgain) { initLevel(level); return; }
-  if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; exitOpenAt = nowT; sfx.open(); netFxEv(['e']); }
+  if (!exitOpenShown && exitVisiblyOpen()) { exitOpenShown = true; exitOpenAt = nowT; sfx.open(); }
 
   // the clock runs with the cave's pace: a cave second is 1000 ms at the normal pace (cave 3's), longer in the
   // slow easy caves and shorter in the fast hard ones, just like the kids' steps
@@ -3927,7 +3920,7 @@ function renderView(k){
       const px = x*T - ox, py = y*T - oy;
       g.drawImage(TL.DIRT[DVAR[i]], px, py, T, T);
       g.save(); g.beginPath(); g.rect(px, py, T, T); g.clip(); g.fillStyle = '#000';
-      g.beginPath(); g.arc(px + T/2, py + T/2, T * .72 * Math.min(1, dk * 1.15), 0, Math.PI * 2); g.fill(); g.restore();
+      g.beginPath(); g.arc(px + T/2, py + T/2, T * .72 * Math.max(0, Math.min(1, dk * 1.15)), 0, Math.PI * 2); g.fill(); g.restore();
     }
     if (!s) continue;
     const from = src[i], gk = glideK(i);
@@ -4117,7 +4110,7 @@ function loop(now){
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
     let n = 0;
     if (netRole === 'guest') n = netGuestTicks();
-    else while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; }
+    else while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; if (netRole) { netSave(); netSettle(); } }
     if (n >= cap) worldT = simT;
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
@@ -4125,7 +4118,7 @@ function loop(now){
       // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
       // noticed it, or each step would run late by part of a frame and the walk would pulse
       const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
-      nowT = t0; stepPlayer(p); p.nextAt = t0 + tickMs;
+      nowT = t0; if (netRole) netStep(p, t0); else stepPlayer(p); p.nextAt = t0 + tickMs;
       if (state === 'play') checkEnd();
     });
   } else worldT = simT;
@@ -4255,93 +4248,112 @@ const BT = (() => {
   if (C.Plugins && C.Plugins.BtLink) return C.Plugins.BtLink;
   return C.registerPlugin ? C.registerPlugin('BtLink') : null;
 })();
-let netRole = null, netPeer = '', netLink = false, netFull = true, netSt = '', netKeyP = '', netSyncAt = 0;
-let netT0 = null, netOffs = [], netBoomIn = false;
-const NET_BEAT = 1000;   // ms between the host's clock beats (they keep the ticks of both phones together)
+let netRole = null, netPeer = '', netLink = false, netSt = '', netSyncAt = 0;
+let netT0 = null, netOffs = [];
+const NET_BEAT = 1000, NET_HIST = 60;   // ms between the host's clock beats; ticks of history kept for going back
 const b64 = a => { let t = ''; for (let i = 0; i < a.length; i++) t += String.fromCharCode(a[i]); return btoa(t); };
 const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
-function netFxEv(){}   // each phone's own engine makes its effects
 function netSend(o){ if (BT && netLink) BT.send({ data: JSON.stringify(o) }).catch(() => {}); }
-/* Each phone runs the whole cave with its own engine, at the same ticks and with the same chance (the seed and the
-   tick number), so most of the time both see the same without being told. Each one is the boss of its own kid: it
-   moves it, decides if it dies, and tells the other, where that kid is a puppet that only moves as told; rocks it
-   pushes and explosions that kill it go along too. Nothing else is sent: a beat of the host's clock each second,
-   and a copy of the cave when one starts (both build it the same way anyway). */
+/* Two phones, one cave (rollback): both run the same engine at the same ticks with the same chance, so the cave only
+   depends on what the kids do. Each phone sends just its kid's steps, stamped with their tick ("tick 152: right").
+   The steps of a tick always go in the same order on both phones: J1's, then J2's. A step from the other phone
+   arrives a little late: this phone goes back to the copy it kept of that tick, puts the step in its place and
+   works the ticks out again up to now (quietly: no sounds or effects twice). Both end up with exactly the same cave;
+   when both kids reach for the same thing in the same tick, J1 goes first on both, so they agree on who got it. */
 const isRemote = p => !!(netRole && p && (netRole === 'host' ? p.id === 1 : p.id === 0));
 const netMe = () => players[netRole === 'host' ? 0 : 1];
-function netPState(p){ return { id: p.id, x: p.x, y: p.y, f: p.face, s: p.stepN, d: p.dig, w: p.walking ? 1 : 0, al: p.alive ? 1 : 0, ex: p.exited ? 1 : 0, g: p.gems, l: p.lives, r: p.respawn, im: p.immune, dm: p.doomed ? 1 : 0, i: p.idle, sc: p.score, wi: p.wins || 0 }; }
+let netRngS = 0, netReplaying = false, netLog = [], netHist = new Map(), netSeq = 0, netLate = 0, netRolls = 0;
+// no sound twice: going back over ticks already played is silent
+Object.keys(sfx).forEach(k => { const f = sfx[k]; sfx[k] = (...a) => netReplaying ? undefined : f(...a); });
+function netRng(){ netRngS = netRngS + 0x6D2B79F5 | 0; let t = Math.imul(netRngS ^ netRngS >>> 15, 1 | netRngS); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt'];
+// a copy of everything the game needs, taken after each tick
+function netSave(){
+  if (!netRole || !grid) return;
+  netHist.set(tickN, {
+    t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell].map(a => a.slice()),
+    pb: pendingBooms.map(e => ({ ...e })), p: players.map(q => PKEYS.map(k => q[k])),
+    sc: [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS] });
+  netHist.delete(tickN - NET_HIST);
+}
+function netLoad(k){
+  const h = netHist.get(k);
+  [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell].forEach((a, i) => a.set(h.A[i]));
+  pendingBooms = h.pb.map(e => ({ ...e })); players.forEach((q, i) => PKEYS.forEach((k2, j) => { q[k2] = h.p[i][j]; }));
+  [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS] = h.sc;
+  tickN = k;
+}
+const netKey = e => e.k * 1e6 + e.id * 1e5 + e.s;   // order inside a tick: J1 before J2, then in the order they were taken
+function netDo(e, t){
+  const p = players[e.id], h = p.held;
+  p.held = [e.d]; nowT = Math.min(t, simT); stepPlayer(p); p.held = h; e.done = true;   // never a time ahead of the screen
+}
+// put the steps of the log in their place: straight away if they are the newest, else go back and work it out again
+function netSettle(){
+  if (!grid || state !== 'play') return;
+  const todo = netLog.filter(e => !e.done && e.lv === level && e.k <= tickN);
+  if (!todo.length) return;
+  let first = todo[0]; for (const e of todo) if (netKey(e) < netKey(first)) first = e;
+  const later = netLog.some(e => e.done && e.lv === level && netKey(e) > netKey(first));
+  if (first.k === tickN && !later) { todo.sort((a, b) => netKey(a) - netKey(b)).forEach(e => netDo(e, simT)); return; }
+  const k0 = first.k;
+  if (!netHist.has(k0)) { netLate++; todo.forEach(e => netDo(e, simT)); return; }   // too old to go back: just take it
+  const now = tickN, liveT = worldT, keepNow = nowT;
+  netReplaying = true; netRolls++;
+  netLoad(k0);
+  netLog.forEach(e => { if (e.lv === level && e.k >= k0) e.done = false; });
+  for (let k = k0; k <= now; k++){
+    const base = netHist.get(k);
+    netLog.filter(e => e.lv === level && e.k === k).sort((a, b) => netKey(a) - netKey(b)).forEach(e => netDo(e, (base ? base.t : liveT) + (e.ph || 0)));
+    if (k === now || state !== 'play') break;
+    const next = netHist.get(k + 1);
+    worldT = nowT = next ? next.t : liveT; tick(); netSave();
+  }
+  netReplaying = false; worldT = liveT; nowT = keepNow;
+}
+// this phone's kid takes a step: into the log, done here at once (in order), and off to the other phone
+function netStep(p, t0){
+  const d = p.held[p.held.length - 1], e = { k: tickN, id: p.id, d, s: ++netSeq, lv: level, ph: Math.max(0, Math.round(t0 - worldT)) };
+  netLog.push(e); netSettle();
+  netSend({ t: 'a', k: e.k, id: e.id, d, s: e.s, lv: e.lv, ph: e.ph });
+}
+function netNewCave(){ netHist.clear(); netLog = netLog.filter(e => e.lv === level && e.k >= tickN); netSave(); }
+function netTrim(){ const old = tickN - NET_HIST; if (netLog.length > 400 || netLog.some(e => e.k < old)) netLog = netLog.filter(e => e.k >= old && e.lv === level); }
 function netClockSeen(hw){ const now = performance.now(); netOffs.push([now - hw, now]); netOffs = netOffs.filter(x => now - x[1] < 4000); }
 const netOff = () => { let o = Infinity; for (const x of netOffs) o = Math.min(o, x[0]); return o; };
 // guest: run ticks in step with the host's (its clock as seen here, a little behind by the trip over the air)
 function netGuestTicks(){
   if (!netT0 || !netOffs.length) return 0;
   const k = netT0.tk + Math.floor((performance.now() - netOff() - netT0.at) / tickMs);
-  if (k - tickN > 8) tickN = k - 1;
   let n = 0;
-  while (tickN < k && state === 'play' && n < 8) { worldT = simT; nowT = simT; tick(); n++; }
+  while (tickN < k && state === 'play' && n < 8) { worldT = simT; nowT = simT; tick(); netSave(); netSettle(); n++; }
   return n;
 }
 function netFrame(){
   if (!netRole || !netLink || !players.length || !grid) return;
-  const now = performance.now(), me = netMe();
-  if (me && state !== 'menu') {
-    const st = netPState(me), key = JSON.stringify(st);
-    if (key !== netKeyP || me.netPush) { netKeyP = key; if (me.netPush) { st.pu = me.netPush; me.netPush = null; } netSend({ t: 'pl', ...st }); }
-  }
+  const now = performance.now();
+  netTrim();
   if (netRole === 'host') {
     if (state !== netSt) { netSt = state; netSend({ t: 'st', st: state, ov: state === 'play' || state === 'menu' ? '' : [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300) }); }
-    if (state === 'play' && netFull) {
-      netFull = false; netSyncAt = now;
-      netSend({ t: 'sy', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), lv: level, tl: timeLeft, ms: magicState,
-                g: b64(grid), f: b64(fall), a: b64(aux), d: b64(dir), v: b64(vari) });
-    } else if (state === 'play' && now - netSyncAt >= NET_BEAT) {
-      netSyncAt = now;
-      netSend({ t: 'tk', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), tl: timeLeft });
-    }
+    if (state === 'play' && now - netSyncAt >= NET_BEAT) { netSyncAt = now; netSend({ t: 'tk', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT) }); }
   }
-}
-const isKidCell = v => v === P1 || v === P2;
-function netSetCell(j, g, f, a, d, v){
-  if (grid[j] === g && fall[j] === f && dir[j] === d) { aux[j] = a; return; }
-  grid[j] = g; fall[j] = f; aux[j] = a; dir[j] = d; vari[j] = v; src[j] = -1;
-}
-// the other kid, as its phone says
-function applyPuppet(p, a){
-  const was = p.doomed, wasOut = p.exited, i0 = p.y*W + p.x, j = a.y*W + a.x;
-  if (a.pu) { const [rf, rt] = a.pu; if (grid[rf] === ROCK && grid[rt] === E) { const f = fall[rf]; move(rf, rt); fall[rt] = f; } }
-  const there = p.alive && !p.exited && grid[i0] === p.cell;
-  if (there && (i0 !== j || !a.al || a.ex)) grid[i0] = E;
-  if (a.al && !a.ex && grid[j] !== p.cell) {
-    const t = grid[j];
-    if (!isKidCell(t)) {
-      const near = there && Math.abs(a.x - p.x) + Math.abs(a.y - p.y) === 1;
-      if (t === DIRT) dugAt[j] = simT;
-      grid[j] = p.cell; fall[j] = 0; aux[j] = 0; src[j] = near ? i0 : -1; srcAt[j] = simT;
-      if (near) p.actAt = simT;
-    }
-  }
-  p.x = a.x; p.y = a.y; p.face = a.f; p.stepN = a.s; p.dig = a.d; p.walking = !!a.w; p.alive = !!a.al; p.exited = !!a.ex;
-  p.gems = a.g; p.lives = a.l; p.respawn = a.r; p.immune = a.im; p.doomed = !!a.dm; p.idle = a.i; p.score = a.sc; p.wins = a.wi;
-  if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; sfx.ohno(); }
-  if (p.exited && !wasOut) { sfx.exit(); if (netRole === 'host' && (mode === 'versus' || mode === 'pc')) roundWin(p); }
-  updateHud();
 }
 function netGot(o){
-  if (o.t === 'pl') { const p = players[o.id]; if (p && isRemote(p) && grid) applyPuppet(p, o); return; }
-  if (o.t === 'bm') {
-    // a kid blew up on the other phone: here too (this engine leaves that kid alone otherwise)
-    if (!grid || state !== 'play') return;
-    netBoomIn = true; explode(o.cx, o.cy, !!o.g, false); netBoomIn = false; return;
+  if (o.t === 'a') {
+    // a step of the other kid, at its tick
+    if (!grid || o.lv !== level || netLog.some(e => e.id === o.id && e.s === o.s)) return;
+    netLog.push({ k: o.k, id: o.id, d: o.d, s: o.s, lv: o.lv, ph: o.ph });
+    netSettle(); return;
   }
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
     caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
-    startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; return;
+    startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; netNewCave(); return;
   }
   if (o.t === 'lv') {
     if (state === 'menu' || !players.length) return;
-    initLevel(o.lv); tickN = o.tk | 0; (o.L || []).forEach((l, k) => { if (players[k]) players[k].lives = l; }); return;
+    initLevel(o.lv); tickN = o.tk | 0; (o.L || []).forEach((l, k) => { if (players[k]) players[k].lives = l; }); netNewCave(); return;
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
   if (o.t === 'st') {
@@ -4351,16 +4363,7 @@ function netGot(o){
     else if (state !== 'menu') guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
     return;
   }
-  if ((o.t !== 'sy' && o.t !== 'tk') || !players.length || !grid) return;
-  netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph }; timeLeft = o.tl;
-  if (o.t === 'tk' || o.lv !== level) return;
-  // a new cave: the host's copy, in case anything differs (the kids stay as each phone has them)
-  const G = unb64(o.g), F = unb64(o.f), A = unb64(o.a), D = unb64(o.d), V = unb64(o.v);
-  for (let j = 0; j < W*H; j++){
-    if (isKidCell(G[j]) || isKidCell(grid[j])) continue;
-    netSetCell(j, G[j], F[j], A[j], D[j], V[j]);
-  }
-  magicState = o.ms;
+  if (o.t === 'tk' && players.length) { netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph }; }
 }
 function guestWait(text){
   showOverlay(`<div class="card"><h2>DOS CELULARES</h2><p style="white-space:pre-line">${text.replace(/[<&]/g, ch => ch === '<' ? '&lt;' : '&amp;')}</p>
@@ -4430,7 +4433,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); netFull = true; };
+  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
