@@ -2390,6 +2390,7 @@ function initLevel(n){
   buttBase = 0; for (let i=0; i<W*H; i++) if (grid[i] === BUTT) buttBase++;
   timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; applyGravity(); snapCams();
   state = 'play'; hideOverlay(); updateHud(); netFull = true;
+  if (netRole === 'host' && netLink) netSend({ t: 'lv', lv: level, tk: tickN, L: players.map(p => p.lives) });
 }
 
 /* ---------- rules ---------- */
@@ -2427,6 +2428,7 @@ function backAt(p){
 }
 function killPlayer(p){
   if (!p.alive) return;
+  if (isRemote(p)) { p.alive = false; p.walking = false; p.doomed = false; return; }   // its own phone counts the lives
   lastDeathTick = tickN; p.dieX = p.x; p.dieY = p.y;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
@@ -2443,17 +2445,18 @@ function catchGem(p, i){
   grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
 }
 function explode(cx, cy, toGem, now){
+  let boomLocal = false;
   if (!now && deferDeaths()) {
     const caught = [];
     for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
       const t = grid[(cy+dy)*W + cx+dx];
-      if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !(friendly() && !rockBlast)) caught.push(p); }
+      if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !isRemote(p) && !(friendly() && !rockBlast)) caught.push(p); }
     }
     if (caught.length && caught.every(p => p.doomed)) return;   // already caught: the explosion is on its way
     if (caught.length) {
       // the kid on the other phone gets longer: a step it took there before seeing this can still save it
-      const n = Math.max(3, Math.ceil((netRole === 'host' && caught.includes(players[1]) ? 900 : 450) / tickMs));
-      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy });
+      const n = Math.max(3, Math.ceil(450 / tickMs));
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy, net: netBoomIn });
       holdKiller(pendingBooms[pendingBooms.length - 1]);   // what caught them waits too; nothing else does
       caught.forEach(p => { p.doomed = true; p.walking = false; p.held = []; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
       sfx.ohno();
@@ -2463,11 +2466,16 @@ function explode(cx, cy, toGem, now){
   for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
     if (t === STEEL || t === EXIT || t === NEST || t === STAR) continue;
-    if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); }
+    if (t === P1 || t === P2){
+      const p = players[t-P1];
+      if (isRemote(p)) { if (!netBoomIn) continue; killPlayer(p); }   // the other phone's kid dies only when that phone says so
+      else { if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); boomLocal = true; }
+    }
     if (boss[j]) { boss[j] = 0; starPending = j; }
     grid[j] = BOOM; aux[j] = 0; dir[j] = toGem ? 1 : 0; fall[j] = 0; moved[j] = 1; src[j] = -1;
   }
   sfx.boom();
+  if (boomLocal && netRole && netLink) netSend({ t: 'bm', cx, cy, g: toGem ? 1 : 0 });   // the other phone blows it up too
 }
 
 // rules of the original caves (not the random training levels, which must match the Python copy in rl/)
@@ -2622,16 +2630,16 @@ function stepPlayer(p){
     grid[i] = E; p.alive = false; p.exited = true; p.x += dx; p.y += dy;
     p.score += timeLeft * 2; sfx.exit();
     if (p.ai && aiKind !== 'astar') { AI.exits++; aiTerminal(p, 60, 'x'); }
-    if (mode === 'versus' || mode === 'pc') roundWin(p);
+    if ((mode === 'versus' || mode === 'pc') && netRole !== 'guest') roundWin(p);
   }
   else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && caveRules()) {
     // original caves: each tick of pushing moves the rock with probability 1/2, so on average it takes two ticks,
     // as long as a rock takes to start falling and drop one cell; with luck it goes at once, even while falling
-    if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; go(); p.push = 0; if (first) { critterFromRock(j + OFF[d], d, p); netFxEv(['c', j + OFF[d], d, p.id]); } }
+    if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; p.netPush = [j, j + OFF[d]]; go(); p.push = 0; if (first) { critterFromRock(j + OFF[d], d, p); netFxEv(['c', j + OFF[d], d, p.id]); } }
     else p.push++;
   }
   else if (t === ROCK && canPush(d) && grid[j + OFF[d]] === E && !fall[j]) {
-    if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; go(); p.push = 0; }
+    if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; p.netPush = [j, j + OFF[d]]; go(); p.push = 0; }
   }
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
 }
@@ -2651,7 +2659,7 @@ function runPendingBooms(){
   const due = pendingBooms.filter(e => e.at <= tickN); if (!due.length) return;
   pendingBooms = pendingBooms.filter(e => e.at > tickN);
   holdCell.fill(0); pendingBooms.forEach(holdKiller);
-  due.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
+  due.forEach(e => { rockBlast = e.rock; netBoomIn = !!e.net; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; netBoomIn = false; });
   players.forEach(p => { if (!p.alive) p.doomed = false; });
 }
 function drawOhNo(g, ox, oy){
@@ -2689,7 +2697,7 @@ function fallObj(i, x, y){
     if (k < steps) {
       const nb = grid[cur + G], cx = (cur + G) % W, cy = (cur + G) / W | 0;
       if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
-      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0 && !isRemote(players[nb - P1])) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy, nb === BUTT);
     }
     return;
@@ -2711,7 +2719,7 @@ function fallObj(i, x, y){
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
-      if (players[bt-P1].immune <= 0) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
+      if (players[bt-P1].immune <= 0 && !isRemote(players[bt-P1])) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(bx, by, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
@@ -2734,7 +2742,7 @@ function fallObj(i, x, y){
 function enemy(i, x, y, t){
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly() && !isRemote(players[n-P1])) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
     if (n === AMOEBA) { explode(x, y, t === BUTT); return; }
   }
   const d = dir[i];
@@ -2759,11 +2767,13 @@ function amoebaCell(i){
 let tickN = 0, lastDeathTick = -99;
 function tick(){
   tickN++; moved.fill(0);
+  if (netRole) crng = rng(Math.imul(fxSeed ^ tickN, 0x9E3779B1) ^ level);   // two phones: the same chance at the same tick
   if (pendingBooms.length) runPendingBooms(); landThisTick = false;
   players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = frame & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
-    if (!ownClock(p)) return netRole === 'host' && p.id === 1 ? undefined : stepPlayer(p);
+    if (isRemote(p)) return;   // the other phone moves it
+    if (!ownClock(p)) return stepPlayer(p);
     if (!p.held.length) { p.idle++; p.walking = false; p.push = 0; }   // standing still: count the idle time
   });
   if (state !== 'play') return;
@@ -2798,6 +2808,7 @@ function tick(){
 
   let soloAgain = false;
   players.forEach(p => {
+    if (isRemote(p)) return;
     if (p.immune > 0) p.immune--;
     if (!p.alive && !p.exited && p.respawn > 0 && --p.respawn === 0){
       if (solo) { soloAgain = true; return; }   // one player: the cave starts over, as in the original
@@ -2822,7 +2833,7 @@ function tick(){
 const active = () => players.filter(p => !p.exited && (p.alive || p.respawn > 0)).length;
 
 function checkEnd(){
-  if (state !== 'play') return;
+  if (state !== 'play' || netRole === 'guest') return;   // two phones: the host decides how a cave ends
   if (hlTrain()) {
     // learning a cave: every life of the PC is one attempt at the same cave
     const a = players[1];
@@ -4101,16 +4112,16 @@ function loop(now){
   const dt = Math.min(250, now - last); last = now;
   if (turbo || simHook) { acc = 0; if (turbo) { drawTurbo(); drawAiPanel(); } else render(); requestAnimationFrame(loop); return; }
   // the guest phone only draws: the cave runs on the host
-  if (netRole === 'guest') { if (state === 'play') simT += dt; worldT = simT; netInput(); frame++; render(); requestAnimationFrame(loop); return; }
     if (state === 'play') {
     simT += dt * speed;
     const cap = speed >= 1000 ? 600 : Math.ceil(speed * 2.2);
     let n = 0;
-    while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; }
+    if (netRole === 'guest') n = netGuestTicks();
+    else while (simT - worldT >= tickMs && state === 'play' && n < cap) { worldT += tickMs; nowT = worldT; tick(); n++; }
     if (n >= cap) worldT = simT;
     // players with their own clock: a step starts the moment the key is held and the previous step is over
     players.forEach(p => {
-      if (state !== 'play' || p.doomed || (netRole === 'host' && p.id === 1) || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
+      if (state !== 'play' || p.doomed || isRemote(p) || !ownClock(p) || !p.alive || !p.held.length || simT < p.nextAt) return;
       // keep the cadence while the key stays held: the step starts at its scheduled time, not at the frame that
       // noticed it, or each step would run late by part of a frame and the walk would pulse
       const t0 = simT - p.nextAt < 50 ? p.nextAt : simT;
@@ -4244,154 +4255,145 @@ const BT = (() => {
   if (C.Plugins && C.Plugins.BtLink) return C.Plugins.BtLink;
   return C.registerPlugin ? C.registerPlugin('BtLink') : null;
 })();
-let netRole = null, netPeer = '', netLink = false;
-let netSentG = new Uint8Array(W*H), netSentV = new Uint8Array(W*H), netSentD = new Uint8Array(W*H);
-let netAG = new Uint8Array(W*H), netPend = [], netSeqN = 0, netPred = [];   // guest: the host's cells, its own steps not yet confirmed
-let netSentB = new Uint8Array(W*H), netMovedAt = new Float64Array(W*H).fill(-1e9), netEv = [];
-let netSrcAt = new Float64Array(W*H), netDugAt = new Float64Array(W*H), netKey = '', netSt = '', netFull = true, netFx = [], netHeld = -2;
+let netRole = null, netPeer = '', netLink = false, netFull = true, netSt = '', netKeyP = '', netSyncAt = 0;
+let netT0 = null, netOffs = [], netBoomIn = false;
+const NET_SYNC = 300, NET_R = 2;   // ms between cave comparisons; the remote kid's own patch: cells this close to it
 const b64 = a => { let t = ''; for (let i = 0; i < a.length; i++) t += String.fromCharCode(a[i]); return btoa(t); };
 const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
-// effects (dust, critters, gems flying, the star...) go along as events; the guest draws its own, not in step
-function netFxEv(e){ if (netRole === 'host' && netLink && state === 'play') netEv.push(e); }
+function netFxEv(){}   // each phone's own engine makes its effects
 function netSend(o){ if (BT && netLink) BT.send({ data: JSON.stringify(o) }).catch(() => {}); }
-// every sound the host plays during a game is played on the guest too
-Object.keys(sfx).forEach(k => { const f = sfx[k]; sfx[k] = (...a) => { if (netRole === 'host' && state !== 'menu') netFx.push(k); return f(...a); }; });
+/* Each phone runs the whole cave with its own engine, at the same ticks and with the same chance (the seed and the
+   tick number), so most of the time both see the same without being told. Each one is the boss of its own kid: it
+   moves it, decides if it dies, and tells the other, where that kid is a puppet that only moves as told. Every
+   0.3 s they compare: the host's cave counts everywhere except the cells around the guest's kid, where the
+   guest's counts. Explosions that kill a kid are sent too, since the other engine does not touch that kid. */
+const isRemote = p => !!(netRole && p && (netRole === 'host' ? p.id === 1 : p.id === 0));
+const netMe = () => players[netRole === 'host' ? 0 : 1];
+function netPState(p){ return { id: p.id, x: p.x, y: p.y, f: p.face, s: p.stepN, d: p.dig, w: p.walking ? 1 : 0, al: p.alive ? 1 : 0, ex: p.exited ? 1 : 0, g: p.gems, l: p.lives, r: p.respawn, im: p.immune, dm: p.doomed ? 1 : 0, i: p.idle, sc: p.score, wi: p.wins || 0 }; }
+function netClockSeen(hw){ const now = performance.now(); netOffs.push([now - hw, now]); netOffs = netOffs.filter(x => now - x[1] < 4000); }
+const netOff = () => { let o = Infinity; for (const x of netOffs) o = Math.min(o, x[0]); return o; };
+// guest: run ticks in step with the host's (its clock as seen here, a little behind by the trip over the air)
+function netGuestTicks(){
+  if (!netT0 || !netOffs.length) return 0;
+  const k = netT0.tk + Math.floor((performance.now() - netOff() - netT0.at) / tickMs);
+  if (k - tickN > 8) tickN = k - 1;
+  let n = 0;
+  while (tickN < k && state === 'play' && n < 8) { worldT = simT; nowT = simT; tick(); n++; }
+  return n;
+}
 function netFrame(){
-  // host: send what changed since the last message (everything at the start of a cave)
-  if (netRole !== 'host' || !netLink || !grid || (state === 'menu' && !netFull)) return;
-  const full = netFull, c = [], m = [], dg = [];
-  for (let j = 0; j < W*H; j++){
-    if (full || grid[j] !== netSentG[j] || vari[j] !== netSentV[j] || dir[j] !== netSentD[j] || boss[j] !== netSentB[j]) { if (!full) c.push(j, grid[j], vari[j], dir[j], boss[j]); netSentG[j] = grid[j]; netSentV[j] = vari[j]; netSentD[j] = dir[j]; netSentB[j] = boss[j]; }
-    if (src[j] >= 0 && srcAt[j] !== netSrcAt[j]) { m.push(j, src[j]); netSrcAt[j] = srcAt[j]; }
-    if (dugAt[j] !== netDugAt[j]) { if (dugAt[j] > 0) dg.push(j); netDugAt[j] = dugAt[j]; }
+  if (!netRole || !netLink || !players.length || !grid) return;
+  const now = performance.now(), me = netMe();
+  if (me && state !== 'menu') {
+    const st = netPState(me), key = JSON.stringify(st);
+    if (key !== netKeyP || me.netPush) { netKeyP = key; if (me.netPush) { st.pu = me.netPush; me.netPush = null; } netSend({ t: 'pl', ...st }); }
   }
-  const P = players.map(p => [p.x, p.y, p.face, p.walking ? 1 : 0, p.dig, p.stepN, p.alive ? 1 : 0, p.exited ? 1 : 0, p.respawn, p.immune, p.gems, p.lives, p.score, p.doomed ? 1 : 0, p.wins || 0, p.idle, p.netSeq || 0]);
-  const key = JSON.stringify(P) + state + timeLeft + level + magicState;
-  if (!full && !c.length && !m.length && !dg.length && !netFx.length && !netEv.length && key === netKey) return;
-  const msg = { t: 's', lv: level, st: state, tl: timeLeft, ms: magicState, P, m, dg, fx: netFx.splice(0), ev: netEv.splice(0) };
-  if (full) { msg.g = b64(grid); msg.v = b64(vari); msg.d = b64(dir); msg.b = b64(boss); } else msg.c = c;
-  if (state !== netSt) { netSt = state; if (state !== 'play') msg.ov = [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300); }
-  netKey = key; netFull = false; netSend(msg);
+  if (netRole === 'host') {
+    if (state !== netSt) { netSt = state; netSend({ t: 'st', st: state, ov: state === 'play' || state === 'menu' ? '' : [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300) }); }
+    if (state === 'play' && (netFull || now - netSyncAt >= NET_SYNC)) {
+      netSyncAt = now;
+      netSend({ t: 'sy', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT), lv: level, tl: timeLeft, ms: magicState, full: netFull ? 1 : 0,
+                g: b64(grid), f: b64(fall), a: b64(aux), d: b64(dir), v: b64(vari) });
+      netFull = false;
+    }
+  } else if (state === 'play' && now - netSyncAt >= NET_SYNC && me && me.alive && !me.exited) {
+    netSyncAt = now;
+    const c = [];
+    for (let y = me.y - NET_R; y <= me.y + NET_R; y++) for (let x = me.x - NET_R; x <= me.x + NET_R; x++){
+      if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
+      const j = y*W + x; c.push(j, grid[j], fall[j], aux[j], dir[j], vari[j]);
+    }
+    netSend({ t: 'gs', c });
+  }
+}
+const isKidCell = v => v === P1 || v === P2;
+function netSetCell(j, g, f, a, d, v){
+  if (grid[j] === g && fall[j] === f && dir[j] === d) { aux[j] = a; return; }
+  grid[j] = g; fall[j] = f; aux[j] = a; dir[j] = d; vari[j] = v; src[j] = -1;
+}
+// the other kid, as its phone says
+function applyPuppet(p, a){
+  const was = p.doomed, wasOut = p.exited, i0 = p.y*W + p.x, j = a.y*W + a.x;
+  if (a.pu) { const [rf, rt] = a.pu; if (grid[rf] === ROCK && grid[rt] === E) { const f = fall[rf]; move(rf, rt); fall[rt] = f; } }
+  const there = p.alive && !p.exited && grid[i0] === p.cell;
+  if (there && (i0 !== j || !a.al || a.ex)) grid[i0] = E;
+  if (a.al && !a.ex && grid[j] !== p.cell) {
+    const t = grid[j];
+    if (!isKidCell(t)) {
+      const near = there && Math.abs(a.x - p.x) + Math.abs(a.y - p.y) === 1;
+      if (t === DIRT) dugAt[j] = simT;
+      grid[j] = p.cell; fall[j] = 0; aux[j] = 0; src[j] = near ? i0 : -1; srcAt[j] = simT;
+      if (near) p.actAt = simT;
+    }
+  }
+  p.x = a.x; p.y = a.y; p.face = a.f; p.stepN = a.s; p.dig = a.d; p.walking = !!a.w; p.alive = !!a.al; p.exited = !!a.ex;
+  p.gems = a.g; p.lives = a.l; p.respawn = a.r; p.immune = a.im; p.doomed = !!a.dm; p.idle = a.i; p.score = a.sc; p.wins = a.wi;
+  if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; sfx.ohno(); }
+  if (p.exited && !wasOut) { sfx.exit(); if (netRole === 'host' && (mode === 'versus' || mode === 'pc')) roundWin(p); }
+  updateHud();
 }
 function netGot(o){
-  if (o.t === 'in' && netRole === 'host') { const p = players[1]; if (p && !p.ai) p.held = o.d < 0 ? [] : [o.d]; return; }
-  if (o.t === 'mv' && netRole === 'host') {
-    // a step the guest already took on its screen: take it here now (this phone still decides what really happens)
-    const p = players[1]; if (!p || p.ai || state !== 'play') return;
-    if (p.doomed) {
-      // on its own screen it moved before seeing the end, so it got away: what only it set off (a rock on its
-      // head, a firefly touching it) does not go off, unless the other kid is caught in it too
-      const inBlast = (e, q) => q && q.alive && Math.abs(q.x - e.cx) <= 1 && Math.abs(q.y - e.cy) <= 1;
-      pendingBooms = pendingBooms.filter(e => !(e.by === p && !inBlast(e, players[0])));
-      holdCell.fill(0); pendingBooms.forEach(holdKiller);
-      if (!pendingBooms.some(e => inBlast(e, p))) { p.doomed = false; p.ohnoUntil = -1e9; }
+  if (o.t === 'pl') { const p = players[o.id]; if (p && isRemote(p) && grid) applyPuppet(p, o); return; }
+  if (o.t === 'bm') {
+    // a kid blew up on the other phone: here too (this engine leaves that kid alone otherwise)
+    if (!grid || state !== 'play') return;
+    netBoomIn = true; explode(o.cx, o.cy, !!o.g, false); netBoomIn = false; return;
+  }
+  if (o.t === 'gs' && netRole === 'host') {
+    // the cells around the guest's kid are as the guest sees them, unless that would touch this phone's kid
+    const me = netMe(), c = o.c;
+    for (let k = 0; k < c.length; k += 6){
+      const j = c[k];
+      if (me.alive && Math.max(Math.abs(j % W - me.x), Math.abs((j / W | 0) - me.y)) <= 1) continue;
+      if (isKidCell(grid[j]) || isKidCell(c[k+1])) continue;
+      netSetCell(j, c[k+1], c[k+2], c[k+3], c[k+4], c[k+5]);
     }
-    const f0 = netFx.length, e0 = netEv.length;
-    p.held = [o.d]; nowT = simT; stepPlayer(p); p.nextAt = simT + tickMs; p.netSeq = o.s;
-    netFx.splice(f0);   // its sounds already played over there
-    netEv.splice(e0, netEv.length - e0, ...netEv.slice(e0).filter(e => !(e[0] === 'f' && e[1] === 1)));
-    checkEnd(); return;
+    return;
   }
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
     caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
-    startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); return;
+    startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; return;
+  }
+  if (o.t === 'lv') {
+    if (state === 'menu' || !players.length) return;
+    initLevel(o.lv); tickN = o.tk | 0; (o.L || []).forEach((l, k) => { if (players[k]) players[k].lives = l; }); return;
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
-  if (o.t !== 's' || !players.length) return;
-  if (o.lv !== level) { initLevel(o.lv); netPend = []; netPred = []; }   // the cave's look comes from its own file; its cells come next
-  if (o.g) { netAG.set(unb64(o.g)); vari.set(unb64(o.v)); dir.set(unb64(o.d)); if (o.b) boss.set(unb64(o.b)); src.fill(-1); netPend = []; }
-  if (o.c) for (let k = 0; k < o.c.length; k += 5){ const j = o.c[k]; netAG[j] = o.c[k+1]; vari[j] = o.c[k+2]; dir[j] = o.c[k+3]; boss[j] = o.c[k+4]; }
-  // the host's cave, then this phone's own steps it has not confirmed yet on top (dropped if they no longer fit)
-  const me = players[1], ack = o.P[1] ? o.P[1][16] || 0 : 0;
-  netPend = netPend.filter(m => m.s > ack);   // steps the host has not seen yet may still save it
-  grid.set(netAG);
-  for (let k = 0; k < netPend.length; k++){
-    const m = netPend[k], t = grid[m.to];
-    if (grid[m.from] !== me.cell || !(t === E || t === DIRT || t === GEM)) { netPend.length = k; break; }
-    grid[m.from] = E; grid[m.to] = me.cell;
-  }
-  netPred = netPred.filter(q => simT - q.at < 2000);
-  const mine = (j, f) => netPred.some(q => q.to === j && (f === undefined || q.from === f));
-  for (let k = 0; k < o.m.length; k += 2){
-    const j = o.m[k], f = o.m[k+1];
-    if (mine(j, f)) continue;   // its own step: already gliding here
-    src[j] = f; srcAt[j] = simT;
-    // rocks turn as they roll and ease into a fall, worked out here from how they move
-    fallN[j] = GOFF && j === f + GOFF && simT - netMovedAt[f] < tickMs * 1.6 ? Math.min(250, fallN[f] + 1) : 0;
-    rot[j] = rot[f] + (j === f + 1 ? 1 : j === f - 1 ? -1 : 0) * Math.PI / 2; netMovedAt[j] = simT;
-  }
-  o.dg.forEach(j => { if (!mine(j)) dugAt[j] = simT; });
-  o.P.forEach((a, k) => {
-    const p = players[k]; if (!p) return;
-    const was = p.doomed;
-    if (k === 1 && netPend.length) {
-      // still ahead of the host: keep its own position and walk, take the rest
-      p.alive = !!a[6]; p.exited = !!a[7]; p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.wins = a[14];
-      return;
-    }
-    if (k === 1) {
-      // confirmed: the host's word, keeping its own walk going unless the host put it somewhere else
-      const moved = a[0] !== p.x || a[1] !== p.y;
-      [p.x, p.y, p.face] = a; p.walking = !!a[3]; p.alive = !!a[6]; p.exited = !!a[7];
-      p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.doomed = !!a[13]; p.wins = a[14]; p.idle = a[15] || 0;
-      if (moved) { p.stepN = a[5]; p.actAt = simT; p.dig = a[4]; }
-      if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; }
-      return;
-    }
-    if (a[5] !== p.stepN) p.actAt = simT;   // a step just started: its walk frames run from now
-    [p.x, p.y, p.face] = a; p.walking = !!a[3]; p.dig = a[4]; p.stepN = a[5]; p.alive = !!a[6]; p.exited = !!a[7];
-    p.respawn = a[8]; p.immune = a[9]; p.gems = a[10]; p.lives = a[11]; p.score = a[12]; p.doomed = !!a[13]; p.wins = a[14]; p.idle = a[15] || 0;
-    if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; }
-  });
-  timeLeft = o.tl; magicState = o.ms;
-  (o.ev || []).forEach(e => {
-    if (e[0] === 'd') { dust.push({ x: e[1], y: e[2], at: simT }); shakeAt = simT; }
-    else if (e[0] === 'l') landAt[e[1]] = simT;
-    else if (e[0] === 'c') critterFromRock(e[1], e[2], players[e[3]]);
-    else if (e[0] === 'f') { if (e[1] !== 1) flyGem(players[e[1]], e[2]); }   // its own gems flew when it took them
-    else if (e[0] === 's') starFlash = { at: simT, x: e[1], y: e[2], drop: e[3] };
-    else if (e[0] === 'n') nestPuff.push({ i: e[1], at: simT });
-    else if (e[0] === 'e') exitOpenAt = simT;
-  });
-  o.fx.forEach(n => { if (sfx[n]) sfx[n](); });
-  if (o.st !== state) {
+  if (o.t === 'st') {
+    if (o.st === state || !players.length) return;
     state = o.st;
     if (state === 'play') hideOverlay();
-    else guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
+    else if (state !== 'menu') guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
+    return;
   }
-  updateHud();
+  if (o.t !== 'sy' || !players.length || !grid) return;
+  netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph };
+  if (o.lv !== level) return;
+  // the host's cave counts everywhere except around this phone's own kid
+  const G = unb64(o.g), F = unb64(o.f), A = unb64(o.a), D = unb64(o.d), V = unb64(o.v), me = netMe();
+  const mine = j => !o.full && me.alive && !me.exited && Math.max(Math.abs(j % W - me.x), Math.abs((j / W | 0) - me.y)) <= NET_R;
+  for (let j = 0; j < W*H; j++){
+    if (mine(j) || isKidCell(G[j]) || isKidCell(grid[j])) continue;
+    netSetCell(j, G[j], F[j], A[j], D[j], V[j]);
+  }
+  timeLeft = o.tl; magicState = o.ms;
 }
 function guestWait(text){
   showOverlay(`<div class="card"><h2>DOS CELULARES</h2><p style="white-space:pre-line">${text.replace(/[<&]/g, ch => ch === '<' ? '&lt;' : '&amp;')}</p>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
   $('bnetq').onclick = netQuit;
 }
-// guest: send the direction its kid is held in whenever it changes
-function netInput(){
-  const p = players[1]; if (netRole !== 'guest' || !p) return;
-  const d = p.held.length ? p.held[p.held.length - 1] : -1;
-  if (d !== netHeld) { netHeld = d; netSend({ t: 'in', d }); }
-  // its own kid moves on this screen at once (same pace as on the host); the step goes to the host, which confirms it
-  if (state !== 'play' || d < 0 || !p.alive || p.doomed || p.exited || simT < p.nextAt) return;
-  const t0 = simT - p.nextAt < 50 ? p.nextAt : simT; p.nextAt = t0 + tickMs;
-  const [dx, dy] = DXY[d], i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
-  netSend({ t: 'mv', d, s: ++netSeqN });
-  if (dx) p.face = dx < 0 ? 1 : 0;
-  if (!(t === E || t === DIRT || t === GEM)) return;   // pushing a rock, the exit, a star: the host's answer shows it
-  netPend.push({ s: netSeqN, from: i, to: j }); netPred.push({ from: i, to: j, at: simT });
-  grid[i] = E; grid[j] = p.cell; src[j] = i; srcAt[j] = simT; src[i] = -1;
-  p.x += dx; p.y += dy; p.walking = true; p.stepN++; p.actAt = simT; p.idle = 0; p.dig = -1;
-  if (t === DIRT) { dugAt[j] = simT; p.dig = d; sfx.step(); }
-  if (t === GEM) { sfx.gem(); flyGem(p, j); }
-}
 function netQuit(){
   netRole = null; netLink = false; if (BT) BT.close().catch(() => {});
   document.getElementById('views').classList.remove('netguest'); menu();
 }
 if (BT) {
-  BT.addListener('data', e => { let o; try { o = JSON.parse(e.line); } catch (err) { return; } netGot(o); });
+  BT.addListener('data', e => {
+    let o; try { o = JSON.parse(e.line); } catch (err) { return; }
+    netGot(o);
+  });
   BT.addListener('connected', e => {
     netLink = true; netPeer = e.name || 'el otro celular';
     if (netRole === 'host') hostPick(); else guestWait('Conectado con ' + netPeer + '. Esperando que elija el juego…');
@@ -4446,7 +4448,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed }); netFull = true; };
+  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); netFull = true; };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
