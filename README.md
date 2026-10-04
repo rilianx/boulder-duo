@@ -48,5 +48,7 @@ Ver [`rl/README.md`](rl/README.md).
 - **Memoria:** variables en el stack y nodos con dirección en el heap. Un puntero vale un nodo, `NULL` o basura.
 - **Intérprete:** ejecuta un subconjunto de C. Comandos simples: `Nodo *x = …;`, `x = …;`, `x->next = …;`, `x->value = n;`, `malloc(sizeof(Nodo))` (con campos basura), `free`, `if (x->value == n)`, `if (x == NULL)` y `printf`. Bloquea los errores de compilación, los segfault, el uso después de `free` y el *double free*, y marca las fugas.
 - **Funciones compuestas** (`crearNodo`, `insertarInicio`, `insertarDespues`, `eliminarSiguiente`): están escritas con los mismos comandos simples y se desbloquean al hacer a mano lo mismo que hacen. Al llamarlas se ve su marco en el stack, con los parámetros copiados, y en el código se puede abrir la línea para ver cada paso.
+- **Atajos:** `p = p->next;` se desbloquea la primera vez que el alumno avanza un puntero a mano. Desde ahí, avanzar cualquier puntero es un toque en la pestaña «Atajos».
+- **Advertencia de saltos:** antes de ejecutar una línea con dos o más `->next` seguidos (por ejemplo `head->next->next`), el motor avisa y deja escribirla igual o cancelar.
 - **Tocar el dibujo:** tocar un post-it, la casilla `next` de un nodo o el cuerpo de un nodo pone su expresión en la línea que se está armando (`head`, `head->next`, o el nombre más corto del nodo). Si no hay ninguna línea en curso, empieza su asignación.
 - **Herramientas:** deshacer, ordenar el dibujo y exportar el programa completo como un `.c` que compila.

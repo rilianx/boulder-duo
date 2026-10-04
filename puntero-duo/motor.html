@@ -39,7 +39,7 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
   border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
 .mini:disabled{opacity:.35}
 
-.main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(64px,1fr);gap:8px;min-height:0}
+.main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(64px,1fr);gap:8px;min-height:0;overflow:hidden}
 .boardcell{position:relative;min-width:0;display:flex;align-items:flex-start;justify-content:center}
 canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
@@ -175,6 +175,11 @@ const FUNCS = {
     unlock: 'Haz que un nodo se salte al siguiente y después libera el que quedó afuera.' },
 };
 const FUNC_ORDER = ['crearNodo', 'insertarInicio', 'insertarDespues', 'eliminarSiguiente'];
+// Atajos: una línea común que pasa a ser un solo toque cuando el alumno ya la escribió a mano.
+const SHORTCUTS = {
+  avanzar: { title: 'p = p->next;', unlock: 'Avanza un puntero a mano una vez: arma «_ = _;» con la variable y su ->next (por ejemplo p = p->next).' },
+};
+const ALL_UNLOCKS = FUNC_ORDER.concat(Object.keys(SHORTCUTS));
 let UNLOCKED = new Set();
 try { UNLOCKED = new Set(JSON.parse(localStorage.getItem('punteroC.unlocked') || '[]')); } catch (e) {}
 function saveUnlocks() { try { localStorage.setItem('punteroC.unlocked', JSON.stringify([...UNLOCKED])); } catch (e) {} }
@@ -342,6 +347,7 @@ async function execStmt(text, ctx) {
     v.t = val;
     if (top && old !== null && old !== G && val !== null && val !== G && val !== old && nodeOf(val) && nodeOf(val).next === old) unlock('insertarInicio');
     if (top && lhs === 'p') hop();
+    if (top && rhs === lhs + '->next') unlock('avanzar');
     return;
   }
   throw new CErr('error de sintaxis.', 'compile');
@@ -432,6 +438,7 @@ const STMTS = [
   ['Memoria', [['free(§ptr);', '']]],
   ['Consultas', [['if (§lv->value == §num)', ''], ['if (§lv == NULL)', ''], ['printf("%d", §lv->value);', '']]],
   ['Funciones', [['insertarDespues(§lv, §num);', 'fn:insertarDespues'], ['eliminarSiguiente(§lv);', 'fn:eliminarSiguiente']]],
+  ['Atajos', []],
 ];
 const declaredPtrs = () => M.globals.filter(v => v.kind === 'ptr');
 function piecesFor(type) {
@@ -486,6 +493,14 @@ function renderBuilder() {
     for (const [lbl, list] of STMTS) {
       if (lbl !== TAB) continue;
       const g = document.createElement('div'); g.className = 'grp';
+      if (lbl === 'Atajos') {
+        if (!UNLOCKED.has('avanzar')) g.appendChild(mkChip('🔒 p = p->next;', 'locked', () => lockedHint('avanzar')));
+        else for (const v of declaredPtrs()) if (v.name !== 'head') g.appendChild(mkChip(`${v.name} = ${v.name}->next;`, 'fn', () => guardRun(`${v.name} = ${v.name}->next;`)));
+        if (UNLOCKED.has('avanzar') && !g.children.length) {
+          const t = document.createElement('span'); t.style.cssText = 'font-size:14px;color:var(--soft)';
+          t.textContent = 'Declara un puntero para recorrer (por ejemplo p) y aquí aparece su atajo para avanzar.'; g.appendChild(t);
+        }
+      }
       for (const [tpl, kind] of list) {
         const fn = kind.startsWith('fn:') ? kind.slice(3) : null;
         if (lbl !== 'Variables' && lbl !== 'Funciones' && !declaredPtrs().length) continue;
@@ -527,10 +542,20 @@ function renderBuilder() {
 function fill(piece) {
   BUILD = BUILD.replace(HOLE, piece);
   if (HOLE.test(BUILD)) { renderBuilder(); return; }
-  const line = BUILD; BUILD = null; run(line);
+  const line = BUILD; BUILD = null; guardRun(line);
+}
+// Advertencia antes de usar dos o más ->next seguidos: llegar lejos de un salto es donde más se equivoca uno.
+function guardRun(line) {
+  const m = line.match(/(\w+)((?:->next){2,})/);
+  if (!m) { run(line); return; }
+  const n = m[2].split('->next').length - 1;
+  showFb('warn', '⚠ ' + line, `Para llegar a ese nodo usas ${n} ->next seguidos (${m[1] + m[2]}). Es fácil perderse contando saltos: lo usual es acercar un puntero primero, por ejemplo avanzando p con p = p->next.`,
+    [['Escribirla igual', () => { hideFb(); run(line); }], ['Cancelar', () => { hideFb(); renderBuilder(); }]]);
+  renderBuilder();
 }
 $('bx').onclick = () => { BUILD = null; renderBuilder(); };
 function lockedHint(fn) {
+  if (SHORTCUTS[fn]) { showFb('info', '🔒 atajo ' + SHORTCUTS[fn].title, 'Se desbloquea así: ' + SHORTCUTS[fn].unlock, [['Entendido', hideFb]]); return; }
   showFb('info', '🔒 ' + FUNCS[fn].sig, 'Se desbloquea cuando lo haces a mano: ' + FUNCS[fn].unlock, [['Entendido', hideFb]]);
 }
 
@@ -561,12 +586,12 @@ function renderCode() {
   el.scrollTop = el.scrollHeight;
 }
 function showFb(kind, code, why, buttons) {
-  const fb = $('fb'); fb.hidden = false; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
+  const fb = $('fb'); fb.hidden = false; $('chips').hidden = true; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
   $('fbcode').textContent = code; $('fbwhy').textContent = why;
   const row = $('fbrow'); row.innerHTML = '';
   for (const [t, f] of buttons) { const b = document.createElement('button'); b.textContent = t; b.onclick = f; row.appendChild(b); }
 }
-function hideFb() { $('fb').hidden = true; }
+function hideFb() { $('fb').hidden = true; $('chips').hidden = false; }
 function showCard(html, onReady) {
   const ov = $('ov'); ov.hidden = false; ov.innerHTML = `<div class="card">${html}</div>`;
   if (onReady) onReady();
@@ -575,6 +600,12 @@ function closeCard() { $('ov').hidden = true; $('ov').innerHTML = ''; }
 function showUnlock(name) {
   const F = FUNCS[name];
   beep(660, 0.12, 'triangle', 0.05); setTimeout(() => beep(990, 0.2, 'triangle', 0.05), 120);
+  if (SHORTCUTS[name]) {
+    showCard(`<h2>🔓 Atajo: <code>${esc(SHORTCUTS[name].title)}</code></h2><p>Acabas de avanzar un puntero al nodo siguiente. Desde ahora, en la pestaña <b>Atajos</b>, avanzar cualquier puntero es un solo toque.</p>
+      <p>La línea que se escribe es la misma: <code>p = p->next;</code>. Ojo: si <code>p</code> es <code>NULL</code>, avanzar provoca un segfault.</p>
+      <div class="row"><button id="cok">Seguir</button></div>`, () => { $('cok').onclick = () => { closeCard(); if (PENDING_UNLOCK.length) showUnlock(PENDING_UNLOCK.shift()); renderBuilder(); }; $('cok').focus(); });
+    renderBuilder(); return;
+  }
   showCard(`<h2>🔓 ${name}()</h2><p>Acabas de hacer a mano lo que hace esta función. Desde ahora aparece en el menú y la puedes usar en una sola línea.</p>
     <pre>${esc(F.sig)} {\n${F.body.map(l => '  ' + l).join('\n')}\n}</pre>
     <p>Al usarla, en el código toca la línea para ver por dentro cada paso que ejecutó.</p>
@@ -617,13 +648,14 @@ $('bhelp').onclick = () => {
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
       <li>Un nodo que nadie apunta queda transparente: <b>sin acceso</b>.</li>
-      <li>Las <b>funciones</b> se desbloquean cuando haces a mano lo mismo que hacen. Al usarlas, toca su línea para ver los pasos por dentro.</li>
+      <li>Las <b>funciones</b> y los <b>atajos</b> (como <code>p = p->next;</code>) se desbloquean cuando haces a mano lo mismo que hacen. Al usar una función, toca su línea para ver los pasos por dentro.</li>
+      <li>Si una línea usa dos o más <code>->next</code> seguidos, aparece una advertencia antes de ejecutarla.</li>
     </ul>
     <p>⇅ ordena el dibujo · { } muestra el programa completo · ↶ deshace.</p>
-    <p>Funciones desbloqueadas: ${FUNC_ORDER.filter(f => UNLOCKED.has(f)).map(f => `<code>${f}</code>`).join(', ') || 'ninguna todavía'}.</p>
+    <p>Desbloqueado: ${ALL_UNLOCKS.filter(f => UNLOCKED.has(f)).map(f => `<code>${esc(SHORTCUTS[f] ? SHORTCUTS[f].title : f + '()')}</code>`).join(', ') || 'nada todavía'}.</p>
     <div class="row"><button id="cg">Seguir</button><button class="sec" id="call">Desbloquear todas (profesor)</button><button class="sec" id="cnone">Volver a bloquear</button></div>`, () => {
     $('cg').onclick = closeCard;
-    $('call').onclick = () => { FUNC_ORDER.forEach(f => UNLOCKED.add(f)); saveUnlocks(); closeCard(); renderBuilder(); };
+    $('call').onclick = () => { ALL_UNLOCKS.forEach(f => UNLOCKED.add(f)); saveUnlocks(); closeCard(); renderBuilder(); };
     $('cnone').onclick = () => { UNLOCKED.clear(); saveUnlocks(); closeCard(); renderBuilder(); };
   });
 };
@@ -905,7 +937,9 @@ function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch
 
 function fit() {
   const cell = $('cell').getBoundingClientRect();
-  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (innerHeight * 0.42) / LH));
+  // el dibujo usa a lo más el 42 % del alto, y menos si el menú de abajo crece: el código siempre conserva unas líneas
+  const free = innerHeight - document.querySelector('header').offsetHeight - document.querySelector('.build').offsetHeight - 110;
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, Math.min(innerHeight * 0.42, free) / LH));
   DPR = Math.min(3, window.devicePixelRatio || 1);
   if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
     SC = s;
@@ -916,6 +950,7 @@ function fit() {
 }
 new ResizeObserver(fit).observe($('cell'));
 addEventListener('resize', fit);
+new ResizeObserver(fit).observe(document.querySelector('.build'));
 
 /* ════════════════════════════════════════════════════════════════════
    9. TOCAR EL DIBUJO
