@@ -42,7 +42,7 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
 .main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,42%);gap:8px;min-height:0}
 @media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 340px} }
 .boardcell{position:relative;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
-canvas#cv{display:block;touch-action:manipulation;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
+canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
   padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
@@ -498,6 +498,11 @@ function renderBuilder() {
       }
       if (g.children.length) box.appendChild(g);
     }
+    if (declaredPtrs().length) {
+      const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
+      tip.textContent = 'También puedes tocar un puntero en el dibujo para cambiar a dónde apunta.';
+      box.appendChild(tip);
+    }
     if (!declaredPtrs().length) {
       const p = document.createElement('p'); p.className = 'hint'; p.style.margin = '0'; p.style.fontSize = '15px'; p.style.color = 'var(--soft)';
       p.textContent = 'La memoria está vacía. Empieza declarando un puntero, por ejemplo Nodo *head = malloc(sizeof(Nodo));';
@@ -506,6 +511,12 @@ function renderBuilder() {
     return;
   }
   $('ltxt').innerHTML = holeHTML(BUILD); $('bx').hidden = false;
+  const ht = HOLE.exec(BUILD)[1];
+  if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num') {
+    const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
+    tip.textContent = ht === 'num' ? 'Toca un número, o el valor de un nodo en el dibujo.' : ht === 'var' ? 'Toca una pieza, o un post-it en el dibujo.' : 'Toca una pieza, o en el dibujo: un post-it, un nodo o su casilla next.';
+    box.appendChild(tip);
+  }
   const type = HOLE.exec(BUILD)[1];
   const g = document.createElement('div'); g.className = 'grp';
   for (const pc of piecesFor(type)) {
@@ -863,6 +874,7 @@ function draw(dt) {
   }
   for (const key of Object.keys(AR)) if (!seenKeys.has(key)) delete AR[key];
   for (const id of liveIds()) drawNode(nodeOf(id));
+  drawTapHints(layout);
   for (const it of layout) if (it.v) drawVar(it);
   drawAvatar(layout);
 }
@@ -894,6 +906,87 @@ function fit() {
   }
 }
 new ResizeObserver(fit).observe($('cell'));
+
+/* ════════════════════════════════════════════════════════════════════
+   9. TOCAR EL DIBUJO
+   Tocar un puntero pone su expresión en la línea que se está armando:
+   post-it → head · casilla next → head->next · cuerpo del nodo → su nombre (o su valor si el hueco es un número).
+   Sin línea en curso, tocar un puntero empieza su asignación.
+   ════════════════════════════════════════════════════════════════════ */
+// expresión más corta (a lo más dos ->) que llega al nodo desde una variable de main
+function nameOf(id) {
+  for (let d = 0; d <= 2; d++) for (const v of M.globals) {
+    if (v.kind !== 'ptr') continue;
+    let cur = v.t, ok = true;
+    for (let i = 0; i < d; i++) { if (cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) { ok = false; break; } cur = nodeOf(cur).next; }
+    if (ok && cur === id) return v.name + '->next'.repeat(d);
+  }
+  return null;
+}
+function hitTest(pt) {
+  for (const it of varLayout()) if (it.v && !it.frame && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
+  const ids = liveIds().reverse();
+  for (const id of ids) {
+    const P = POS[id]; if (!P) continue;
+    const L = P.x - NW / 2, Tp = P.y - NH / 2;
+    if (pt.y < Tp - 6 || pt.y > Tp + NH + 6 || pt.x < L - 4 || pt.x > L + NW + 8) continue;
+    return { kind: pt.x >= L + DW - 2 ? 'next' : 'node', id };
+  }
+  return null;
+}
+const holeType = () => BUILD && (HOLE.exec(BUILD) || [])[1];
+function tapBoard(e) {
+  if (BUSY || !$('ov').hidden) return;
+  const r = cv.getBoundingClientRect();
+  const pt = { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
+  const h = hitTest(pt); if (!h) return;
+  const type = holeType();
+  let expr = null;
+  if (h.kind === 'var') expr = h.v.name;
+  else {
+    const n = nodeOf(h.id);
+    if (n.dead) { showFb('info', 'sin acceso', 'Ese nodo ya no tiene ninguna variable ni flecha que llegue a él: en C no hay forma de nombrarlo.', [['Entendido', hideFb]]); return; }
+    if (type === 'num' && h.kind === 'node') { if (n.v === null) return; fill(String(n.v)); tapFx(h); return; }
+    const base = nameOf(h.id);
+    if (!base) { showFb('info', 'sin nombre', 'No hay una variable que llegue a ese nodo con a lo más dos ->. Declara un puntero que lo apunte.', [['Entendido', hideFb]]); return; }
+    expr = h.kind === 'next' ? base + '->next' : base;
+  }
+  tapFx(h);
+  if (!BUILD) {   // empezar una asignación con lo que se tocó
+    if (h.kind === 'var') BUILD = expr + ' = §ptr;';
+    else if (h.kind === 'next') BUILD = expr.replace(/->next$/, '') + '->next = §ptr;';
+    else BUILD = expr + '->value = §num;';
+    hideFb(); renderBuilder(); return;
+  }
+  if (type === 'new' || type === 'num') return;
+  if (type === 'var' && h.kind !== 'var') return;
+  if (expr.split('->').length > 3) { showFb('info', expr, 'Esa expresión tiene demasiadas flechas; usa un puntero más cercano.', [['Entendido', hideFb]]); return; }
+  fill(expr);
+}
+cv.addEventListener('click', tapBoard);
+let TAP = null;
+function tapFx(h) { TAP = { ...h, t: 1 }; beep(880, 0.04, 'triangle', 0.03); }
+function drawTapHints(layout) {
+  const type = holeType();
+  const want = !BUSY && (!BUILD || type === 'ptr' || type === 'lv' || type === 'var' || type === 'num');
+  const glow = (x, y, w, h, a) => { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#c9dbff'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6); ctx.restore(); };
+  if (want && BUILD) {
+    const a = 0.35 + 0.2 * Math.sin(T * 5);
+    if (type !== 'num') for (const it of layout) if (it.v && !it.frame && it.v.kind === 'ptr') glow(it.x, it.y, PW, PH, a);
+    if (type !== 'var') for (const id of liveIds()) {
+      const n = nodeOf(id), P = POS[id]; if (n.dead || n.freed || !P) continue;
+      if (type === 'num') { if (n.v !== null) glow(P.x - NW / 2, P.y - NH / 2, DW, NH, a); }
+      else glow(P.x - NW / 2, P.y - NH / 2, NW, NH, a);
+    }
+  }
+  if (TAP && TAP.t > 0) {
+    TAP.t -= 0.05;
+    ctx.save(); ctx.globalAlpha = TAP.t; ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.5;
+    if (TAP.kind === 'var') { const it = layout.find(o => o.v === TAP.v); if (it) rRect(it.x - 3, it.y - 3, PW + 6, PH + 6, 444, 0.6); }
+    else if (POS[TAP.id]) { const P = POS[TAP.id], L = P.x - NW / 2, Tp = P.y - NH / 2; if (TAP.kind === 'next') rRect(L + DW - 2, Tp - 3, NW - DW + 5, NH + 6, 445, 0.6); else rRect(L - 3, Tp - 3, DW + 4, NH + 6, 446, 0.6); }
+    ctx.restore();
+  }
+}
 
 let last = performance.now();
 function frame(now) {
