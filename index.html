@@ -4321,12 +4321,21 @@ function netNewCave(){ netHist.clear(); netLog = netLog.filter(e => e.lv === lev
 function netTrim(){ const old = tickN - NET_HIST; if (netLog.length > 400 || netLog.some(e => e.k < old)) netLog = netLog.filter(e => e.k >= old && e.lv === level); }
 function netClockSeen(hw){ const now = performance.now(); netOffs.push([now - hw, now]); netOffs = netOffs.filter(x => now - x[1] < 4000); }
 const netOff = () => { let o = Infinity; for (const x of netOffs) o = Math.min(o, x[0]); return o; };
-// guest: run ticks in step with the host's (its clock as seen here, a little behind by the trip over the air)
+/* Guest: its ticks run on its own clock at an even pace, like the host's. To stay with the host (whose clock it
+   sees through the beats, a little behind by the trip over the air) it only goes 6% faster or slower for a while,
+   which nobody notices; just when far apart (over 3 ticks, after a cut) it catches up at once. */
 function netGuestTicks(){
-  if (!netT0 || !netOffs.length) return 0;
-  const k = netT0.tk + Math.floor((performance.now() - netOff() - netT0.at) / tickMs);
+  if (!netT0 || !netOffs.length) { worldT = simT; return 0; }
+  const host = netT0.tk + (performance.now() - netOff() - netT0.at) / tickMs;   // where the host is, in ticks
+  const lag = host - (tickN + (simT - worldT) / tickMs);                          // > 0: this phone is behind
   let n = 0;
-  while (tickN < k && state === 'play' && n < 8) { worldT = simT; nowT = simT; tick(); netSave(); netSettle(); n++; }
+  if (lag > 3) {
+    while (tickN < Math.floor(host) && state === 'play' && n < 12) { worldT = simT; nowT = simT; tick(); netSave(); netSettle(); n++; }
+    return n;
+  }
+  if (lag < -3) { worldT = simT; return 0; }   // far ahead: wait for the host
+  const pace = tickMs / (lag > .25 ? 1.06 : lag < -.25 ? .94 : 1);
+  while (simT - worldT >= pace && state === 'play' && n < 4) { worldT += pace; nowT = worldT; tick(); netSave(); netSettle(); n++; }
   return n;
 }
 function netFrame(){
