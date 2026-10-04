@@ -112,6 +112,12 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 Ver [`rl/README.md`](rl/README.md).
 
+## Vidas, reaparecer y reiniciar
+
+- **VIDAS ∞ (COOPERATIVO)** (botón del menú): en cooperativo (y con 1 jugador) las vidas no se acaban; el marcador muestra ∞.
+- Al morir, el niño o la niña **reaparece donde murió** (o en la casilla libre más cercana, si ahí quedó algo), no al comienzo de la cueva. El PC sí vuelve a su inicio.
+- En la pausa está **REINICIAR CUEVA**: empieza la misma cueva de nuevo, con las vidas que cada uno tiene (en el computador también con la tecla R).
+
 ## Celular en vertical
 
 En el celular todo se juega en vertical y llenando la pantalla: el tablero se vuelve alto (unas 12 casillas de ancho y tantas filas como quepan) y el menú queda encima, con scroll si no cabe. De a dos en un mismo celular, cada uno tiene media pantalla (J2 dado vuelta, como antes). En el celular no aparecen GRAVEDAD REAL ni ENTRENAR PC (siguen en el computador). La app de Android queda fija en vertical.

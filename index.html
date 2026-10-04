@@ -2355,7 +2355,7 @@ function initLevel(n){
   const spawns = (mode === 'train' && !hlTrain()) || simHook ? genLevel(n) : genCave(n);
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
-    p.gems = 0; p.exited = false; p.doomed = false; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
+    p.gems = 0; p.exited = false; p.doomed = false; p.dieX = undefined; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
     if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = 16; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
   });
@@ -2382,13 +2382,29 @@ function move(i, j){
 
 // intermissions are a bonus: dying there costs no life, and running out of time just moves on to the next cave
 const isBonus = () => caveRules() && caveOf(level).cave.props.Intermission === 'true';
+// option: endless lives in cooperative (and one player); a kid always comes back
+let infLives = false;
+try { infLives = localStorage.getItem('boulder-duo-inflives') === '1'; } catch (e) {}
+const endless = p => infLives && mode === 'coop' && !p.ai;
+// a kid comes back where they died: that cell if it is free (or dirt), else the nearest free one close by,
+// else at the start of the cave (the PC always goes back to its start)
+function backAt(p){
+  if (p.dieX === undefined) return p.sy*W + p.sx;
+  const ok = i => grid[i] === E || grid[i] === DIRT;
+  for (let r = 0; r <= 3; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++){
+    if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+    const x = p.dieX + dx, y = p.dieY + dy;
+    if (x > 0 && y > 0 && x < W - 1 && y < H - 1 && ok(y*W + x)) return y*W + x;
+  }
+  return p.sy*W + p.sx;
+}
 function killPlayer(p){
   if (!p.alive) return;
-  lastDeathTick = tickN;
+  lastDeathTick = tickN; p.dieX = p.x; p.dieY = p.y;
   if (!p.ai && isBonus()) { p.alive = false; p.respawn = -1; p.walking = false; return; }
   if (p.ai && !p.external && aiKind === 'astar' && (mode === 'pc' || mode === 'train')) { p.alive = false; p.walking = false; p.respawn = 10; hlEnd('d'); hlDied = true; return; }
   if (p.ai) { p.alive = false; p.walking = false; p.respawn = 10; AI.deaths++; aiTerminal(p, -40, 'd'); return; }
-  p.alive = false; p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
+  p.alive = false; if (!endless(p)) p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
 
 let rockBlast = false, hlDied = false;
@@ -2749,9 +2765,9 @@ function tick(){
   players.forEach(p => {
     if (p.immune > 0) p.immune--;
     if (!p.alive && !p.exited && p.respawn > 0 && --p.respawn === 0){
-      const j = p.sy*W + p.sx, t = grid[j];
+      const j = p.ai ? p.sy*W + p.sx : backAt(p), t = grid[j];
       if (t === P1 || t === P2 || t === BOOM) p.respawn = 1;
-      else { grid[j] = p.cell; fall[j] = 0; p.x = p.sx; p.y = p.sy; p.alive = true; p.immune = 24; p.push = 0; }
+      else { grid[j] = p.cell; fall[j] = 0; p.x = j % W; p.y = j / W | 0; p.alive = true; p.immune = 24; p.push = 0; }
     }
   });
 
@@ -2789,7 +2805,7 @@ function checkEnd(){
     if (mode === 'pc') aiTruncate(players[1]);
     if (mode !== 'coop') return roundDraw('Se acabó el tiempo.');
     if (players.some(p => p.exited)) return levelWon();
-    players.forEach(p => { if (p.alive) { p.alive = false; p.lives--; } });
+    players.forEach(p => { if (p.alive) { p.alive = false; if (!endless(p)) p.lives--; } });
     if (players.every(p => p.lives <= 0)) return gameOver('Se acabó el tiempo y no quedan vidas.');
     return levelLost('Se acabó el tiempo. Cada jugador en la mina perdió una vida.');
   }
@@ -2836,6 +2852,7 @@ function menu(){
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
+      <button id="binf" class="${infLives ? 'on' : ''}">VIDAS ∞ (COOPERATIVO): ${infLives ? 'SÍ' : 'NO'}</button>
     </div>
     <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
@@ -2852,6 +2869,7 @@ function menu(){
   const pickSet = k => { caveSet = k; mode = 'coop'; try { localStorage.setItem('boulder-duo-caves', k); } catch (e) {} initLevel(startN()); menu(); };
   $('bpick').onclick = () => { mode = 'coop'; caveMenu(); };
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
+  $('binf').onclick = () => { infLives = !infLives; try { localStorage.setItem('boulder-duo-inflives', infLives ? '1' : '0'); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
   $('bzoom').onclick = () => { zoomIn = !zoomIn; try { localStorage.setItem('boulder-duo-zoom', zoomIn ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
@@ -2994,9 +3012,10 @@ function togglePause(){
   if (state === 'play') {
     state = 'pause';
     const fsb = document.body.classList.contains('fs') && !standalone;
-    showOverlay(`<div class="card"><h2>PAUSA</h2><div class="row"><button id="bres">CONTINUAR</button><button id="bq">SALIR AL MENÚ</button></div>
+    showOverlay(`<div class="card"><h2>PAUSA</h2><div class="row"><button id="bres">CONTINUAR</button><button id="brst">REINICIAR CUEVA</button><button id="bq">SALIR AL MENÚ</button></div>
       <div class="row sets"><button id="bpsnd" class="${muted ? '' : 'on'}">SONIDO: ${muted ? 'NO' : 'SÍ'}</button>${fsb ? '<button id="bpfs">SALIR DE PANTALLA COMPLETA</button>' : ''}</div></div>`);
     $('bres').onclick = togglePause; $('bq').onclick = menu; onEnter = togglePause;
+    $('brst').onclick = () => initLevel(level);   // the same cave from the start, with the lives each one has
     $('bpsnd').onclick = () => { audioOn(); toggleSound(); state = 'play'; togglePause(); };
     if (fsb) $('bpfs').onclick = () => { toggleFull(); state = 'play'; togglePause(); };
   } else if (state === 'pause') { state = 'play'; hideOverlay(); }
@@ -3626,7 +3645,7 @@ function updateHud(){
   const team = players[0].gems + players[1].gems;
   players.forEach((p, k) => {
     $('g'+k).textContent = mode === 'versus' ? `${p.gems}/${needEach}` : `${team}/${need}`;
-    $('l'+k).textContent = mode === 'train' && k === 0 ? '—' : p.exited ? 'SALIÓ' : p.ai ? '∞' : p.lives;
+    $('l'+k).textContent = mode === 'train' && k === 0 ? '—' : p.exited ? 'SALIÓ' : p.ai || endless(p) ? '∞' : p.lives;
     $('s'+k).textContent = p.score;
     $('c'+k).textContent = caveLabel(level);
     $('w'+k).textContent = p.wins;
@@ -4174,7 +4193,7 @@ function netGot(o){
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
-    caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd;
+    caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
     startGame(o.m); initLevel(o.lv); return;
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
@@ -4271,7 +4290,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet }); netFull = true; };
+  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives }); netFull = true; };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
