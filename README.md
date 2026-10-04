@@ -44,7 +44,7 @@ Ver [`rl/README.md`](rl/README.md).
 
 ### Puntero C: motor (modo libre)
 
-[`puntero-duo/motor.html`](puntero-duo/motor.html) es el motor gráfico, sin ejercicios: la memoria parte vacía y se arma con líneas de C.
+[`puntero-duo/motor.html`](puntero-duo/motor.html) es el motor gráfico, sin ejercicios: la memoria parte vacía y se arma con líneas de C. Arriba va el dibujo apaisado (las listas corren de izquierda a derecha), debajo el programa y abajo el menú.
 - **Memoria:** variables en el stack y nodos con dirección en el heap. Un puntero vale un nodo, `NULL` o basura.
 - **Intérprete:** ejecuta un subconjunto de C. Comandos simples: `Nodo *x = …;`, `x = …;`, `x->next = …;`, `x->value = n;`, `malloc(sizeof(Nodo))` (con campos basura), `free`, `if (x->value == n)`, `if (x == NULL)` y `printf`. Bloquea los errores de compilación, los segfault, el uso después de `free` y el *double free*, y marca las fugas.
 - **Funciones compuestas** (`crearNodo`, `insertarInicio`, `insertarDespues`, `eliminarSiguiente`): están escritas con los mismos comandos simples y se desbloquean al hacer a mano lo mismo que hacen. Al llamarlas se ve su marco en el stack, con los parámetros copiados, y en el código se puede abrir la línea para ver cada paso.

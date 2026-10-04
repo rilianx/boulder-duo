@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
 <style>
-/* Cuaderno en vertical: arriba el dibujo (margen = stack, hoja = heap) con el programa en C al lado; abajo, el armador de líneas. Un solo look de papel, a propósito. */
+/* Cuaderno apaisado: arriba el dibujo (margen = stack, hoja = heap), debajo el programa en C y abajo el armador de líneas. Un solo look de papel, a propósito. */
 :root{
   color-scheme: light;
   --paper:#fbf8ef;
@@ -39,9 +39,8 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
   border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
 .mini:disabled{opacity:.35}
 
-.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,42%);gap:8px;min-height:0}
-@media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 340px} }
-.boardcell{position:relative;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+.main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(64px,1fr);gap:8px;min-height:0}
+.boardcell{position:relative;min-width:0;display:flex;align-items:flex-start;justify-content:center}
 canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
@@ -635,12 +634,12 @@ $('bsort').onclick = () => { if (!BUSY) sortDrawing(); };
 /* ════════════════════════════════════════════════════════════════════
    7. DIBUJO A MANO
    ════════════════════════════════════════════════════════════════════ */
-const LW = 250, LH = 480;
+const LW = 400, LH = 250;
 const MX = 70;
 const NW = 62, NH = 30, DW = 40;
 const PW = 60, PH = 24;
-const COLS = [136, 212], ROWS = 7;
-const Y = i => 36 + i * 64;
+const COLS = [116, 198, 280, 362], ROWS = 3;
+const Y = i => 46 + i * 76;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cv = $('cv'), ctx = cv.getContext('2d');
 let SC = 1, DPR = 1, boil = 0, T = 0;
@@ -650,8 +649,8 @@ const AR = {};      // geometría animada de cada flecha
 
 function freeSlot() {
   const used = Object.values(M.nodes).map(n => n.x + ',' + n.y);
-  for (const x of COLS) for (let r = 0; r < ROWS; r++) if (!used.includes(x + ',' + Y(r))) return [x, Y(r)];
-  return [COLS[1], Y(ROWS - 1)];
+  for (let r = 0; r < ROWS; r++) for (const x of COLS) if (!used.includes(x + ',' + Y(r))) return [x, Y(r)];
+  return [COLS.at(-1), Y(ROWS - 1)];
 }
 function spawnFx(id) { const n = nodeOf(id); POS[id] = { x: n.x, y: n.y - 34 }; }
 function flash(id, ok) { FX.flash[id] = { t: 1, ok }; }
@@ -667,7 +666,7 @@ function sortDrawing() {
   }
   const pointed = new Set(M.globals.map(v => v.t).concat(Object.values(M.nodes).map(n => n.next)));
   for (const id of liveIds()) if (!seen.has(id)) { if (nodeOf(id).freed && !pointed.has(id)) delete M.nodes[id]; else order.push(id); }
-  order.forEach((id, i) => { const n = nodeOf(id); if (!n) return; n.x = COLS[Math.floor(i / ROWS) % 2]; n.y = Y(i % ROWS); });
+  order.forEach((id, i) => { const n = nodeOf(id); if (!n) return; n.x = COLS[i % COLS.length]; n.y = Y(Math.floor(i / COLS.length) % ROWS); });
 }
 
 function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return ((n >>> 0) % 10000) / 5000 - 1; }
@@ -700,6 +699,10 @@ function rCircle(x, y, r, seed, fill) {
    por la izquierda si es una variable del margen. */
 function arrowGeo(a, n, opts) {
   const L = n.x - NW / 2, mid = n.x - 6;
+  if (opts.fromVar && n.x > COLS[0] + 20) {   // nodo lejos del margen: la flecha llega por arriba para no cruzar otros nodos
+    const b = { x: mid + opts.lane, y: n.y - NH / 2 - 1 };
+    return { a, b, c1: { x: a.x + 40, y: Math.min(a.y, b.y - 30) }, c2: { x: b.x, y: b.y - 30 } };
+  }
   if (opts.fromVar) { const b = { x: L - 1, y: n.y + opts.lane }; return { a, b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } }; }
   if (opts.self) { const b = { x: mid, y: n.y - NH / 2 - 1 }; return { a, b, c1: { x: a.x + 42, y: a.y - 4 }, c2: { x: mid + 4, y: b.y - 46 } }; }
   const dy = n.y - a.y;
@@ -760,10 +763,10 @@ function buildPaper() {
 // posiciones de las variables: primero las de main, luego cada marco de función bajo su nombre
 function varLayout() {
   const out = []; let y = 10;
-  for (const v of M.globals) { out.push({ v, x: 5, y, frame: null }); y += 36; }
+  for (const v of M.globals) { out.push({ v, x: 5, y, frame: null }); y += 30; }
   for (const f of M.frames) {
-    y += 6; out.push({ header: f.fn + '()', y }); y += 16;
-    for (const v of f.locals) { out.push({ v, x: 5, y, frame: f }); y += 32; }
+    y += 2; out.push({ header: f.fn + '()', y }); y += 14;
+    for (const v of f.locals) { out.push({ v, x: 5, y, frame: f }); y += 28; }
   }
   return out;
 }
@@ -858,7 +861,13 @@ function draw(dt) {
   const layout = varLayout();
   let lane = 0;
   for (const it of layout) {
-    if (it.header) { ctx.fillStyle = '#2350b8'; ctx.font = '13px "Cutive Mono", monospace'; ctx.textAlign = 'left'; ctx.fillText(it.header, 4, it.y + 10); continue; }
+    if (it.header) {   // nombre de la función del marco, recortado al ancho del margen
+      ctx.save(); ctx.beginPath(); ctx.rect(0, it.y - 2, MX - 3, 16); ctx.clip();
+      ctx.fillStyle = '#2350b8'; ctx.font = '11px "Cutive Mono", monospace'; ctx.textAlign = 'left';
+      const w = ctx.measureText(it.header).width;
+      ctx.fillText(w > MX - 6 ? it.header.slice(0, Math.floor((MX - 14) / (w / it.header.length))) + '…' : it.header, 3, it.y + 9);
+      ctx.restore(); continue;
+    }
     const v = it.v; if (v.kind !== 'ptr') continue;
     const a = { x: it.x + PW, y: it.y + PH / 2 };
     const key = 'v' + (it.frame ? it.frame.fn + M.frames.indexOf(it.frame) : '') + v.name;
@@ -896,7 +905,7 @@ function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch
 
 function fit() {
   const cell = $('cell').getBoundingClientRect();
-  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (cell.height - 4) / LH));
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (innerHeight * 0.42) / LH));
   DPR = Math.min(3, window.devicePixelRatio || 1);
   if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
     SC = s;
@@ -906,6 +915,7 @@ function fit() {
   }
 }
 new ResizeObserver(fit).observe($('cell'));
+addEventListener('resize', fit);
 
 /* ════════════════════════════════════════════════════════════════════
    9. TOCAR EL DIBUJO
