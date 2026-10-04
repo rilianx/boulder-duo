@@ -1,0 +1,914 @@
+<title>Puntero C: motor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
+<style>
+/* Cuaderno en vertical: arriba el dibujo (margen = stack, hoja = heap) con el programa en C al lado; abajo, el armador de líneas. Un solo look de papel, a propósito. */
+:root{
+  color-scheme: light;
+  --paper:#fbf8ef;
+  --paper-2:#f3eedf;
+  --graphite:#2e2c2a;
+  --soft:#6f6a62;
+  --margin:#e0726a;
+  --ink:#2350b8;
+  --note:#ffe27a;
+  --ok:#2f8a4c;
+  --bad:#c23a32;
+  --bad-bg:#fff1ee;
+  --warn:#b7791f;
+  --warn-bg:#fff6e3;
+  --lock:#a59f95;
+  --display:"Caveat","Comic Sans MS",cursive;
+  --body:"Patrick Hand","Comic Sans MS",system-ui,sans-serif;
+  --code:"Cutive Mono","Courier New",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--body);font-size:17px;line-height:1.25;
+  padding-inline:16px;padding-block:8px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.app{height:100%;max-width:980px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
+
+header{display:flex;align-items:center;gap:5px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
+h1{font-family:var(--display);font-size:27px;margin:0;line-height:1;white-space:nowrap;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+h1 span{color:var(--ink)}
+h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:400}
+@media (max-width:430px){ h1 small{display:none} }
+.mini{font-family:var(--body);font-size:18px;line-height:1;width:33px;height:33px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
+.mini:disabled{opacity:.35}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,42%);gap:8px;min-height:0}
+@media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 340px} }
+.boardcell{position:relative;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+canvas#cv{display:block;touch-action:manipulation;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
+
+.code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
+  padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+.code .ln{white-space:pre-wrap}
+.code .ln.fn{cursor:pointer}
+.code .ln.fn::before{content:"▸ ";color:var(--ink)}
+.code .ln.fn.open::before{content:"▾ "}
+.code .sub{border-left:1.5px dashed var(--lock);margin-left:6px;padding-left:6px;color:var(--soft)}
+.code .dim{color:var(--soft)}
+.code .err{color:var(--bad)}
+.code .leak{color:var(--warn)}
+.code .out{color:var(--ok)}
+.code .new{background:var(--note);animation:fade 1.6s ease-out forwards}
+@keyframes fade{to{background:transparent}}
+
+.build{display:flex;flex-direction:column;gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
+  border-bottom:1.5px dashed var(--soft);padding:2px 2px 4px}
+.line .txt{flex:1;min-width:0;overflow-wrap:anywhere}
+.line .hole{display:inline-block;min-width:1.6em;border-bottom:2px solid var(--lock);color:var(--lock)}
+.line .hole.cur{border-color:var(--ink);color:var(--ink);background:#eef3ff}
+.line .hint{font-family:var(--body);color:var(--soft);font-size:15px}
+.line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
+.chips{display:flex;flex-direction:column;gap:5px;max-height:36vh;overflow-y:auto}
+.grp{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1.5px solid var(--lock)}
+.tab{font-family:var(--body);font-size:clamp(14px,3.9vw,16px);padding:3px 5px 2px;border:none;background:transparent;color:var(--soft);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1.5px}
+.tab.on{color:var(--graphite);border-bottom-color:var(--ink)}
+.tab:disabled{opacity:.35}
+.chip{font-family:var(--code);font-size:clamp(12.5px,3.4vw,15px);min-height:33px;padding:2px 8px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation}
+.chip:active{background:var(--note)}
+.chip.decl{border-style:dashed}
+.chip.mk{border-color:var(--ok);color:var(--ok)}
+.chip.fn{border-color:var(--ink);color:var(--ink)}
+.chip.locked{border-style:dotted;border-color:var(--lock);color:var(--lock);background:transparent}
+.chip.num{min-width:38px}
+button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
+.fb{border:2px solid var(--bad);background:var(--bad-bg);border-radius:12px 5px 12px 5px / 5px 12px 5px 12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.fb.warn{border-color:var(--warn);background:var(--warn-bg)}
+.fb.info{border-color:var(--ink);background:#eef3ff}
+.fb code{font-family:var(--code);font-size:15px}
+.fb p{margin:0}
+.fb .row{display:flex;gap:8px;flex-wrap:wrap}
+.fb button{font-family:var(--body);font-size:18px;padding:5px 14px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
+
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.88);padding:6px;z-index:2}
+.card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:14px 16px;max-width:460px;width:100%;
+  display:flex;flex-direction:column;gap:9px;box-shadow:4px 5px 0 rgba(46,44,42,.18);max-height:100%;overflow-y:auto}
+.card h2{font-family:var(--display);font-size:32px;margin:0;line-height:1;text-wrap:balance}
+.card p{margin:0}
+.card code{font-family:var(--code);font-size:.9em;background:var(--paper-2);padding:0 3px}
+.card pre{font-family:var(--code);font-size:12.5px;background:var(--paper-2);padding:6px 8px;margin:0;overflow-x:auto;white-space:pre;-webkit-user-select:text;user-select:text}
+.card .row{display:flex;gap:8px;flex-wrap:wrap}
+.card button{font-family:var(--body);font-size:18px;padding:6px 14px;border:2px solid var(--graphite);background:var(--note);color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
+.card button.sec{background:#fffdf6}
+.card ul{margin:0;padding-left:20px}
+</style>
+
+<div class="app">
+  <header>
+    <h1>Puntero <span>C</span> <small>motor</small></h1>
+    <button class="mini" id="bundo" aria-label="Deshacer la última línea">↶</button>
+    <button class="mini" id="bsort" aria-label="Ordenar el dibujo">⇅</button>
+    <button class="mini" id="bexport" aria-label="Ver el programa completo en C">{ }</button>
+    <button class="mini" id="breset" aria-label="Empezar de cero">⟲</button>
+    <button class="mini" id="bhelp" aria-label="Ayuda">?</button>
+  </header>
+
+  <div class="main">
+    <div class="boardcell" id="cell">
+      <canvas id="cv" aria-label="Memoria: variables en el margen, nodos en la hoja"></canvas>
+      <div class="overlay" id="ov" hidden></div>
+    </div>
+    <div class="code" id="code" aria-live="polite"></div>
+  </div>
+
+  <div class="build">
+    <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
+    <div class="chips" id="chips"></div>
+    <div class="fb" id="fb" hidden>
+      <code id="fbcode"></code>
+      <p id="fbwhy"></p>
+      <div class="row" id="fbrow"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+/* ════════════════════════════════════════════════════════════════════
+   1. MEMORIA
+   Todo lo que se puede deshacer vive en M (datos planos, se clona con JSON).
+   Los nodos se identifican por id; un puntero vale un id, null (NULL) o 'G' (basura).
+   ════════════════════════════════════════════════════════════════════ */
+const G = 'G';
+const NAMES = ['head', 'p', 'q', 'nuevo', 'aux', 'sig', 'ant'];
+let M = null;
+function newMem() { return { nodes: {}, globals: [], frames: [], nextId: 1 }; }
+const nodeOf = id => M.nodes[id];
+const liveIds = () => Object.keys(M.nodes).map(Number);
+
+// Dentro de una función solo se ven sus variables locales (como en C); afuera, las de main.
+function scope() { return M.frames.length ? M.frames[M.frames.length - 1].locals : M.globals; }
+const lookup = name => scope().find(v => v.name === name) || null;
+
+/* ════════════════════════════════════════════════════════════════════
+   2. FUNCIONES COMPUESTAS
+   Se escriben con las mismas líneas simples que usa el alumno y se desbloquean
+   cuando el alumno hace a mano lo mismo que hacen.
+   ════════════════════════════════════════════════════════════════════ */
+const FUNCS = {
+  crearNodo: {
+    sig: 'Nodo *crearNodo(int v)', params: [['v', 'int']], returns: true,
+    body: ['Nodo *n = malloc(sizeof(Nodo));', 'n->value = v;', 'n->next = NULL;', 'return n;'],
+    unlock: 'Crea un nodo con malloc e inicializa sus dos campos: value y next.' },
+  insertarInicio: {
+    sig: 'Nodo *insertarInicio(Nodo *head, int v)', params: [['head', 'ptr'], ['v', 'int']], returns: true,
+    body: ['Nodo *n = crearNodo(v);', 'n->next = head;', 'return n;'],
+    unlock: 'Pon un nodo delante del primero de una lista y luego mueve la variable que apuntaba al primero.' },
+  insertarDespues: {
+    sig: 'void insertarDespues(Nodo *p, int v)', params: [['p', 'ptr'], ['v', 'int']], returns: false,
+    body: ['Nodo *n = crearNodo(v);', 'n->next = p->next;', 'p->next = n;'],
+    unlock: 'Mete un nodo justo después de otro sin perder lo que venía detrás.' },
+  eliminarSiguiente: {
+    sig: 'void eliminarSiguiente(Nodo *p)', params: [['p', 'ptr']], returns: false,
+    body: ['Nodo *b = p->next;', 'p->next = b->next;', 'free(b);'],
+    unlock: 'Haz que un nodo se salte al siguiente y después libera el que quedó afuera.' },
+};
+const FUNC_ORDER = ['crearNodo', 'insertarInicio', 'insertarDespues', 'eliminarSiguiente'];
+let UNLOCKED = new Set();
+try { UNLOCKED = new Set(JSON.parse(localStorage.getItem('punteroC.unlocked') || '[]')); } catch (e) {}
+function saveUnlocks() { try { localStorage.setItem('punteroC.unlocked', JSON.stringify([...UNLOCKED])); } catch (e) {} }
+
+/* ════════════════════════════════════════════════════════════════════
+   3. INTÉRPRETE de un subconjunto de C
+   ════════════════════════════════════════════════════════════════════ */
+class CErr { constructor(msg, kind) { this.msg = msg; this.kind = kind; } }   // kind: compile | run
+const sleep = ms => new Promise(r => setTimeout(r, REDUCED ? Math.min(ms, 60) : ms));
+const STEP_MS = 520;
+
+function splitArgs(s) {
+  const out = []; let depth = 0, cur = '';
+  for (const ch of s) {
+    if (ch === '(') depth++; if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+function deref(id, what) {
+  if (id === null) throw new CErr(`Segmentation fault: ${what} es NULL, no hay nodo que leer.`, 'run');
+  if (id === G) throw new CErr(`Comportamiento indefinido: ${what} es basura (nunca se inicializó).`, 'run');
+  const n = nodeOf(id);
+  if (!n || n.freed) throw new CErr(`Uso después de free: ${what} apunta a memoria liberada.`, 'run');
+  return n;
+}
+// nombre(->next)*  → id | null | G
+function evalChain(e) {
+  const parts = e.split('->'), base = parts.shift();
+  if (!/^\w+$/.test(base)) throw new CErr(`error de sintaxis en '${e}'`, 'compile');
+  const v = lookup(base);
+  if (!v) throw new CErr(`error: '${base}' no está declarada` + (M.frames.length ? ` dentro de ${M.frames.at(-1).fn}()` : '') + '.', 'compile');
+  if (v.kind === 'int') throw new CErr(`error: '${base}' es un int, no un puntero.`, 'compile');
+  let cur = v.t, path = base;
+  for (const f of parts) {
+    if (f === 'prev') throw new CErr("error: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder.", 'compile');
+    if (f !== 'next') throw new CErr(`error: 'Nodo' no tiene un miembro llamado '${f}'.`, 'compile');
+    cur = deref(cur, path).next; path += '->next';
+  }
+  return cur;
+}
+async function evalPtr(e, ctx) {
+  e = e.trim();
+  if (e === 'NULL') return null;
+  if (e === 'malloc(sizeof(Nodo))') {
+    const id = M.nextId++;
+    const [x, y] = freeSlot();
+    M.nodes[id] = { id, v: null, next: G, freed: false, dead: false, x, y, mallocd: ctx.depth === 0, initV: false, initN: false };
+    spawnFx(id);
+    return id;
+  }
+  const m = /^(\w+)\((.*)\)$/.exec(e);
+  if (m) return await callFn(m[1], splitArgs(m[2]), ctx, true);
+  return evalChain(e);
+}
+function evalInt(e) {
+  e = e.trim();
+  if (/^-?\d+$/.test(e)) return +e;
+  const v = lookup(e);
+  if (v && v.kind === 'int') return v.val;
+  throw new CErr(`error: '${e}' no es un número.`, 'compile');
+}
+
+async function callFn(name, args, ctx, wantValue) {
+  const F = FUNCS[name];
+  if (!F) throw new CErr(`error: la función '${name}' no existe.`, 'compile');
+  if (ctx.depth === 0 && !UNLOCKED.has(name)) throw new CErr(`error: '${name}' todavía no está definida. ${F.unlock}`, 'compile');
+  if (wantValue && !F.returns) throw new CErr(`error: ${name}() es void, no devuelve un puntero.`, 'compile');
+  if (args.length !== F.params.length) throw new CErr(`error: ${name}() recibe ${F.params.length} argumento(s).`, 'compile');
+  // los argumentos se evalúan en quien llama y se COPIAN a las variables locales de la función
+  const locals = [];
+  for (let i = 0; i < args.length; i++) {
+    const [pn, pk] = F.params[i];
+    if (pk === 'int') locals.push({ name: pn, kind: 'int', val: evalInt(args[i]) });
+    else locals.push({ name: pn, kind: 'ptr', t: await evalPtr(args[i], ctx) });
+  }
+  M.frames.push({ fn: name, locals });
+  let ret;
+  try {
+    for (const line of F.body) {
+      await sleep(STEP_MS);
+      const entry = { text: line, sub: [] };
+      ctx.sub.push(entry); renderCode();
+      const r = await execStmt(line, { depth: ctx.depth + 1, sub: entry.sub });
+      if (r && 'ret' in r) { ret = r.ret; break; }
+    }
+    await sleep(STEP_MS * 0.6);
+  } finally { M.frames.pop(); }
+  return ret;
+}
+
+// Ejecuta una línea. Devuelve { ret } si es un return.
+async function execStmt(text, ctx) {
+  let m;
+  const top = ctx.depth === 0;
+  if ((m = /^return (.+);$/.exec(text))) return { ret: await evalPtr(m[1], ctx) };
+  if ((m = /^free\((.+)\);$/.exec(text))) {
+    const id = await evalPtr(m[1], ctx);
+    if (id === null) { ctx.note = '  // free(NULL) no hace nada'; return; }
+    if (id === G) throw new CErr(`Comportamiento indefinido: ${m[1]} es basura.`, 'run');
+    const n = nodeOf(id);
+    if (n.freed) throw new CErr('double free: ese nodo ya estaba liberado.', 'run');
+    n.freed = true;
+    if (top && n.bypassed) unlock('eliminarSiguiente');
+    return;
+  }
+  if ((m = /^if \((.+)->value == (.+)\)$/.exec(text))) {
+    const n = deref(evalChain(m[1]), m[1]);
+    if (n.v === null) throw new CErr(`Comportamiento indefinido: ${m[1]}->value es basura (nunca se le asignó un valor).`, 'run');
+    const ok = n.v === evalInt(m[2]);
+    flash(n.id, ok);
+    ctx.note = ok ? '  // verdadero' : '  // falso';
+    return;
+  }
+  if ((m = /^if \((.+) == NULL\)$/.exec(text))) {
+    const id = evalChain(m[1]);
+    if (id === G) throw new CErr(`Comportamiento indefinido: ${m[1]} es basura.`, 'run');
+    ctx.note = id === null ? '  // verdadero' : '  // falso';
+    if (id !== null && nodeOf(id)) flash(id, false);
+    return;
+  }
+  if ((m = /^printf\("%d", (.+)->value\);$/.exec(text))) {
+    const n = deref(evalChain(m[1]), m[1]);
+    if (n.v === null) throw new CErr(`Comportamiento indefinido: ${m[1]}->value es basura.`, 'run');
+    flash(n.id, true);
+    ctx.out = String(n.v);
+    return;
+  }
+  if ((m = /^(\w+)\((.*)\);$/.exec(text))) { await callFn(m[1], splitArgs(m[2]), ctx, false); return; }
+
+  const eq = text.indexOf(' = ');
+  if (eq < 0 || !text.endsWith(';')) throw new CErr('error de sintaxis.', 'compile');
+  const lhs = text.slice(0, eq), rhs = text.slice(eq + 3, -1);
+
+  if ((m = /^Nodo \*(\w+)$/.exec(lhs))) {
+    if (lookup(m[1])) throw new CErr(`error: '${m[1]}' ya está declarada.`, 'compile');
+    if (rhs === m[1] || rhs.startsWith(m[1] + '->')) throw new CErr(`error: '${m[1]}' se usa en su propia declaración, antes de tener un valor.`, 'compile');
+    const val = await evalPtr(rhs, ctx);
+    scope().push({ name: m[1], kind: 'ptr', t: val });
+    if (top && m[1] === 'p') hop();
+    return;
+  }
+  if ((m = /^(.+)->value$/.exec(lhs))) {
+    const val = evalInt(rhs);
+    const n = deref(evalChain(m[1]), m[1]);
+    n.v = val; if (top) n.initV = true;
+    flash(n.id, true);
+    return;
+  }
+  if ((m = /^(.+)->next$/.exec(lhs))) {
+    const val = await evalPtr(rhs, ctx);
+    const n = deref(evalChain(m[1]), m[1]);
+    const old = n.next;
+    n.next = val; if (top) n.initN = true;
+    if (top && val !== null && val !== G && val !== old && old !== null && old !== G && nodeOf(val) && nodeOf(val).next === old) unlock('insertarDespues');
+    if (top && old !== null && old !== G && nodeOf(old) && val === nodeOf(old).next && val !== old) nodeOf(old).bypassed = true;
+    return;
+  }
+  if (/^\w+$/.test(lhs)) {
+    const v = lookup(lhs);
+    if (!v) throw new CErr(`error: '${lhs}' no está declarada. Primero: Nodo *${lhs} = …;`, 'compile');
+    const old = v.t;
+    const val = await evalPtr(rhs, ctx);
+    v.t = val;
+    if (top && old !== null && old !== G && val !== null && val !== G && val !== old && nodeOf(val) && nodeOf(val).next === old) unlock('insertarInicio');
+    if (top && lhs === 'p') hop();
+    return;
+  }
+  throw new CErr('error de sintaxis.', 'compile');
+}
+
+// Un nodo al que no llega ninguna variable (de ningún marco) ni ninguna flecha queda sin acceso.
+function checkLeaks() {
+  const roots = M.globals.concat(...M.frames.map(f => f.locals)).filter(v => v.kind === 'ptr').map(v => v.t);
+  const seen = new Set(), q = roots.filter(id => id !== null && id !== G && nodeOf(id) && !nodeOf(id).freed);
+  while (q.length) {
+    const id = q.pop(); if (seen.has(id)) continue; seen.add(id);
+    const nx = nodeOf(id).next;
+    if (nx !== null && nx !== G && nodeOf(nx) && !nodeOf(nx).freed) q.push(nx);
+  }
+  const lost = [];
+  for (const id of liveIds()) { const n = nodeOf(id); if (!n.dead && !n.freed && !seen.has(id)) { n.dead = true; lost.push(n); } }
+  return lost;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   4. PROGRAMA, DESHACER Y DESBLOQUEOS
+   ════════════════════════════════════════════════════════════════════ */
+let PROG = [], UNDO = [], BUSY = false;
+async function run(text) {
+  if (BUSY) return;
+  BUSY = true; hideFb(); renderBuilder();
+  const snap = JSON.stringify(M);
+  const entry = { text, sub: [], cls: 'new' };
+  PROG.push(entry); renderCode();
+  const ctx = { depth: 0, sub: entry.sub };
+  try {
+    await execStmt(text, ctx);
+  } catch (e) {
+    if (!(e instanceof CErr)) { console.error(e); e = new CErr('Error interno: ' + e.message, 'run'); }
+    if (e.kind === 'run') await sleep(350);
+    M = JSON.parse(snap);
+    entry.text = '// ✗ ' + text; entry.cls = 'err'; entry.sub = [];
+    renderCode(); shake();
+    showFb('bad', '✗ ' + text, e.msg, [['Entendido', hideFb]]);
+    beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
+    BUSY = false; renderBuilder(); return;
+  }
+  UNDO.push({ mem: snap, prog: PROG.length - 1 });
+  if (entry.sub.length) entry.open = false;   // las funciones quedan plegadas; se abren tocándolas
+  if (ctx.note) entry.text += ctx.note;
+  if (ctx.out != null) PROG.push({ text: '// salida: ' + ctx.out, cls: 'out' });
+  beep(620, 0.08, 'triangle', 0.05, 1.3); vibrate(12);
+  const lost = checkLeaks();
+  if (lost.length) {
+    const nm = lost.map(n => n.v === null ? '(sin valor)' : n.v);
+    const vals = nm.length > 1 ? nm.slice(0, -1).join(', el ') + ' y el ' + nm.at(-1) : String(nm[0]);
+    const pl = lost.length > 1;
+    PROG.push({ text: `// ⚠ fuga: el ${vals} ${pl ? 'quedaron' : 'quedó'} sin acceso`, cls: 'leak' });
+    beep(500, 0.5, 'sine', 0.05, 0.3);
+    showFb('warn', '⚠ ' + text, `${pl ? `El ${vals} quedaron` : `El ${vals} quedó`} sin ninguna variable ni flecha que ${pl ? 'los' : 'lo'} apunte. En C ya no hay forma de alcanzar${pl ? 'los' : 'lo'} ni de liberar${pl ? 'los' : 'lo'}.`,
+      [['↶ Deshacer', undo], ['Seguir así', hideFb]]);
+  }
+  // crearNodo: un nodo hecho con malloc al que el alumno le dio value y next a mano
+  if (Object.values(M.nodes).some(n => n.mallocd && n.initV && n.initN)) unlock('crearNodo');
+  renderCode();
+  BUSY = false; renderBuilder();
+  if (PENDING_UNLOCK.length) showUnlock(PENDING_UNLOCK.shift());
+}
+function undo() {
+  if (BUSY || !UNDO.length) return;
+  const u = UNDO.pop();
+  M = JSON.parse(u.mem); PROG.length = u.prog; renderCode();
+  hideFb(); renderBuilder();
+}
+const PENDING_UNLOCK = [];
+function unlock(name) {
+  if (UNLOCKED.has(name)) return;
+  UNLOCKED.add(name); saveUnlocks();
+  if (!PENDING_UNLOCK.includes(name)) PENDING_UNLOCK.push(name);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   5. ARMADOR DE LÍNEAS
+   Una plantilla tiene huecos §tipo que se llenan tocando piezas:
+   §new nombre sin declarar · §var variable declarada · §lv expresión que apunta a un nodo
+   §ptr cualquier valor puntero · §num número
+   ════════════════════════════════════════════════════════════════════ */
+let BUILD = null, TAB = 'Variables';
+const HOLE = /§(\w+)/;
+const STMTS = [
+  ['Variables', [['Nodo *§new = §ptr;', 'decl'], ['§var = §ptr;', '']]],
+  ['Campos', [['§lv->next = §ptr;', ''], ['§lv->value = §num;', '']]],
+  ['Memoria', [['free(§ptr);', '']]],
+  ['Consultas', [['if (§lv->value == §num)', ''], ['if (§lv == NULL)', ''], ['printf("%d", §lv->value);', '']]],
+  ['Funciones', [['insertarDespues(§lv, §num);', 'fn:insertarDespues'], ['eliminarSiguiente(§lv);', 'fn:eliminarSiguiente']]],
+];
+const declaredPtrs = () => M.globals.filter(v => v.kind === 'ptr');
+function piecesFor(type) {
+  const vs = declaredPtrs();
+  const out = [];
+  if (type === 'new') for (const n of NAMES) if (!lookup(n)) out.push({ text: n });
+  if (type === 'var') for (const v of vs) out.push({ text: v.name });
+  if (type === 'lv' || type === 'ptr') {
+    if (type === 'ptr') out.push({ text: 'NULL' });
+    for (const v of vs) out.push({ text: v.name });
+    for (const v of vs) out.push({ text: v.name + '->next' });
+    for (const v of vs) { const t = v.t; if (t !== null && t !== G && nodeOf(t) && !nodeOf(t).freed && nodeOf(t).next !== null) out.push({ text: v.name + '->next->next' }); }
+    const bait = vs.find(v => v.name !== 'head') || vs[0];
+    if (bait) out.push({ text: bait.name + '->prev' });
+  }
+  if (type === 'ptr') {
+    out.push({ text: 'malloc(sizeof(Nodo))', cls: 'mk' });
+    out.push({ text: 'crearNodo(§num)', label: 'crearNodo(…)', cls: 'fn', fn: 'crearNodo' });
+    out.push({ text: 'insertarInicio(§lv, §num)', label: 'insertarInicio(…)', cls: 'fn', fn: 'insertarInicio' });
+  }
+  if (type === 'num') for (let i = 0; i <= 9; i++) out.push({ text: String(i), cls: 'num' });
+  return out;
+}
+function holeHTML(text) {
+  let first = true;
+  return esc(text).replace(/§(\w+)/g, (_, t) => {
+    const lab = { new: 'nombre', var: 'variable', lv: 'nodo', ptr: 'valor', num: 'n' }[t] || t;
+    const h = `<span class="hole${first ? ' cur' : ''}">${lab}</span>`; first = false; return h;
+  });
+}
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function mkChip(label, cls, onclick) {
+  const b = document.createElement('button');
+  b.className = 'chip ' + (cls || ''); b.textContent = label; b.onclick = onclick; return b;
+}
+function renderBuilder() {
+  const box = $('chips'); box.innerHTML = '';
+  $('bundo').disabled = BUSY || !UNDO.length;
+  if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
+  if (!BUILD) {
+    $('ltxt').innerHTML = '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
+    const empty = !declaredPtrs().length;
+    if (empty) TAB = 'Variables';
+    const tabs = document.createElement('div'); tabs.className = 'tabs';
+    for (const [lbl] of STMTS) {
+      const t = document.createElement('button'); t.className = 'tab' + (lbl === TAB ? ' on' : ''); t.textContent = lbl;
+      t.disabled = empty && lbl !== 'Variables' && lbl !== 'Funciones';
+      t.onclick = () => { TAB = lbl; renderBuilder(); };
+      tabs.appendChild(t);
+    }
+    box.appendChild(tabs);
+    for (const [lbl, list] of STMTS) {
+      if (lbl !== TAB) continue;
+      const g = document.createElement('div'); g.className = 'grp';
+      for (const [tpl, kind] of list) {
+        const fn = kind.startsWith('fn:') ? kind.slice(3) : null;
+        if (lbl !== 'Variables' && lbl !== 'Funciones' && !declaredPtrs().length) continue;
+        if (tpl.startsWith('Nodo') && !piecesFor('new').length) continue;
+        if (tpl.startsWith('§var') && !declaredPtrs().length) continue;
+        const label = tpl.replace(/§\w+/g, '_');
+        if (fn && !UNLOCKED.has(fn)) g.appendChild(mkChip('🔒 ' + fn + '(…)', 'locked', () => lockedHint(fn)));
+        else g.appendChild(mkChip(label, fn ? 'fn' : kind, () => { BUILD = tpl; renderBuilder(); }));
+      }
+      if (g.children.length) box.appendChild(g);
+    }
+    if (!declaredPtrs().length) {
+      const p = document.createElement('p'); p.className = 'hint'; p.style.margin = '0'; p.style.fontSize = '15px'; p.style.color = 'var(--soft)';
+      p.textContent = 'La memoria está vacía. Empieza declarando un puntero, por ejemplo Nodo *head = malloc(sizeof(Nodo));';
+      box.appendChild(p);
+    }
+    return;
+  }
+  $('ltxt').innerHTML = holeHTML(BUILD); $('bx').hidden = false;
+  const type = HOLE.exec(BUILD)[1];
+  const g = document.createElement('div'); g.className = 'grp';
+  for (const pc of piecesFor(type)) {
+    if (pc.fn && !UNLOCKED.has(pc.fn)) { g.appendChild(mkChip('🔒 ' + pc.fn + '(…)', 'locked', () => lockedHint(pc.fn))); continue; }
+    g.appendChild(mkChip(pc.label || pc.text, pc.cls, () => fill(pc.text)));
+  }
+  box.appendChild(g);
+}
+function fill(piece) {
+  BUILD = BUILD.replace(HOLE, piece);
+  if (HOLE.test(BUILD)) { renderBuilder(); return; }
+  const line = BUILD; BUILD = null; run(line);
+}
+$('bx').onclick = () => { BUILD = null; renderBuilder(); };
+function lockedHint(fn) {
+  showFb('info', '🔒 ' + FUNCS[fn].sig, 'Se desbloquea cuando lo haces a mano: ' + FUNCS[fn].unlock, [['Entendido', hideFb]]);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   6. PANEL DE CÓDIGO, TARJETAS Y AVISOS
+   ════════════════════════════════════════════════════════════════════ */
+function renderCode() {
+  const el = $('code');
+  const lines = ['<div class="ln dim">// Nodo: int value; Nodo *next;</div>', '<div class="ln dim">int main(void) {</div>'];
+  const walk = (list, depth) => {
+    for (const e of list) {
+      const isFn = e.sub && e.sub.length;
+      const cls = ['ln', e.cls || '', isFn ? 'fn' : '', isFn && e.open !== false ? 'open' : ''].join(' ');
+      lines.push(`<div class="${cls}" data-path="${e._path}">${'  '.repeat(depth ? 0 : 1)}${esc(e.text)}</div>`);
+      if (isFn && e.open !== false) { lines.push('<div class="sub">'); walk(e.sub, depth + 1); lines.push('</div>'); }
+    }
+  };
+  const tag = (list, pre) => list.forEach((e, i) => { e._path = pre + i; if (e.sub) tag(e.sub, pre + i + '.'); });
+  tag(PROG, '');
+  walk(PROG, 0);
+  el.innerHTML = lines.join('');
+  el.querySelectorAll('.ln.fn').forEach(d => d.onclick = () => {
+    let e = null, list = PROG;
+    for (const k of d.dataset.path.split('.')) { e = list[+k]; list = e.sub; }
+    e.open = e.open === false; renderCode();
+  });
+  PROG.forEach(e => { if (e.cls === 'new') setTimeout(() => { if (e.cls === 'new') e.cls = ''; }, 1600); });
+  el.scrollTop = el.scrollHeight;
+}
+function showFb(kind, code, why, buttons) {
+  const fb = $('fb'); fb.hidden = false; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
+  $('fbcode').textContent = code; $('fbwhy').textContent = why;
+  const row = $('fbrow'); row.innerHTML = '';
+  for (const [t, f] of buttons) { const b = document.createElement('button'); b.textContent = t; b.onclick = f; row.appendChild(b); }
+}
+function hideFb() { $('fb').hidden = true; }
+function showCard(html, onReady) {
+  const ov = $('ov'); ov.hidden = false; ov.innerHTML = `<div class="card">${html}</div>`;
+  if (onReady) onReady();
+}
+function closeCard() { $('ov').hidden = true; $('ov').innerHTML = ''; }
+function showUnlock(name) {
+  const F = FUNCS[name];
+  beep(660, 0.12, 'triangle', 0.05); setTimeout(() => beep(990, 0.2, 'triangle', 0.05), 120);
+  showCard(`<h2>🔓 ${name}()</h2><p>Acabas de hacer a mano lo que hace esta función. Desde ahora aparece en el menú y la puedes usar en una sola línea.</p>
+    <pre>${esc(F.sig)} {\n${F.body.map(l => '  ' + l).join('\n')}\n}</pre>
+    <p>Al usarla, en el código toca la línea para ver por dentro cada paso que ejecutó.</p>
+    <div class="row"><button id="cok">Seguir</button></div>`, () => { $('cok').onclick = () => { closeCard(); if (PENDING_UNLOCK.length) showUnlock(PENDING_UNLOCK.shift()); renderBuilder(); }; $('cok').focus(); });
+  renderBuilder();
+}
+function exportC() {
+  const used = new Set();
+  const scan = list => list.forEach(e => { for (const f of FUNC_ORDER) if (e.text.includes(f + '(')) used.add(f); if (e.sub) scan(e.sub); });
+  scan(PROG);
+  if (used.has('insertarInicio') || used.has('insertarDespues')) used.add('crearNodo');
+  const defs = FUNC_ORDER.filter(f => used.has(f)).map(f => `${FUNCS[f].sig} {\n${FUNCS[f].body.map(l => '  ' + l).join('\n')}\n}\n`).join('\n');
+  const body = PROG.filter(e => e.cls !== 'err').map(e => {
+    if (e.cls === 'out' || e.cls === 'leak') return '  ' + e.text;
+    let t = e.text;
+    if (t.startsWith('if (')) { const [cond, note] = t.split('  //'); return `  if ${cond.slice(3)} { /* ${note ? note.trim() : ''} */ }`; }
+    if (t.startsWith('printf(')) t = t.replace('"%d"', '"%d\\n"');
+    return '  ' + t;
+  }).join('\n');
+  return `#include <stdio.h>\n#include <stdlib.h>\n\ntypedef struct Nodo {\n  int value;\n  struct Nodo *next;\n} Nodo;\n\n${defs}${defs ? '\n' : ''}int main(void) {\n${body}${body ? '\n' : ''}  return 0;\n}\n`;
+}
+$('bexport').onclick = () => {
+  const code = exportC();
+  showCard(`<h2>Tu programa en C</h2><p>Esto compila tal cual con <code>gcc programa.c</code>. Las consultas quedan como <code>if</code> vacíos con su resultado.</p>
+    <pre id="expre">${esc(code)}</pre>
+    <div class="row"><button id="ccopy">Copiar</button><button class="sec" id="cclose">Cerrar</button></div>`, () => {
+    $('cclose').onclick = closeCard;
+    $('ccopy').onclick = () => {
+      const done = () => { $('ccopy').textContent = 'Copiado'; };
+      try { navigator.clipboard.writeText(code).then(done, () => selectPre()); } catch (e) { selectPre(); }
+    };
+  });
+};
+function selectPre() { const r = document.createRange(); r.selectNodeContents($('expre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('ccopy').textContent = 'Seleccionado: copia con el menú'; }
+$('bhelp').onclick = () => {
+  showCard(`<h2>Cómo funciona</h2>
+    <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
+    <p>Abajo eliges una línea y llenas sus huecos tocando piezas. La línea se ejecuta y se anima. A la derecha queda el programa.</p>
+    <ul>
+      <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
+      <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
+      <li>Un nodo que nadie apunta queda transparente: <b>sin acceso</b>.</li>
+      <li>Las <b>funciones</b> se desbloquean cuando haces a mano lo mismo que hacen. Al usarlas, toca su línea para ver los pasos por dentro.</li>
+    </ul>
+    <p>⇅ ordena el dibujo · { } muestra el programa completo · ↶ deshace.</p>
+    <p>Funciones desbloqueadas: ${FUNC_ORDER.filter(f => UNLOCKED.has(f)).map(f => `<code>${f}</code>`).join(', ') || 'ninguna todavía'}.</p>
+    <div class="row"><button id="cg">Seguir</button><button class="sec" id="call">Desbloquear todas (profesor)</button><button class="sec" id="cnone">Volver a bloquear</button></div>`, () => {
+    $('cg').onclick = closeCard;
+    $('call').onclick = () => { FUNC_ORDER.forEach(f => UNLOCKED.add(f)); saveUnlocks(); closeCard(); renderBuilder(); };
+    $('cnone').onclick = () => { UNLOCKED.clear(); saveUnlocks(); closeCard(); renderBuilder(); };
+  });
+};
+$('bundo').onclick = undo;
+$('breset').onclick = () => { if (BUSY) return; M = newMem(); PROG = []; UNDO = []; BUILD = null; hideFb(); renderCode(); renderBuilder(); };
+$('bsort').onclick = () => { if (!BUSY) sortDrawing(); };
+
+/* ════════════════════════════════════════════════════════════════════
+   7. DIBUJO A MANO
+   ════════════════════════════════════════════════════════════════════ */
+const LW = 250, LH = 480;
+const MX = 70;
+const NW = 62, NH = 30, DW = 40;
+const PW = 60, PH = 24;
+const COLS = [136, 212], ROWS = 7;
+const Y = i => 36 + i * 64;
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv = $('cv'), ctx = cv.getContext('2d');
+let SC = 1, DPR = 1, boil = 0, T = 0;
+const POS = {};     // id → posición dibujada (se anima hacia x,y)
+const FX = { flash: {}, shake: 0, hop: 0, avatar: null };
+const AR = {};      // geometría animada de cada flecha
+
+function freeSlot() {
+  const used = Object.values(M.nodes).map(n => n.x + ',' + n.y);
+  for (const x of COLS) for (let r = 0; r < ROWS; r++) if (!used.includes(x + ',' + Y(r))) return [x, Y(r)];
+  return [COLS[1], Y(ROWS - 1)];
+}
+function spawnFx(id) { const n = nodeOf(id); POS[id] = { x: n.x, y: n.y - 34 }; }
+function flash(id, ok) { FX.flash[id] = { t: 1, ok }; }
+function shake() { FX.shake = 0.4; }
+function hop() { FX.hop = 1; }
+
+// Ordenar: las listas que salen de cada variable, en orden, columna por columna. Lo liberado sin referencias se borra.
+function sortDrawing() {
+  const order = [], seen = new Set();
+  for (const v of M.globals) {
+    let id = v.t;
+    while (id !== null && id !== G && nodeOf(id) && !seen.has(id)) { seen.add(id); order.push(id); id = nodeOf(id).next; }
+  }
+  const pointed = new Set(M.globals.map(v => v.t).concat(Object.values(M.nodes).map(n => n.next)));
+  for (const id of liveIds()) if (!seen.has(id)) { if (nodeOf(id).freed && !pointed.has(id)) delete M.nodes[id]; else order.push(id); }
+  order.forEach((id, i) => { const n = nodeOf(id); if (!n) return; n.x = COLS[Math.floor(i / ROWS) % 2]; n.y = Y(i % ROWS); });
+}
+
+function hash(n) { n = (n ^ 61) ^ (n >>> 16); n = n + (n << 3); n = n ^ (n >>> 4); n = Math.imul(n, 0x27d4eb2d); n = n ^ (n >>> 15); return ((n >>> 0) % 10000) / 5000 - 1; }
+const J = (s, a) => hash(s * 7919 + boil * 104729) * a;
+const lerp = (a, b, t) => a + (b - a) * t;
+function rLine(x1, y1, x2, y2, seed, amp = 1, passes = 2) {
+  for (let p = 0; p < passes; p++) {
+    const s = seed * 13 + p * 5;
+    ctx.beginPath();
+    ctx.moveTo(x1 + J(s + 2, amp), y1 + J(s + 3, amp));
+    ctx.quadraticCurveTo((x1 + x2) / 2 + J(s, amp * 1.4), (y1 + y2) / 2 + J(s + 1, amp * 1.4), x2 + J(s + 4, amp), y2 + J(s + 5, amp));
+    ctx.stroke();
+  }
+}
+function rRect(x, y, w, h, seed, amp = 0.9) {
+  rLine(x, y, x + w, y, seed, amp); rLine(x + w, y, x + w, y + h, seed + 1, amp);
+  rLine(x + w, y + h, x, y + h, seed + 2, amp); rLine(x, y + h, x, y, seed + 3, amp);
+}
+function rCircle(x, y, r, seed, fill) {
+  ctx.beginPath();
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 22) * Math.PI * 2, rr = r + J(seed + i, r * 0.07);
+    i ? ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr) : ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  ctx.stroke();
+}
+/* Geometría de una flecha: sale hacia la derecha desde el punto y llega al MEDIO del nodo,
+   perpendicular al borde: por arriba si viene de arriba (o es el mismo nodo), por abajo si viene de abajo,
+   por la izquierda si es una variable del margen. */
+function arrowGeo(a, n, opts) {
+  const L = n.x - NW / 2, mid = n.x - 6;
+  if (opts.fromVar) { const b = { x: L - 1, y: n.y + opts.lane }; return { a, b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } }; }
+  if (opts.self) { const b = { x: mid, y: n.y - NH / 2 - 1 }; return { a, b, c1: { x: a.x + 42, y: a.y - 4 }, c2: { x: mid + 4, y: b.y - 46 } }; }
+  const dy = n.y - a.y;
+  let b, c2;
+  if (dy > NH * 0.9) { b = { x: mid, y: n.y - NH / 2 - 1 }; c2 = { x: mid, y: b.y - 34 }; }
+  else if (dy < -NH * 0.9) { b = { x: mid, y: n.y + NH / 2 + 1 }; c2 = { x: mid, y: b.y + 34 }; }
+  else if (a.x < L) { b = { x: L - 1, y: n.y }; c2 = { x: b.x - 26, y: n.y }; }
+  else { b = { x: mid, y: n.y - NH / 2 - 1 }; c2 = { x: mid, y: b.y - 34 }; }
+  const reach = Math.min(40, Math.max(18, Math.abs(b.x - a.x) * 0.5 + 12));
+  return { a, b, c1: { x: a.x + reach, y: a.y }, c2 };
+}
+function lerpGeo(cur, tgt, k) {
+  if (!cur) return JSON.parse(JSON.stringify(tgt));
+  for (const key of ['a', 'b', 'c1', 'c2']) { cur[key].x = lerp(cur[key].x, tgt[key].x, k); cur[key].y = lerp(cur[key].y, tgt[key].y, k); }
+  return cur;
+}
+function drawArrow(g, seed, color, width, dash) {
+  const { a, b, c1, c2 } = g;
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
+  if (dash) ctx.setLineDash(dash);
+  for (let p = 0; p < 2; p++) {
+    ctx.beginPath(); ctx.moveTo(a.x + J(seed + p, 0.7), a.y + J(seed + p + 9, 0.7));
+    ctx.bezierCurveTo(c1.x + J(seed + p + 3, 2), c1.y + J(seed + p + 4, 2), c2.x + J(seed + p + 5, 2), c2.y + J(seed + p + 6, 2), b.x, b.y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const ang = Math.atan2(b.y - c2.y, b.x - c2.x), L = 9;
+  rLine(b.x, b.y, b.x - Math.cos(ang - 0.45) * L, b.y - Math.sin(ang - 0.45) * L, seed + 20, 0.6, 1);
+  rLine(b.x, b.y, b.x - Math.cos(ang + 0.45) * L, b.y - Math.sin(ang + 0.45) * L, seed + 21, 0.6, 1);
+}
+function drawNull(x, y, seed) {
+  ctx.strokeStyle = '#6f6a62'; ctx.lineWidth = 1.3;
+  rLine(x, y, x + 6, y, seed, 0.4, 1);
+  rLine(x + 6, y - 6, x + 6, y + 6, seed + 1, 0.4, 1); rLine(x + 9, y - 4, x + 9, y + 4, seed + 2, 0.4, 1); rLine(x + 12, y - 2, x + 12, y + 2, seed + 3, 0.4, 1);
+}
+function drawGarbage(x, y, seed) {   // puntero sin inicializar: un garabato que no llega a ninguna parte
+  ctx.strokeStyle = '#c23a32'; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x, y);
+  for (let i = 1; i <= 6; i++) ctx.lineTo(x + i * 3.2, y + (i % 2 ? -4 : 4) + J(seed + i, 1));
+  ctx.stroke();
+  ctx.fillStyle = '#c23a32'; ctx.font = '12px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('¿?', x + 21, y + 4);
+}
+const addrOf = id => '0x' + (0x3a0 + id * 0x18).toString(16);
+
+let paper = null;
+function buildPaper() {
+  paper = document.createElement('canvas'); paper.width = Math.round(LW * SC * DPR); paper.height = Math.round(LH * SC * DPR);
+  const g = paper.getContext('2d'); g.scale(SC * DPR, SC * DPR);
+  g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, LW, LH);
+  g.strokeStyle = '#c9dbeb'; g.lineWidth = 0.7;
+  for (let x = 0; x <= LW; x += 12.5) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, LH); g.stroke(); }
+  for (let y = 0; y <= LH; y += 12.5) { g.beginPath(); g.moveTo(0, y); g.lineTo(LW, y); g.stroke(); }
+  g.strokeStyle = '#e0726a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(MX, 0); g.lineTo(MX, LH); g.stroke();
+  g.fillStyle = '#b6b0a6'; g.font = '13px "Patrick Hand", sans-serif'; g.textAlign = 'center';
+  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', LW - 22, 12);
+}
+
+// posiciones de las variables: primero las de main, luego cada marco de función bajo su nombre
+function varLayout() {
+  const out = []; let y = 10;
+  for (const v of M.globals) { out.push({ v, x: 5, y, frame: null }); y += 36; }
+  for (const f of M.frames) {
+    y += 6; out.push({ header: f.fn + '()', y }); y += 16;
+    for (const v of f.locals) { out.push({ v, x: 5, y, frame: f }); y += 32; }
+  }
+  return out;
+}
+function drawVar(it) {
+  const { v, x, y, frame } = it;
+  ctx.save(); ctx.translate(x + PW / 2, y + PH / 2); ctx.rotate(-0.04 + (v.name.length % 3) * 0.02);
+  ctx.fillStyle = frame ? '#e8f0ff' : '#ffe27a'; ctx.fillRect(-PW / 2, -PH / 2, PW, PH);
+  ctx.strokeStyle = frame ? '#2350b8' : '#8a7420'; ctx.lineWidth = 1.1;
+  if (frame) ctx.setLineDash([3, 2]);
+  rRect(-PW / 2, -PH / 2, PW, PH, v.name.charCodeAt(0) * 7, 0.6);
+  ctx.setLineDash([]);
+  ctx.fillStyle = v.name === 'p' && !frame ? '#2350b8' : '#2e2c2a';
+  ctx.font = (v.kind === 'int' ? '14px' : v.name.length > 4 ? '15px' : '17px') + ' "Patrick Hand", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(v.kind === 'int' ? `${v.name} = ${v.val}` : v.name, v.kind === 'int' ? 0 : -4, 1);
+  ctx.restore();
+  if (v.kind === 'ptr') { ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + PW - 5, y + PH / 2, 2.4, 0, 7); ctx.fill(); }
+}
+function drawNode(n) {
+  const P = POS[n.id], x = P.x, y = P.y, L = x - NW / 2, Tp = y - NH / 2;
+  ctx.save();
+  if (n.dead) { ctx.globalAlpha = 0.28; ctx.setLineDash([4, 3]); }
+  if (n.freed) { ctx.globalAlpha = 0.45; ctx.setLineDash([3, 3]); }
+  const fl = FX.flash[n.id];
+  ctx.fillStyle = fl ? (fl.ok ? '#e3f4e6' : '#f6ece0') : '#fffdf6'; ctx.fillRect(L, Tp, NW, NH);
+  ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.8;
+  rRect(L, Tp, NW, NH, n.id * 17 + 3);
+  rLine(L + DW, Tp, L + DW, Tp + NH, n.id * 17 + 9, 0.6, 1);
+  ctx.setLineDash([]);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  if (n.v === null) { ctx.fillStyle = '#c23a32'; ctx.font = '18px "Patrick Hand", sans-serif'; ctx.fillText('¿?', L + DW / 2, y + 1); }
+  else { ctx.fillStyle = '#2e2c2a'; ctx.font = '22px "Patrick Hand", sans-serif'; ctx.fillText(String(n.v), L + DW / 2, y + 1); }
+  ctx.fillStyle = '#2e2c2a';
+  const d = { x: x + NW / 2 - (NW - DW) / 2, y };
+  if (n.next === null) { ctx.lineWidth = 1.4; rLine(L + DW + 3, Tp + NH - 4, L + NW - 3, Tp + 4, n.id * 5 + 1, 0.5, 1); }
+  else { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, 7); ctx.fill(); }
+  ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'right';
+  ctx.fillText(addrOf(n.id), L + NW, Tp + NH + 8);
+  ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center';
+  if (n.dead) { ctx.globalAlpha = 0.85; ctx.fillStyle = '#b7791f'; ctx.fillText('sin acceso', x, Tp - 7); }
+  if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.fillText('liberado', x, Tp - 7); }
+  ctx.restore();
+}
+function drawAvatar(layout) {
+  const it = layout.find(o => o.v && o.v.name === 'p' && !o.frame);
+  if (!it) { FX.avatar = null; return; }
+  const v = it.v; let tx, ty;
+  if (v.t !== null && v.t !== G && nodeOf(v.t)) { const P = POS[v.t]; tx = P.x - NW / 2 - 4; ty = P.y - NH / 2 - 8; }
+  else { tx = it.x + PW + 20; ty = it.y + PH / 2 - 14; }
+  if (!FX.avatar) FX.avatar = { x: tx, y: ty };
+  const A = FX.avatar; A.x = lerp(A.x, tx, 0.2); A.y = lerp(A.y, ty, 0.2);
+  const sh = FX.shake ? Math.sin(FX.shake * 70) * 3 : 0;
+  const x = A.x + sh, y = A.y - Math.sin(Math.min(1, FX.hop) * Math.PI) * 12 + Math.sin(T * 4) * 0.8;
+  ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.8; rCircle(x, y, 11, 77, '#c9dbff');
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(x + s * 4, y - 2, 3, 3.6, 0, 0, 7); ctx.fill();
+    ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + s * 4 + 1, y - 1.5, 1.4, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = '#2350b8'; ctx.font = 'bold 12px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('p', x, y + 6);
+}
+
+function draw(dt) {
+  ctx.setTransform(SC * DPR, 0, 0, SC * DPR, 0, 0);
+  if (!paper) buildPaper();
+  ctx.drawImage(paper, 0, 0, LW, LH);
+  if (!M) return;
+  const k = Math.min(1, dt * 9);
+  for (const id of liveIds()) {
+    const n = nodeOf(id);
+    if (!POS[id]) POS[id] = { x: n.x, y: n.y };
+    POS[id].x = lerp(POS[id].x, n.x, k); POS[id].y = lerp(POS[id].y, n.y, k);
+  }
+  const posNode = id => ({ x: POS[id].x, y: POS[id].y });
+  const seenKeys = new Set();
+  // flechas next
+  for (const id of liveIds()) {
+    const n = nodeOf(id), P = POS[id], a = { x: P.x + NW / 2 - (NW - DW) / 2, y: P.y };
+    const key = 'n' + id;
+    if (n.next === G) { if (!n.freed) drawGarbage(a.x + 2, a.y, id * 13); continue; }
+    if (n.next === null || !nodeOf(n.next)) continue;
+    seenKeys.add(key);
+    AR[key] = lerpGeo(AR[key] || arrowGeo(a, { x: a.x, y: a.y }, { self: false }), arrowGeo(a, posNode(n.next), { self: n.next === id }), k * 1.2);
+    AR[key].a = a;
+    ctx.globalAlpha = n.dead ? 0.25 : 1;
+    const t = nodeOf(n.next);
+    drawArrow(AR[key], id * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, t.freed ? [4, 4] : null);
+    ctx.globalAlpha = 1;
+  }
+  // variables
+  const layout = varLayout();
+  let lane = 0;
+  for (const it of layout) {
+    if (it.header) { ctx.fillStyle = '#2350b8'; ctx.font = '13px "Cutive Mono", monospace'; ctx.textAlign = 'left'; ctx.fillText(it.header, 4, it.y + 10); continue; }
+    const v = it.v; if (v.kind !== 'ptr') continue;
+    const a = { x: it.x + PW, y: it.y + PH / 2 };
+    const key = 'v' + (it.frame ? it.frame.fn + M.frames.indexOf(it.frame) : '') + v.name;
+    if (v.t === null) { drawNull(a.x - 2, a.y, v.name.charCodeAt(0) * 11 + 900); delete AR[key]; continue; }
+    if (v.t === G || !nodeOf(v.t)) { drawGarbage(a.x, a.y, v.name.charCodeAt(0)); continue; }
+    seenKeys.add(key);
+    const tgt = arrowGeo(a, posNode(v.t), { fromVar: true, lane: ((lane++ % 3) - 1) * 6 });
+    AR[key] = lerpGeo(AR[key] || { a: { ...a }, b: { ...a }, c1: { ...a }, c2: { ...a } }, tgt, k * 1.2);
+    AR[key].a = a;
+    const t = nodeOf(v.t);
+    const col = t.freed ? '#c23a32' : it.frame ? '#2350b8' : v.name === 'p' ? '#2350b8' : '#5d574f';
+    drawArrow(AR[key], v.name.charCodeAt(0) * 31 + 7, col, v.name === 'p' ? 1.7 : 1.3, t.freed ? [4, 4] : [5, 3]);
+  }
+  for (const key of Object.keys(AR)) if (!seenKeys.has(key)) delete AR[key];
+  for (const id of liveIds()) drawNode(nodeOf(id));
+  for (const it of layout) if (it.v) drawVar(it);
+  drawAvatar(layout);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   8. SONIDO, TAMAÑO Y BUCLE
+   ════════════════════════════════════════════════════════════════════ */
+let AC = null;
+function beep(f, d = 0.08, type = 'triangle', v = 0.05, slide = 0) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.exponentialRampToValueAtTime(f * slide, t + d);
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + d + 0.02);
+  } catch (e) {}
+}
+function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+function fit() {
+  const cell = $('cell').getBoundingClientRect();
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (cell.height - 4) / LH));
+  DPR = Math.min(3, window.devicePixelRatio || 1);
+  if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
+    SC = s;
+    cv.style.width = LW * SC + 'px'; cv.style.height = LH * SC + 'px';
+    cv.width = Math.round(LW * SC * DPR); cv.height = Math.round(LH * SC * DPR);
+    paper = null;
+  }
+}
+new ResizeObserver(fit).observe($('cell'));
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
+  boil = REDUCED ? 0 : Math.floor(now / 220) % 5;
+  for (const id in FX.flash) { FX.flash[id].t -= dt * 0.8; if (FX.flash[id].t <= 0) delete FX.flash[id]; }
+  if (FX.shake) FX.shake = Math.max(0, FX.shake - dt);
+  if (FX.hop) FX.hop = Math.max(0, FX.hop - dt * 3);
+  draw(dt);
+  requestAnimationFrame(frame);
+}
+M = newMem();
+fit(); renderCode(); renderBuilder();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
+requestAnimationFrame(frame);
+// para pruebas y para el futuro modo teclado: ejecutar una línea escrita
+window.ejecutar = run;
+</script>

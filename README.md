@@ -41,3 +41,11 @@ Ver [`rl/README.md`](rl/README.md).
 ### Puntero C (versión táctil)
 
 [`puntero-duo/tactil.html`](puntero-duo/tactil.html) es la versión para celular, de un jugador, con el código en C escribiéndose al lado. Cada línea se arma con dos toques: primero lo que va a la izquierda del `=` (una variable, `x->next`, una declaración `Nodo *sig` o una acción como `free(_)`, `if (_->value == 7)` o `return`), y después lo que va a la derecha (`NULL`, una variable, `x->next`, `x->next->next`, `x->prev` o `crearNodo(v)`). Las piezas salen del estado actual, así que el alumno puede declarar punteros, crear nodos, avanzar y conectar con libertad. Se parte solo con `l->head`. Lo que en C no compila o se cae (variable sin declarar, `->prev`, segfault, uso después de free, double free) no se ejecuta y se explica. Una fuga sí se ejecuta: el nodo queda en su lugar, transparente y marcado «sin acceso», y se puede deshacer. Todo lo que es C válido se dibuja tal cual, incluso `p->next = p` (una flecha que vuelve al mismo nodo). Cada nivel solo define el punto de partida y el estado que gana, y al terminar muestra una solución de referencia. En las búsquedas los datos están ocultos, y cada `if` falso cambia el `?` del nodo por `≠7`.
+
+### Puntero C: motor (modo libre)
+
+[`puntero-duo/motor.html`](puntero-duo/motor.html) es el motor gráfico, sin ejercicios: la memoria parte vacía y se arma con líneas de C.
+- **Memoria:** variables en el stack y nodos con dirección en el heap. Un puntero vale un nodo, `NULL` o basura.
+- **Intérprete:** ejecuta un subconjunto de C. Comandos simples: `Nodo *x = …;`, `x = …;`, `x->next = …;`, `x->value = n;`, `malloc(sizeof(Nodo))` (con campos basura), `free`, `if (x->value == n)`, `if (x == NULL)` y `printf`. Bloquea los errores de compilación, los segfault, el uso después de `free` y el *double free*, y marca las fugas.
+- **Funciones compuestas** (`crearNodo`, `insertarInicio`, `insertarDespues`, `eliminarSiguiente`): están escritas con los mismos comandos simples y se desbloquean al hacer a mano lo mismo que hacen. Al llamarlas se ve su marco en el stack, con los parámetros copiados, y en el código se puede abrir la línea para ver cada paso.
+- **Herramientas:** deshacer, ordenar el dibujo y exportar el programa completo como un `.c` que compila.
