@@ -389,7 +389,7 @@ async function run(text) {
     if (!(e instanceof CErr)) { console.error(e); e = new CErr('Error interno: ' + e.message, 'run'); }
     if (e.kind === 'run') await sleep(350);
     M = JSON.parse(snap);
-    entry.text = '// ✗ ' + text; entry.cls = 'err'; entry.sub = [];
+    entry.text = '// ✗ ' + text; entry.cls = 'err'; entry.sub = []; entry.msg = e.msg;
     renderCode(); shake();
     showFb('bad', '✗ ' + text, e.msg, [['Entendido', hideFb]]);
     beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
@@ -738,18 +738,44 @@ function exportC() {
   }).join('\n');
   return `#include <stdio.h>\n#include <stdlib.h>\n\ntypedef struct Nodo {\n  int value;\n  struct Nodo *next;\n} Nodo;\n\n${defs}${defs ? '\n' : ''}int main(void) {\n${body}${body ? '\n' : ''}  return 0;\n}\n`;
 }
-$('bexport').onclick = () => {
-  const code = exportC();
-  showCard(`<h2>Tu programa en C</h2><p>Esto compila tal cual con <code>gcc programa.c</code>. Las consultas quedan como <code>if</code> vacíos con su resultado.</p>
-    <pre id="expre">${esc(code)}</pre>
-    <div class="row"><button id="ccopy">Copiar</button><button class="sec" id="cclose">Cerrar</button></div>`, () => {
+/* Registro para consultas: todo lo que pasó (también lo que falló, con su mensaje) y cómo quedó la memoria.
+   Sirve para pegarlo en un chat o un correo y revisar juntos qué ocurrió. */
+function debugReport() {
+  const addr = id => id === null ? 'NULL' : id === G ? 'basura' : addrOf(id);
+  const out = ['// Puntero C · registro', '// desbloqueado: ' + (ALL_UNLOCKS.filter(f => UNLOCKED.has(f)).join(', ') || 'nada'), '', '// líneas, en orden:'];
+  const walk = (list, ind) => list.forEach(e => {
+    out.push(ind + e.text + (e.msg ? '   // → ' + e.msg : ''));
+    if (e.sub && e.sub.length) walk(e.sub, ind + '    | ');
+  });
+  walk(PROG, '  ');
+  out.push('', '// memoria al final:');
+  for (const v of M.globals) out.push(`  ${v.name} = ${addr(v.t)}` + (v.t !== null && v.t !== G && nodeOf(v.t) ? (nodeOf(v.t).freed ? '  (apunta a memoria liberada)' : `  (value ${nodeOf(v.t).v ?? '¿?'})`) : ''));
+  for (const id of liveIds()) {
+    const n = nodeOf(id);
+    out.push(`  ${addrOf(id)}: { value: ${n.v ?? '¿?'}, next: ${addr(n.next)} }` + (n.freed ? '  liberado' : '') + (n.dead ? '  sin acceso' : ''));
+  }
+  return out.join('\n') + '\n';
+}
+function copyCard(title, intro, text) {
+  showCard(`<h2>${title}</h2><p>${intro}</p>
+    <pre id="expre">${esc(text)}</pre>
+    <div class="row"><button id="ccopy">Copiar</button><button class="sec" id="cother"></button><button class="sec" id="cclose">Cerrar</button></div>`, () => {
     $('cclose').onclick = closeCard;
     $('ccopy').onclick = () => {
       const done = () => { $('ccopy').textContent = 'Copiado'; };
-      try { navigator.clipboard.writeText(code).then(done, () => selectPre()); } catch (e) { selectPre(); }
+      try { navigator.clipboard.writeText(text).then(done, () => selectPre()); } catch (e) { selectPre(); }
     };
   });
-};
+}
+function showProgram() {
+  copyCard('Tu programa en C', 'Esto compila tal cual con <code>gcc programa.c</code>. Las consultas quedan como <code>if</code> vacíos con su resultado.', exportC());
+  $('cother').textContent = 'Ver registro para consultas'; $('cother').onclick = showReport;
+}
+function showReport() {
+  copyCard('Registro para consultas', 'Todo lo que hiciste, incluidas las líneas que fallaron y por qué, y cómo quedó la memoria. Cópialo y pégalo en un mensaje para revisarlo con alguien.', debugReport());
+  $('cother').textContent = 'Ver programa en C'; $('cother').onclick = showProgram;
+}
+$('bexport').onclick = showProgram;
 function selectPre() { const r = document.createRange(); r.selectNodeContents($('expre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('ccopy').textContent = 'Seleccionado: copia con el menú'; }
 $('bhelp').onclick = () => {
   showCard(`<h2>Cómo funciona</h2>
@@ -857,6 +883,34 @@ function arrowGeo(a, n, opts) {
   const reach = Math.min(40, Math.max(18, Math.abs(b.x - a.x) * 0.5 + 12));
   return { a, b, c1: { x: a.x + reach, y: a.y }, c2 };
 }
+// ¿la curva pasa por encima de algún nodo que no es ni el de origen ni el de destino?
+function crossesNode(g, skip) {
+  const pts = [];
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12, u = 1 - t;
+    pts.push({ x: u*u*u*g.a.x + 3*u*u*t*g.c1.x + 3*u*t*t*g.c2.x + t*t*t*g.b.x, y: u*u*u*g.a.y + 3*u*u*t*g.c1.y + 3*u*t*t*g.c2.y + t*t*t*g.b.y });
+  }
+  for (const id of liveIds()) {
+    if (skip.includes(id) || !POS[id]) continue;
+    const P = POS[id], L = P.x - NW / 2 - 2, R = P.x + NW / 2 + 2, Tp = P.y - NH / 2 - 2, B = P.y + NH / 2 + 2;
+    if (pts.some(q => q.x > L && q.x < R && q.y > Tp && q.y < B)) return true;
+  }
+  return false;
+}
+// arco por arriba de la fila, para no esconder la flecha detrás de otros nodos
+function arcGeo(a, n, lift) {
+  const mid = n.x - 6, b = { x: mid, y: n.y - NH / 2 - 1 };
+  const top = Math.min(a.y, n.y) - NH / 2 - lift;
+  return { a, b, c1: { x: a.x + 26, y: top }, c2: { x: mid, y: top } };
+}
+function nextGeo(a, srcId, tgtId) {
+  const n = posNodeOf(tgtId);
+  let g = arrowGeo(a, n, { self: srcId === tgtId });
+  if (srcId === tgtId || !crossesNode(g, [srcId, tgtId])) return g;
+  for (const lift of [30, 44, 60]) { g = arcGeo(a, n, lift); if (!crossesNode(g, [srcId, tgtId])) return g; }
+  return g;
+}
+const posNodeOf = id => ({ x: POS[id].x, y: POS[id].y });
 function lerpGeo(cur, tgt, k) {
   if (!cur) return JSON.parse(JSON.stringify(tgt));
   for (const key of ['a', 'b', 'c1', 'c2']) { cur[key].x = lerp(cur[key].x, tgt[key].x, k); cur[key].y = lerp(cur[key].y, tgt[key].y, k); }
@@ -993,7 +1047,7 @@ function draw(dt) {
     if (n.next === G) { if (!n.freed) drawGarbage(a.x + 2, a.y, id * 13); continue; }
     if (n.next === null || !nodeOf(n.next)) continue;
     seenKeys.add(key);
-    AR[key] = lerpGeo(AR[key] || arrowGeo(a, { x: a.x, y: a.y }, { self: false }), arrowGeo(a, posNode(n.next), { self: n.next === id }), k * 1.2);
+    AR[key] = lerpGeo(AR[key] || arrowGeo(a, { x: a.x, y: a.y }, { self: false }), nextGeo(a, id, n.next), k * 1.2);
     AR[key].a = a;
     ctx.globalAlpha = n.dead ? 0.25 : 1;
     const t = nodeOf(n.next);
