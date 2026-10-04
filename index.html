@@ -1385,8 +1385,16 @@ let VW = 17, VH = 12;                   // tiles visible per player camera; an u
 const AIW = 17, AIH = 12;               // the PC's view always stays this size
 /* ACERCAR: the camera zooms in by 1.25 (5 screen pixels per cave pixel, so tiles still meet without seams):
    about 13.6 x 9.6 tiles on screen, less to see ahead, harder. CW x CH is what the camera covers. */
-let zoomIn = false, ZOOM = 1, CW = VW, CH = VH;
-try { zoomIn = localStorage.getItem('boulder-duo-zoom') === '1'; } catch (e) {}
+/* Zoom: pinch with two fingers on a board, the mouse wheel or + and − (and the ZOOM button of the menu).
+   In steps of a quarter, so the tiles keep whole screen pixels and meet without seams: from seeing the whole
+   cave to twice as close. Farther than 1 shows more of the cave (easier), closer shows less (harder). */
+let zoomLevel = 1, ZOOM = 1, CW = VW, CH = VH;
+try { const z = +localStorage.getItem('boulder-duo-zoomv'); zoomLevel = z >= .25 && z <= 2 ? z : localStorage.getItem('boulder-duo-zoom') === '1' ? 1.25 : 1; } catch (e) {}
+const zoomMin = () => Math.min(1, Math.ceil(Math.max(VW / W, VH / H) * 4) / 4);   // never wider than the whole cave
+function setZoom(z, save){
+  zoomLevel = clamp(Math.round(z * 4) / 4, zoomMin(), 2); applyZoom();
+  if (save) try { localStorage.setItem('boulder-duo-zoomv', String(zoomLevel)); } catch (e) {}
+}
 /* Upright phone: the boards fill the screen. The view keeps tiles about 32 px wide (12 across on most phones)
    and gets as many rows as fit under its bar (half the height each for two players on one phone). */
 function setShape(w, h){
@@ -1410,7 +1418,7 @@ function fitBoards(){
   setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
 }
 addEventListener('resize', () => requestAnimationFrame(fitBoards));
-function applyZoom(){ ZOOM = zoomIn && mode !== 'train' ? 1.25 : 1; CW = VW / ZOOM; CH = VH / ZOOM; }
+function applyZoom(){ ZOOM = mode === 'train' ? 1 : Math.max(zoomMin(), zoomLevel); CW = VW / ZOOM; CH = VH / ZOOM; }
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
@@ -2854,7 +2862,7 @@ function menu(){
     </div>
     <div class="row sets">
       ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
-      <button id="bzoom" class="${zoomIn ? 'on' : ''}">ACERCAR: ${zoomIn ? 'SÍ' : 'NO'}</button>
+      <button id="bzoom" class="${zoomLevel !== 1 ? 'on' : ''}">ZOOM: ×${String(zoomLevel).replace('.', ',')}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
@@ -2877,7 +2885,7 @@ function menu(){
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
   $('binf').onclick = () => { infLives = !infLives; try { localStorage.setItem('boulder-duo-inflives', infLives ? '1' : '0'); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
-  $('bzoom').onclick = () => { zoomIn = !zoomIn; try { localStorage.setItem('boulder-duo-zoom', zoomIn ? '1' : '0'); } catch (e) {} menu(); };
+  $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5].filter(z => z >= zoomMin()); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] || 1, true); menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
@@ -4094,6 +4102,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyR' && state === 'play') { initLevel(level); }
   else if (e.code === 'KeyM') { toggleSound(); }
   else if (e.code === 'KeyG') { cycleGravity(); }
+  else if ((e.key === '+' || e.key === '-' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract') && state === 'play') { setZoom(zoomLevel + (e.key === '+' || e.code === 'NumpadAdd' ? .25 : -.25), true); }
   else if (e.code === 'KeyC') { toggleCrt(); }
   else if (e.code === 'Space' && state === 'play') e.preventDefault();
 });
@@ -4137,6 +4146,9 @@ function swipeHeld(sw){
   p.held = d < 0 ? [] : [d];
 }
 function swipePut(sw){ sw.ring.style.left = sw.ax + 'px'; sw.ring.style.top = sw.ay + 'px'; }
+// two fingers on the same board: a pinch that zooms (they stop steering while they do it)
+let pinch = null;
+const pinchDist = () => Math.hypot(pinch.a.cx - pinch.b.cx, pinch.a.cy - pinch.b.cy) || 1;
 document.addEventListener('pointerdown', e => {
   if (!document.body.classList.contains('touch') || state !== 'play' || !ov.hidden) return;
   if (e.target.closest('button, a, input, select, label, .overlay, .rotate')) return;
@@ -4144,11 +4156,19 @@ document.addEventListener('pointerdown', e => {
   e.preventDefault(); audioOn();
   const ring = document.createElement('div'); ring.className = 'swipe p' + (k + 1) + 's' + (swipeFlipped(k) ? ' flip' : '');
   document.body.appendChild(ring);
-  const sw = { k, ax: e.clientX, ay: e.clientY, d: -1, ring }; swipes.set(e.pointerId, sw); swipePut(sw);
+  const sw = { k, ax: e.clientX, ay: e.clientY, cx: e.clientX, cy: e.clientY, d: -1, ring }; swipes.set(e.pointerId, sw); swipePut(sw);
+  const other = [...swipes.values()].find(o => o !== sw && o.k === k && !o.pinch);
+  if (other && !pinch) {
+    pinch = { a: other, b: sw }; other.pinch = sw.pinch = true; other.d = sw.d = -1;
+    other.ring.remove(); sw.ring.remove(); swipeHeld(sw);
+    pinch.d0 = pinchDist(); pinch.z0 = zoomLevel;
+  }
   try { document.documentElement.setPointerCapture(e.pointerId); } catch (err) {}
 }, { passive: false });
 document.addEventListener('pointermove', e => {
   const sw = swipes.get(e.pointerId); if (!sw) return;
+  sw.cx = e.clientX; sw.cy = e.clientY;
+  if (sw.pinch) { if (pinch && (pinch.a === sw || pinch.b === sw)) setZoom(pinch.z0 * pinchDist() / pinch.d0); return; }
   const dx = e.clientX - sw.ax, dy = e.clientY - sw.ay, dist = Math.hypot(dx, dy);
   if (dist < 14) return;
   const s = swipeFlipped(sw.k) ? -1 : 1;
@@ -4156,7 +4176,16 @@ document.addEventListener('pointermove', e => {
   sw.ring.textContent = '▲▶▼◀'[sw.d]; swipes.delete(e.pointerId); swipes.set(e.pointerId, sw); swipeHeld(sw);
   if (dist > 36) { sw.ax = e.clientX - dx / dist * 36; sw.ay = e.clientY - dy / dist * 36; swipePut(sw); }
 });
-const swipeEnd = e => { const sw = swipes.get(e.pointerId); if (!sw) return; swipes.delete(e.pointerId); sw.ring.remove(); swipeHeld(sw); };
+const swipeEnd = e => {
+  const sw = swipes.get(e.pointerId); if (!sw) return;
+  swipes.delete(e.pointerId); sw.ring.remove(); swipeHeld(sw);
+  if (pinch && (pinch.a === sw || pinch.b === sw)) { pinch = null; setZoom(zoomLevel, true); }   // the other finger stays out of steering until lifted
+};
+// computer: the mouse wheel over a board, or + and −
+addEventListener('wheel', e => {
+  if (state !== 'play' || !e.target.closest || !e.target.closest('.view')) return;
+  e.preventDefault(); setZoom(zoomLevel + (e.deltaY < 0 ? .25 : -.25), true);
+}, { passive: false });
 ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => document.addEventListener(t, swipeEnd));
 document.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch') && state === 'play') e.preventDefault(); });
 /* ---------- two phones over Bluetooth (only inside the Android app, which brings the BtLink plugin) ----------
