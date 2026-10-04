@@ -577,10 +577,11 @@ function renderBuilder() {
   renderCode();   // el cuaderno muestra la línea en construcción (o deja de mostrarla)
   const box = $('chips'); box.innerHTML = '';
   $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
-  if (REPLAY) { renderReplayBar(box); return; }
+  if (REPLAY) { PATH = null; renderReplayBar(box); return; }
   if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
   if (!BUILD) {
-    $('ltxt').innerHTML = '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
+    $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
+    if (PATH) { renderPathBar(box); return; }
     const empty = !declaredPtrs().length;
     if (empty) TAB = 'Variables';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
@@ -620,7 +621,7 @@ function renderBuilder() {
     }
     if (declaredPtrs().length) {
       const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-      tip.textContent = 'También puedes tocar un puntero en el dibujo para cambiar a dónde apunta.';
+      tip.textContent = 'También puedes tocar un post-it en el dibujo y seguir las flechas para elegir un puntero.';
       box.appendChild(tip);
     }
     if (!declaredPtrs().length) {
@@ -631,11 +632,12 @@ function renderBuilder() {
     return;
   }
   $('ltxt').innerHTML = '<span class="hint">Completando la línea en el cuaderno ↑</span>'; $('bx').hidden = false;
+  if (PATH) renderPathBar(box);
   const ht = HOLE.exec(BUILD)[1];
   if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num') {
     const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-    tip.textContent = ht === 'num' ? 'Toca un número, o el valor de un nodo en el dibujo.' : ht === 'var' ? 'Toca una pieza, o un post-it en el dibujo.' : 'Toca una pieza, o en el dibujo: un post-it, un nodo o su casilla next.';
-    box.appendChild(tip);
+    tip.textContent = ht === 'num' ? 'Toca un número, o el valor de un nodo en el dibujo.' : ht === 'var' ? 'Toca una pieza, o un post-it en el dibujo.' : 'Toca una pieza, o en el dibujo parte de un post-it y sigue las flechas.';
+    if (!PATH) box.appendChild(tip);
   }
   const type = HOLE.exec(BUILD)[1];
   const g = document.createElement('div'); g.className = 'grp';
@@ -646,6 +648,7 @@ function renderBuilder() {
   box.appendChild(g);
 }
 function fill(piece) {
+  PATH = null;
   BUILD = BUILD.replace(HOLE, piece);
   if (HOLE.test(BUILD)) { renderBuilder(); return; }
   const line = BUILD; BUILD = null; guardRun(line);
@@ -659,7 +662,7 @@ function guardRun(line) {
     [['Escribirla igual', () => { hideFb(); run(line); }], ['Cancelar', () => { hideFb(); renderBuilder(); }]]);
   renderBuilder();
 }
-$('bx').onclick = () => { BUILD = null; renderBuilder(); };
+$('bx').onclick = () => { BUILD = null; PATH = null; renderBuilder(); };
 function lockedHint(fn) {
   if (SHORTCUTS[fn]) { showFb('info', '🔒 atajo ' + SHORTCUTS[fn].title, 'Se desbloquea así: ' + SHORTCUTS[fn].unlock, [['Entendido', hideFb]]); return; }
   showFb('info', '🔒 ' + FUNCS[fn].sig, 'Se desbloquea cuando lo haces a mano: ' + FUNCS[fn].unlock, [['Entendido', hideFb]]);
@@ -691,7 +694,11 @@ function renderCode() {
   const tag = (list, pre) => list.forEach((e, i) => { e._path = pre + i; if (e.sub) tag(e.sub, pre + i + '.'); });
   tag(PROG, '');
   walk(PROG, 0);
-  if (BUILD && !REPLAY) lines.push(`<div class="ln draft">  ${holeHTML(BUILD)}</div>`);   // la línea que se está armando
+  if (BUILD && !REPLAY) {   // la línea que se está armando; el hueco actual muestra el puntero que se va siguiendo
+    let h = holeHTML(BUILD);
+    if (PATH) h = h.replace(/<span class="hole cur">[^<]*<\/span>/, `<span class="hole cur">${esc(PATH.expr)}</span>`);
+    lines.push(`<div class="ln draft">  ${h}</div>`);
+  } else if (PATH && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr)}</span> …</div>`);
   el.innerHTML = lines.join('');
   el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
     ev.stopPropagation();
@@ -1127,47 +1134,69 @@ function hitTest(pt) {
   return null;
 }
 const holeType = () => BUILD && (HOLE.exec(BUILD) || [])[1];
-// todas las expresiones (a lo más dos ->) que llegan al nodo: primero las más cortas
-function namesOf(id) {
-  const out = [];
-  for (let d = 0; d <= 2; d++) for (const v of M.globals) {
-    if (v.kind !== 'ptr') continue;
-    let cur = v.t, ok = true;
-    for (let i = 0; i < d; i++) { if (cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) { ok = false; break; } cur = nodeOf(cur).next; }
-    if (ok && cur === id) out.push(v.name + '->next'.repeat(d));
-  }
-  return out;
+/* Acceso realista: a un nodo solo se llega por un puntero.
+   Se parte tocando el post-it de una variable y se avanza tocando la casilla next del nodo marcado.
+   PATH guarda la expresión que se va armando (p, p->next, p->next->next…). */
+let PATH = null;
+function pathValue(expr) {   // a qué apunta la expresión, sin lanzar errores
+  const parts = expr.split('->'); const base = parts.shift();
+  const v = lookup(base); if (!v || v.kind !== 'ptr') return undefined;
+  let cur = v.t;
+  for (const f of parts) { if (cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) return undefined; cur = nodeOf(cur).next; }
+  return cur;
 }
+function hint(title, msg) { showFb('info', title, msg, [['Entendido', hideFb]]); }
 function tapBoard(e) {
   if (BUSY || !$('ov').hidden) return;
   const r = cv.getBoundingClientRect();
   const pt = { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
   const h = hitTest(pt); if (!h) return;
   const type = holeType();
-  if (BUILD && (type === 'new' || (type === 'var' && h.kind !== 'var'))) return;
-  if (h.kind === 'var') { tapFx(h); useTapped(h, h.v.name); return; }
-  const n = nodeOf(h.id);
-  if (n.dead) { showFb('info', 'sin acceso', 'Ese nodo ya no tiene ninguna variable ni flecha que llegue a él: en C no hay forma de nombrarlo.', [['Entendido', hideFb]]); return; }
-  if (BUILD && type === 'num') { if (h.kind === 'node' && n.v !== null) { tapFx(h); fill(String(n.v)); } return; }
-  let cands = namesOf(h.id);
-  if (h.kind === 'next') cands = cands.map(c => c + '->next').filter(c => c.split('->').length <= 3);
-  if (!cands.length) { showFb('info', 'sin nombre', 'No hay una variable que llegue ahí con a lo más dos ->. Declara un puntero más cerca.', [['Entendido', hideFb]]); return; }
-  tapFx(h);
-  if (cands.length === 1) { useTapped(h, cands[0]); return; }
-  // varios punteros llegan al mismo lugar: que el alumno elija con cuál nombrarlo
-  const what = h.kind === 'next' ? 'la casilla next de ese nodo' : 'ese nodo';
-  showFb('info', '¿Con cuál puntero?', `A ${what} se puede llegar de ${cands.length} formas. En C hay que escribir una: ¿cuál usas?`,
-    cands.map(c => [c, () => { hideFb(); useTapped(h, c); }]).concat([['Cancelar', () => { hideFb(); renderBuilder(); }]]));
-  $('fbrow').querySelectorAll('button').forEach((b, i) => { if (i < cands.length) b.style.fontFamily = 'var(--code)'; });
-}
-function useTapped(h, expr) {
-  if (!BUILD) {   // empezar una asignación con lo que se tocó
-    if (h.kind === 'var') BUILD = expr + ' = §ptr;';
-    else if (h.kind === 'next') BUILD = expr.replace(/->next$/, '') + '->next = §ptr;';
-    else BUILD = expr + '->value = §num;';
-    hideFb(); renderBuilder(); return;
+  if (BUILD && type === 'new') return;
+  hideFb();
+  if (h.kind === 'var') {
+    if (BUILD && type === 'num') return;
+    tapFx(h);
+    if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
+    PATH = { expr: h.v.name }; renderBuilder(); return;
   }
-  fill(expr);
+  const n = nodeOf(h.id);
+  if (h.kind === 'node') {
+    if (BUILD && type === 'num' && n.v !== null && !n.dead) { tapFx(h); fill(String(n.v)); return; }
+    hint('Por un puntero', 'En C no se toca un nodo directamente: se llega a él por un puntero. Toca el post-it de una variable y sigue las flechas tocando la casilla next de cada nodo.');
+    return;
+  }
+  // casilla next
+  if (BUILD && type === 'var') return;
+  if (!PATH) { hint('Primero un puntero', 'Para llegar a esa casilla, parte tocando el post-it de una variable y sigue las flechas hasta ese nodo.'); return; }
+  const cur = pathValue(PATH.expr);
+  if (cur !== h.id) {
+    hint(PATH.expr, cur === null ? `${PATH.expr} es NULL: no hay casilla next que seguir.` : `Esa casilla no es la del nodo al que apunta ${PATH.expr}. Sigue las flechas: toca la casilla next del nodo marcado.`);
+    return;
+  }
+  tapFx(h);
+  PATH.expr += '->next'; renderBuilder();
+}
+function usePath() {
+  const expr = PATH.expr; PATH = null;
+  if (BUILD) { fill(expr); return; }
+  renderBuilder();
+}
+function startFromPath(tpl) { const expr = PATH.expr; PATH = null; BUILD = tpl.replace('§e', expr); renderBuilder(); }
+function renderPathBar(box) {
+  const g = document.createElement('div'); g.className = 'grp';
+  const val = pathValue(PATH.expr);
+  if (BUILD) g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath));
+  else {
+    g.appendChild(mkChip(PATH.expr + ' = _;', 'fn', () => startFromPath('§e = §ptr;')));
+    if (val !== null && val !== undefined && val !== G) g.appendChild(mkChip(PATH.expr + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
+  }
+  if (PATH.expr.endsWith('->next')) g.appendChild(mkChip('⌫ quitar ->next', '', () => { PATH.expr = PATH.expr.slice(0, -6); renderBuilder(); }));
+  g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
+  box.appendChild(g);
+  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
+  tip.textContent = val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : 'Para seguir la flecha, toca la casilla next del nodo marcado en el dibujo.';
+  box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
 let TAP = null;
@@ -1176,13 +1205,20 @@ function drawTapHints(layout) {
   const type = holeType();
   const want = !BUSY && (!BUILD || type === 'ptr' || type === 'lv' || type === 'var' || type === 'num');
   const glow = (x, y, w, h, a) => { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = '#c9dbff'; ctx.fillRect(x - 3, y - 3, w + 6, h + 6); ctx.restore(); };
-  if (want && BUILD) {
-    const a = 0.35 + 0.2 * Math.sin(T * 5);
+  const a = 0.35 + 0.2 * Math.sin(T * 5);
+  if (PATH && !BUSY) {   // el nodo al que llega el camino, con su casilla next lista para seguir
+    const id = pathValue(PATH.expr);
+    if (id !== null && id !== undefined && id !== G && POS[id]) {
+      const P = POS[id], L = P.x - NW / 2, Tp = P.y - NH / 2;
+      ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(L - 4, Tp - 4, NW + 8, NH + 8, 447, 0.7); ctx.restore();
+      if (nodeOf(id).next !== null) glow(L + DW, Tp, NW - DW, NH, a + 0.15);
+    }
+    for (const it of layout) if (it.v && !it.frame && it.v.kind === 'ptr') glow(it.x, it.y, PW, PH, a * 0.6);
+  } else if (want && BUILD) {
     if (type !== 'num') for (const it of layout) if (it.v && !it.frame && it.v.kind === 'ptr') glow(it.x, it.y, PW, PH, a);
-    if (type !== 'var') for (const id of liveIds()) {
-      const n = nodeOf(id), P = POS[id]; if (n.dead || n.freed || !P) continue;
-      if (type === 'num') { if (n.v !== null) glow(P.x - NW / 2, P.y - NH / 2, DW, NH, a); }
-      else glow(P.x - NW / 2, P.y - NH / 2, NW, NH, a);
+    if (type === 'num') for (const id of liveIds()) {
+      const n = nodeOf(id), P = POS[id]; if (n.dead || n.freed || !P || n.v === null) continue;
+      glow(P.x - NW / 2, P.y - NH / 2, DW, NH, a);
     }
   }
   if (TAP && TAP.t > 0) {
