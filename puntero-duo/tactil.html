@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
 <style>
-/* Cuaderno en vertical: arriba el dibujo (margen = stack, hoja = heap) con el código en C al lado; abajo, las líneas candidatas para escribir. Un solo look de papel, a propósito. */
+/* Cuaderno en vertical: arriba el dibujo (margen = stack, hoja = heap) con el código en C al lado; abajo, el armador de líneas. Un solo look de papel, a propósito. */
 :root{
   color-scheme: light;
   --paper:#fbf8ef;
@@ -17,6 +17,7 @@
   --bad:#c23a32;
   --bad-bg:#fff1ee;
   --warn:#b7791f;
+  --warn-bg:#fff6e3;
   --display:"Caveat","Comic Sans MS",cursive;
   --body:"Patrick Hand","Comic Sans MS",system-ui,sans-serif;
   --code:"Cutive Mono","Courier New",ui-monospace,monospace;
@@ -28,12 +29,13 @@ body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--bo
   padding-inline:16px;padding-block:8px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .app{height:100%;max-width:980px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
 
-header{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
-h1{font-family:var(--display);font-size:28px;margin:0;line-height:1;white-space:nowrap}
+header{display:flex;align-items:center;gap:5px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
+h1{font-family:var(--display);font-size:27px;margin:0;line-height:1;white-space:nowrap}
 h1 span{color:var(--ink)}
-.lv{flex:1;min-width:0;font-size:16px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mini{font-family:var(--body);font-size:19px;line-height:1;width:34px;height:34px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+.lv{flex:1;min-width:0;font-size:15px;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{font-family:var(--body);font-size:18px;line-height:1;width:33px;height:33px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
   border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
+.mini:disabled{opacity:.35}
 
 .main{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,42%);gap:8px;min-height:0}
 @media (min-width:700px){ .main{grid-template-columns:minmax(0,1fr) 340px} }
@@ -50,19 +52,27 @@ canvas#cv{display:block;touch-action:manipulation;border:2px solid var(--graphit
 .code .new{background:var(--note);animation:fade 1.6s ease-out forwards}
 @keyframes fade{to{background:transparent}}
 
-.choose{display:flex;flex-direction:column;gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
-.choose .ask{font-size:15px;color:var(--soft);margin:0}
-.opts{display:grid;grid-template-columns:1fr;gap:6px}
-@media (min-width:700px){ .opts{grid-template-columns:1fr 1fr} }
-.opt{font-family:var(--code);font-size:clamp(13px,3.6vw,16px);text-align:left;min-height:38px;padding:5px 10px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
-  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation;overflow-wrap:anywhere}
-.opt:active{background:var(--note)}
-.opt.tried{text-decoration:line-through;text-decoration-color:var(--bad);color:var(--soft);border-style:dashed}
+.build{display:flex;flex-direction:column;gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
+  border-bottom:1.5px dashed var(--soft);padding:2px 2px 4px}
+.line .txt{flex:1;min-width:0;overflow-wrap:anywhere}
+.line .hole{display:inline-block;min-width:2.2em;border-bottom:2px solid var(--ink);color:var(--ink)}
+.line .hint{font-family:var(--body);color:var(--soft);font-size:15px}
+.line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px;max-height:34vh;overflow-y:auto}
+.chip{font-family:var(--code);font-size:clamp(13px,3.6vw,16px);min-height:38px;padding:4px 10px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+  border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer;touch-action:manipulation}
+.chip:active{background:var(--note)}
+.chip.decl{border-style:dashed}
+.chip.act{background:var(--paper-2)}
+.chip.mk{border-color:var(--ok);color:var(--ok)}
 button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
 .fb{border:2px solid var(--bad);background:var(--bad-bg);border-radius:12px 5px 12px 5px / 5px 12px 5px 12px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
-.fb code{font-family:var(--code);color:var(--bad);font-size:15px}
+.fb.warn{border-color:var(--warn);background:var(--warn-bg)}
+.fb code{font-family:var(--code);font-size:15px}
 .fb p{margin:0}
-.fb button{align-self:flex-start;font-family:var(--body);font-size:18px;padding:5px 14px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
+.fb .row{display:flex;gap:8px;flex-wrap:wrap}
+.fb button{font-family:var(--body);font-size:18px;padding:5px 14px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
   border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
 
 .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.85);padding:6px;z-index:2}
@@ -71,6 +81,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
 .card h2{font-family:var(--display);font-size:32px;margin:0;line-height:1;text-wrap:balance}
 .card p{margin:0}
 .card code{font-family:var(--code);font-size:.9em;background:var(--paper-2);padding:0 3px}
+.card pre{font-family:var(--code);font-size:13px;background:var(--paper-2);padding:6px 8px;margin:0;overflow-x:auto;white-space:pre}
 .card .row{display:flex;gap:8px;flex-wrap:wrap}
 .card button{font-family:var(--body);font-size:19px;padding:7px 16px;border:2px solid var(--graphite);background:var(--note);color:var(--graphite);
   border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
@@ -84,6 +95,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <span class="lv" id="lvname">—</span>
     <button class="mini" id="bprev" aria-label="Nivel anterior">‹</button>
     <button class="mini" id="bnext" aria-label="Nivel siguiente">›</button>
+    <button class="mini" id="bundo" aria-label="Deshacer la última línea">↶</button>
     <button class="mini" id="breset" aria-label="Reiniciar nivel">⟲</button>
     <button class="mini" id="bhelp" aria-label="Ayuda">?</button>
   </header>
@@ -96,13 +108,13 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <div class="code" id="code" aria-live="polite"></div>
   </div>
 
-  <div class="choose">
-    <p class="ask" id="ask">¿Qué línea escribes ahora?</p>
-    <div class="opts" id="opts"></div>
+  <div class="build">
+    <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
+    <div class="chips" id="chips"></div>
     <div class="fb" id="fb" hidden>
       <code id="fbcode"></code>
       <p id="fbwhy"></p>
-      <button id="fbok">↶ Deshacer y elegir otra</button>
+      <div class="row" id="fbrow"></div>
     </div>
   </div>
 </div>
@@ -119,359 +131,268 @@ const X1 = 136, X2 = 212;
 const Y = i => 40 + i * 70;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// ───────────────────────── semántica de C ─────────────────────────
-class Crash { constructor(msg) { this.msg = msg; } }
-const SEG = 'Segmentation fault: se leyó a través de un puntero NULL.';
-const UAF = 'Uso después de free: ese nodo ya fue liberado.';
-const get = name => { const v = varNamed(name); return v ? v.t : null; };
-const nx = n => { if (!n) throw new Crash(SEG); if (n.freed) throw new Crash(UAF); return n.next; };
-const setV = (name, n) => { varNamed(name).t = n; };
-const setNext = (n, m) => { if (!n) throw new Crash(SEG); if (n.freed) throw new Crash(UAF); n.next = m; };
-const decl = (name, n) => { const v = varNamed(name); v.declared = true; v.slot = S.slot++; v.t = n; };
-const freeN = n => { if (!n) return; if (n.freed) throw new Crash('double free: ese nodo ya estaba liberado.'); n.freed = true; };
-const create = v => {
-  const [x, y] = S.L.spawn || [X2, Y(1)];
-  const n = mkNode(v, x, y); n.py -= 30; S.nodes.push(n); return n;
-};
-const declared = name => { const v = varNamed(name); return !!(v && v.declared); };
-const O = (code, run, why, when) => ({ code, run, why, when });
-
 /* ───────────────────────── niveles ─────────────────────────
-   kind 'search': las opciones se generan del estado (ver searchOptions).
-   kind 'script': grupos en orden. Un grupo `all` exige todas sus líneas (en cualquier orden);
-   un grupo `any` se cumple con cualquiera de ellas. `bad` son las líneas malas que se ofrecen. */
+   El alumno arma cualquier línea con los punteros que tiene; el nivel solo define el punto de
+   partida, qué variables se pueden declarar, qué valores entrega crearNodo() y qué estado gana.
+   `best` es el largo de la solución de referencia `ref`. */
 const LEVELS = [
-  { name: '¿Está el 7?', kind: 'search', x: 7, list: [4, 1, 9, 7, 3],
-    sig: 'int esta(Lista *l, int x)',
-    intro: 'Queremos saber si el 7 está en la lista. Al comienzo solo tienes <code>l->head</code>: no hay ningún puntero para recorrer.<br><br>Elige en cada paso la línea correcta. Los datos están ocultos (<code>?</code>): cada vez que preguntas <code>if (p->value == 7)</code> y la respuesta es no, el nodo pasa a <code>≠7</code>. Es lo único que sabes con certeza.' },
+  { name: '¿Está el 7?', kind: 'search', x: 7, list: [4, 1, 9, 7, 3], vars: ['p'], best: 9,
+    sig: 'int esta(Lista *l)',
+    intro: 'Queremos saber si el 7 está en la lista. Al comienzo solo tienes <code>l->head</code>: no hay ningún puntero para recorrer.<br><br>Los datos están ocultos (<code>?</code>). Cada vez que preguntas <code>if (p->value == 7)</code> y la respuesta es no, el nodo pasa a <code>≠7</code>: es lo único que sabes con certeza. Cuando estés seguro, responde con <code>return 1</code> o <code>return 0</code>.',
+    ref: 'Nodo *p = l->head;\nwhile (p != NULL) {\n  if (p->value == 7) return 1;\n  p = p->next;\n}\nreturn 0;' },
 
-  { name: '¿Está el 5?', kind: 'search', x: 5, list: [6, 2, 8, 3],
-    sig: 'int esta(Lista *l, int x)',
-    intro: 'Ahora buscas el 5. Si no está, la única forma de saberlo es revisar <b>todos</b> los nodos hasta que <code>p</code> sea <code>NULL</code>.' },
+  { name: '¿Está el 5?', kind: 'search', x: 5, list: [6, 2, 8, 3], vars: ['p'], best: 10,
+    sig: 'int esta(Lista *l)',
+    intro: 'Ahora buscas el 5. Si no está, la única forma de saberlo es revisar <b>todos</b> los nodos, hasta que <code>p</code> sea <code>NULL</code>.',
+    ref: 'Nodo *p = l->head;\nwhile (p != NULL) {\n  if (p->value == 5) return 1;\n  p = p->next;\n}\nreturn 0;' },
 
-  { name: 'Insertar el 2', kind: 'script', list: [1, 3], spawn: [X2, Y(1)], goal: [1, 2, 3],
+  { name: 'Insertar el 2', kind: 'list', list: [1, 3], vars: ['p', 'sig', 'nuevo'], create: [2], goal: [1, 2, 3], best: 5,
     sig: 'void insertar(Lista *l)',
-    intro: 'Inserta un nodo con el 2 entre el 1 y el 3.<br><br>Necesitas tres punteros: <code>p</code> al nodo después del cual insertas, <code>sig</code> para guardar el que sigue (si no, se pierde) y <code>nuevo</code> para el nodo creado.',
-    groups: [
-      { all: [O('Nodo *p = l->head;', () => decl('p', get('l->head')))],
-        bad: [O('Nodo *p = l->head->next;', () => decl('p', nx(get('l->head'))), 'p quedó en el 3. Para insertar después del 1, p tiene que apuntar al 1.'),
-              O('l->head = crearNodo(2);', () => setV('l->head', create(2)), 'Pisaste la cabeza: el 1 y el 3 quedaron sin ninguna referencia.'),
-              O('Nodo p = l->head;', null, 'Error de compilación: l->head es un Nodo *, no un Nodo. Falta el asterisco.'),
-              O('p = l->head;', null, "Error de compilación: 'p' no está declarada. Hay que escribir Nodo *p.")] },
-      { all: [O('Nodo *sig = p->next;', () => decl('sig', nx(get('p')))),
-              O('Nodo *nuevo = crearNodo(2);', () => decl('nuevo', create(2)))],
-        bad: [O('p->next = crearNodo(2);', () => setNext(get('p'), create(2)), 'Enganchaste el 2, pero el 3 quedó sin referencia: fuga de memoria. Primero guarda el siguiente en sig.', () => !declared('sig')),
-              O('Nodo *sig = p;', () => decl('sig', get('p')), 'sig debe guardar el nodo que sigue a p (el 3), no el mismo nodo de p.', () => !declared('sig')),
-              O('Nodo *nuevo = p->next;', () => decl('nuevo', nx(get('p'))), 'Eso no crea un nodo: nuevo apunta al 3, que ya existía.', () => !declared('nuevo')),
-              O('p->value = 2;', () => { get('p').v = 2; }, 'Eso sobrescribe el 1. No inserta nada.'),
-              O('p = p->next;', () => setV('p', nx(get('p'))), 'p se fue al 3. Ahora no puedes volver al 1 para enganchar el nuevo nodo.')] },
-      { all: [O('p->next = nuevo;', () => setNext(get('p'), get('nuevo'))),
-              O('nuevo->next = sig;', () => setNext(get('nuevo'), get('sig')))],
-        bad: [O('nuevo->next = p;', () => setNext(get('nuevo'), get('p')), 'El 2 apuntaría hacia atrás, al 1: se forma un ciclo.'),
-              O('sig->next = nuevo;', () => setNext(get('sig'), get('nuevo')), 'Eso pone el 2 después del 3, no entre el 1 y el 3.'),
-              O('p = nuevo;', () => setV('p', get('nuevo')), 'Moviste la variable p. Ninguna flecha de la lista cambió.'),
-              O('nuevo = sig;', () => setV('nuevo', get('sig')), 'Moviste la variable nuevo. Si el 2 no estaba enganchado, quedó perdido.')] },
-    ] },
+    intro: 'Inserta un nodo con el 2 entre el 1 y el 3.<br><br>Una forma segura: un puntero <code>p</code> al nodo después del cual insertas, uno <code>sig</code> para guardar el que sigue (si no, se pierde) y uno <code>nuevo</code> para el nodo creado.',
+    ref: 'Nodo *p = l->head;\nNodo *sig = p->next;\nNodo *nuevo = crearNodo(2);\np->next = nuevo;\nnuevo->next = sig;' },
 
-  { name: 'Borrar el 13', kind: 'script', list: [1, 2, 13, 4], bug: 13, goal: [1, 2, 4],
+  { name: 'Borrar el 13', kind: 'list', list: [1, 2, 13, 4], bug: 13, vars: ['p', 'borrar'], goal: [1, 2, 4], best: 5,
     sig: 'void borrar13(Lista *l)',
-    intro: 'Saca el 13 de la lista <b>y libera su memoria</b>. Para borrar un nodo hay que pararse en el anterior y guardar el que se va en otro puntero, porque si no, no hay con qué hacer <code>free</code>.',
-    groups: [
-      { all: [O('Nodo *p = l->head;', () => decl('p', get('l->head')))],
-        bad: [O('Nodo *p = l->head->next->next;', () => decl('p', nx(nx(get('l->head')))), 'p quedó en el 13. Para sacarlo necesitas el nodo anterior, y en una lista simple no se puede retroceder.'),
-              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 1, que sigue en la lista. Ahora l->head apunta a memoria liberada.'),
-              O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Moviste la cabeza: el 1 quedó fuera de la lista y sin referencia.')] },
-      { all: [O('p = p->next;', () => setV('p', nx(get('p'))))],
-        bad: [O('p = p->next->next;', () => setV('p', nx(nx(get('p')))), 'Te pasaste: p está en el 13 y no hay vuelta atrás.'),
-              O('p->next = NULL;', () => setNext(get('p'), null), 'Cortaste la lista después del 1: el 2, el 13 y el 4 quedaron sin referencia.'),
-              O('free(p->next);', () => freeN(nx(get('p'))), 'Liberaste el 2, que no era el que había que borrar.')] },
-      { all: [O('Nodo *borrar = p->next;', () => decl('borrar', nx(get('p'))))],
-        bad: [O('free(p->next);', () => freeN(nx(get('p'))), 'Liberaste el 13, pero p->next sigue apuntando ahí (puntero colgante) y el 4 quedó inalcanzable.'),
-              O('p->next = p->next->next;', () => setNext(get('p'), nx(nx(get('p')))), 'El 13 salió de la lista, pero nadie lo apunta: ya no puedes hacerle free. Fuga de memoria.'),
-              O('Nodo *borrar = p;', () => decl('borrar', get('p')), 'borrar quedó en el 2. Tiene que apuntar al 13.')] },
-      { all: [O('p->next = borrar->next;', () => setNext(get('p'), nx(get('borrar'))))],
-        bad: [O('free(borrar);', () => freeN(get('borrar')), 'El 13 sigue enganchado: p->next quedaría apuntando a memoria liberada.'),
-              O('borrar = borrar->next;', () => setV('borrar', nx(get('borrar'))), 'Moviste borrar al 4. La lista no cambió.'),
-              O('p->next = borrar;', () => setNext(get('p'), get('borrar')), 'p->next ya apuntaba al 13. No cambia nada.')] },
-      { all: [O('free(borrar);', () => freeN(get('borrar')))],
-        bad: [O('borrar = NULL;', () => setV('borrar', null), 'Nadie liberó el 13: queda ocupando memoria sin que nada lo apunte. Fuga.'),
-              O('free(p);', () => freeN(get('p')), 'Liberaste el 2, que sigue en la lista.'),
-              O('free(borrar->next);', () => freeN(nx(get('borrar'))), 'Liberaste el 4, que sigue en la lista.')] },
-    ] },
+    intro: 'Saca el 13 de la lista <b>y libera su memoria</b> con <code>free</code>. Si solo lo saltas, queda ocupando memoria sin que nada lo apunte: una fuga.',
+    ref: 'Nodo *p = l->head;\np = p->next;\nNodo *borrar = p->next;\np->next = borrar->next;\nfree(borrar);' },
 
-  { name: 'Pila: push', kind: 'script', list: [5, 2], spawn: [X2, Y(0)], goal: [8, 5, 2],
+  { name: 'Pila: push', kind: 'list', list: [5, 2], vars: ['nuevo'], create: [8], goal: [8, 5, 2], best: 3,
     sig: 'void push(Lista *l)',
-    intro: 'Una pila crece por <code>l->head</code>. Haz push del 8: crea el nodo, haz que apunte al tope actual y luego mueve la cabeza. El orden importa.',
-    groups: [
-      { all: [O('Nodo *nuevo = crearNodo(8);', () => decl('nuevo', create(8)))],
-        bad: [O('l->head = crearNodo(8);', () => setV('l->head', create(8)), 'Pisaste la cabeza: el 5 y el 2 quedaron sin referencia.'),
-              O('Nodo *nuevo = l->head;', () => decl('nuevo', get('l->head')), 'Eso no crea un nodo: nuevo apunta al 5.'),
-              O('Nodo nuevo = crearNodo(8);', null, 'Error de compilación: crearNodo devuelve un Nodo *. Falta el asterisco.')] },
-      { all: [O('nuevo->next = l->head;', () => setNext(get('nuevo'), get('l->head')))],
-        bad: [O('l->head = nuevo;', () => setV('l->head', get('nuevo')), 'Si mueves la cabeza primero, el 5 y el 2 quedan sin referencia: fuga.'),
-              O('l->head->next = nuevo;', () => setNext(get('l->head'), get('nuevo')), 'Eso engancha el 8 después del 5, y el 2 queda perdido.'),
-              O('nuevo->next = l->head->next;', () => setNext(get('nuevo'), nx(get('l->head'))), 'El 8 apuntaría al 2: te saltas el 5.')] },
-      { all: [O('l->head = nuevo;', () => setV('l->head', get('nuevo')))],
-        bad: [O('nuevo = l->head;', () => setV('nuevo', get('l->head')), 'Al revés: nuevo se movió al 5, el 8 quedó sin referencia y la cabeza no cambió.'),
-              O('l->head->next = nuevo;', () => setNext(get('l->head'), get('nuevo')), 'El 5 apuntaría al 8 y el 8 al 5: un ciclo. Además el 2 se pierde.'),
-              O('nuevo->next = NULL;', () => setNext(get('nuevo'), null), 'Desenganchaste el 8 del resto de la pila.')] },
-    ] },
+    intro: 'Una pila crece por <code>l->head</code>. Haz push del 8. El orden de las líneas importa.',
+    ref: 'Nodo *nuevo = crearNodo(8);\nnuevo->next = l->head;\nl->head = nuevo;' },
 
-  { name: 'Pila: pop', kind: 'script', list: [9, 8, 5], goal: [8, 5],
+  { name: 'Pila: pop', kind: 'list', list: [9, 8, 5], vars: ['aux'], goal: [8, 5], best: 3,
     sig: 'void pop(Lista *l)',
-    intro: 'Saca el tope (el 9) y libéralo. Antes de mover <code>l->head</code>, guarda el 9 en <code>aux</code>: si no, no tendrás con qué hacer <code>free</code>.',
-    groups: [
-      { all: [O('Nodo *aux = l->head;', () => decl('aux', get('l->head')))],
-        bad: [O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Sin guardar antes el 9, quedó sin referencia y nunca podrás liberarlo: fuga.'),
-              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 9, pero l->head sigue apuntando ahí y el 8 y el 5 quedaron inalcanzables.'),
-              O('Nodo *aux = l->head->next;', () => decl('aux', nx(get('l->head'))), 'aux debe guardar el nodo que vas a sacar: el 9.')] },
-      { any: [O('l->head = aux->next;', () => setV('l->head', nx(get('aux')))),
-              O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))))],
-        bad: [O('free(aux);', () => freeN(get('aux')), 'Liberaste el 9, pero l->head todavía apunta a él.'),
-              O('aux = aux->next;', () => setV('aux', nx(get('aux'))), 'Moviste aux. La pila no cambió.'),
-              O('l->head = NULL;', () => setV('l->head', null), 'Vaciaste la pila: el 8 y el 5 se perdieron.')] },
-      { all: [O('free(aux);', () => freeN(get('aux')))],
-        bad: [O('aux = NULL;', () => setV('aux', null), 'El 9 nunca se liberó: fuga de memoria.'),
-              O('free(l->head);', () => freeN(get('l->head')), 'Liberaste el 8, que ahora es el tope.'),
-              O('aux = l->head;', () => setV('aux', get('l->head')), 'aux era la única referencia al 9: se perdió sin liberarlo.')] },
-    ] },
+    intro: 'Saca el tope (el 9) y libéralo. Si mueves <code>l->head</code> sin guardar antes el 9, no tendrás con qué hacer <code>free</code>.',
+    ref: 'Nodo *aux = l->head;\nl->head = aux->next;\nfree(aux);' },
 
-  { name: 'Cola: encolar', kind: 'script', list: [1, 2, 3], tail: true, spawn: [X2, Y(3)], goal: [1, 2, 3, 4], goalTail: 4,
+  { name: 'Cola: encolar', kind: 'list', list: [1, 2, 3], tail: true, vars: ['nuevo', 'p'], create: [4], goal: [1, 2, 3, 4], goalTail: 4, best: 3,
     sig: 'void encolar(Lista *l)',
-    intro: 'Una cola tiene <code>l->head</code> (el primero en salir) y <code>l->tail</code> (el último en llegar). Encola el 4 al final. No hace falta recorrer: para eso está <code>tail</code>.',
-    groups: [
-      { all: [O('Nodo *nuevo = crearNodo(4);', () => decl('nuevo', create(4)))],
-        bad: [O('l->tail = crearNodo(4);', () => setV('l->tail', create(4)), 'tail se movió al 4, pero el 3 no apunta a él: el 4 quedó fuera de la lista.'),
-              O('Nodo *p = l->head;', () => decl('p', get('l->head')), 'No hace falta recorrer la cola: l->tail ya apunta al último.'),
-              O('l->head = crearNodo(4);', () => setV('l->head', create(4)), 'Pisaste la cabeza: el 1, el 2 y el 3 quedaron sin referencia.')] },
-      { all: [O('l->tail->next = nuevo;', () => setNext(get('l->tail'), get('nuevo')))],
-        bad: [O('l->tail = nuevo;', () => setV('l->tail', get('nuevo')), 'Si mueves tail primero, ya no tienes cómo llegar al 3 para engancharlo.'),
-              O('nuevo->next = l->tail;', () => setNext(get('nuevo'), get('l->tail')), 'La flecha va al revés: el 4 apunta al 3, pero el 3 no apunta al 4.'),
-              O('nuevo->next = l->head;', () => setNext(get('nuevo'), get('l->head')), 'Así el 4 queda delante del 1, pero nadie apunta al 4: no está en la cola.')] },
-      { any: [O('l->tail = nuevo;', () => setV('l->tail', get('nuevo'))),
-              O('l->tail = l->tail->next;', () => setV('l->tail', nx(get('l->tail'))))],
-        bad: [O('nuevo = l->tail;', () => setV('nuevo', get('l->tail')), 'Al revés: moviste nuevo y l->tail sigue en el 3.'),
-              O('l->tail->next = NULL;', () => setNext(get('l->tail'), null), 'Desenganchaste el 4 que acababas de encolar.'),
-              O('l->head = nuevo;', () => setV('l->head', get('nuevo')), 'l->head es el primero en salir: la cola empezaría en el 4 y el 1, 2 y 3 se perderían.')] },
-    ] },
+    intro: 'Una cola tiene <code>l->head</code> (el primero en salir) y <code>l->tail</code> (el último en llegar). Encola el 4 al final. Se puede recorrer con <code>p</code>, pero no hace falta: para eso está <code>tail</code>.',
+    ref: 'Nodo *nuevo = crearNodo(4);\nl->tail->next = nuevo;\nl->tail = nuevo;' },
 
-  { name: 'Invertir', kind: 'script', list: [1, 2, 3], goal: [3, 2, 1],
+  { name: 'Invertir', kind: 'list', list: [1, 2, 3], vars: ['ant', 'act', 'sig'], goal: [3, 2, 1], best: 15,
     sig: 'void invertir(Lista *l)',
-    intro: 'Deja la lista al revés: <code>3 → 2 → 1 → NULL</code>. El patrón usa tres punteros: <code>ant</code> (lo ya invertido), <code>act</code> (el nodo que estás dando vuelta) y <code>sig</code> (el resto, para no perderlo). Se repite una vuelta por nodo.',
-    groups: null },   // se generan en invertGroups()
+    intro: 'Deja la lista al revés: <code>3 → 2 → 1 → NULL</code>. El patrón clásico usa <code>ant</code> (lo ya invertido), <code>act</code> (el nodo que das vuelta) y <code>sig</code> (el resto, para no perderlo).',
+    ref: 'Nodo *ant = NULL;\nNodo *act = l->head;\nwhile (act != NULL) {\n  Nodo *sig = act->next;\n  act->next = ant;\n  ant = act;\n  act = sig;\n}\nl->head = ant;' },
 ];
 
-function invertGroups() {
-  const G = [
-    { all: [O('Nodo *ant = NULL;', () => decl('ant', null)), O('Nodo *act = l->head;', () => decl('act', get('l->head')))],
-      bad: [O('l->head = NULL;', () => setV('l->head', null), 'La lista entera quedó sin referencia.'),
-            O('Nodo *act = l->head->next;', () => decl('act', nx(get('l->head'))), 'act tiene que partir en el primer nodo, el 1.', () => !declared('act')),
-            O('Nodo *ant = l->head;', () => decl('ant', get('l->head')), 'ant parte en NULL: el primer nodo será el último, y el último apunta a NULL.', () => !declared('ant'))] },
-  ];
-  for (let i = 0; i < 3; i++) {
-    G.push({ note: `// vuelta ${i + 1}: act está en el ${i + 1}`,
-      all: [O(i ? 'sig = act->next;' : 'Nodo *sig = act->next;', () => i ? setV('sig', nx(get('act'))) : decl('sig', nx(get('act'))))],
-      bad: [i < 2 ? O('act->next = ant;', () => setNext(get('act'), get('ant')), 'Sin guardar sig antes, el resto de la lista quedó sin referencia.')
-                  : O('act = act->next;', () => setV('act', nx(get('act'))), 'Si avanzas antes de dar vuelta la flecha, el 3 queda apuntando hacia adelante.'),
-            O('ant = act;', () => setV('ant', get('act')), 'Todavía no: primero guarda el resto en sig y da vuelta la flecha de act.'),
-            O('l->head = act;', () => setV('l->head', get('act')), 'La cabeza se actualiza al final, cuando todo está invertido.')] });
-    G.push({ all: [O('act->next = ant;', () => setNext(get('act'), get('ant')))],
-      bad: [O('ant->next = act;', () => setNext(get('ant'), get('act')), i ? 'Esa es la flecha de ant, que ya está invertida. La que se da vuelta es la de act.' : 'ant es NULL.'),
-            O('act = sig;', () => setV('act', get('sig')), 'Avanzaste sin dar vuelta la flecha de act.'),
-            O('ant = act;', () => setV('ant', get('act')), 'Si mueves ant antes, act->next = ant haría que act se apunte a sí mismo.')] });
-    G.push({ all: [O('ant = act;', () => setV('ant', get('act')))],
-      bad: [O('act = sig;', () => setV('act', get('sig')), 'Si avanzas act primero, ant ya no tiene cómo llegar al nodo que acabas de invertir.'),
-            O('ant = sig;', () => setV('ant', get('sig')), 'ant debe quedar en el nodo que acabas de invertir: act.'),
-            O('act->next = sig;', () => setNext(get('act'), get('sig')), 'Deshiciste la vuelta: act vuelve a apuntar hacia adelante.')] });
-    G.push({ all: [O('act = sig;', () => setV('act', get('sig')))],
-      bad: [O('act = act->next;', () => setV('act', nx(get('act'))), 'act->next ya apunta hacia atrás: volverías al nodo anterior.'),
-            O('sig = sig->next;', () => setV('sig', nx(get('sig'))), 'Eso adelanta sig; el que tiene que avanzar ahora es act.'),
-            O('act = ant;', () => setV('act', get('ant')), 'act retrocedió al nodo ya invertido.')] });
-  }
-  G.push({ note: '// act es NULL: terminó el recorrido',
-    all: [O('l->head = ant;', () => setV('l->head', get('ant')))],
-    bad: [O('l->head = act;', () => setV('l->head', get('act')), 'act es NULL: la lista quedaría vacía y todo se perdería.'),
-          O('l->head = sig;', () => setV('l->head', get('sig')), 'sig es NULL: la lista quedaría vacía.'),
-          O('l->head->next = NULL;', () => setNext(get('l->head'), null), 'l->head todavía apunta al 1, que ya apunta a NULL. No cambia nada.')] });
-  return G;
-}
-
-// ───────────────────────── opciones de la búsqueda ─────────────────────────
-function searchOptions() {
-  const x = S.L.x, head = get('l->head'), hasP = declared('p'), pt = get('p');
-  const known = pt && pt.known, good = [], bad = [];
-  const winYes = () => { S.answer = 1; }, winNo = () => { S.answer = 0; };
-  if (!hasP) good.push(O('Nodo *p = l->head;', () => decl('p', get('l->head'))));
-  else if (pt && !known) good.push(O(`if (p->value == ${x})`, () => check(pt)));
-  else if (pt && known === 'neq') good.push(O('p = p->next;', () => setV('p', nx(pt))));
-  else if (pt && known === 'eq') good.push(O('return 1;', winYes));
-  else if (!pt) good.push(O('return 0;', winNo));
-
-  bad.push(O('l->head = l->head->next;', () => setV('l->head', nx(get('l->head'))), 'Para recorrer no se mueve la cabeza: el primer nodo quedó sin referencia y la lista cambió.', () => head));
-  if (!hasP) {
-    bad.push(O('Nodo *p = l->head->next;', () => decl('p', nx(head)), 'Te saltas el primer nodo sin revisarlo.'),
-             O('Nodo p = l->head;', null, 'Error de compilación: l->head es un Nodo *. Falta el asterisco: Nodo *p.'),
-             O('p = l->head;', null, "Error de compilación: 'p' no está declarada."),
-             O('return 0;', null, 'No has revisado ningún nodo todavía.'));
-  } else {
-    bad.push(O('p = p->prev;', null, "Error de compilación: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder."),
-             O('p++;', null, 'Los nodos no están uno al lado del otro en memoria: p++ apunta a basura.', () => pt));
-    if (pt) {
-      if (!known) bad.push(O('p = p->next;', () => setV('p', nx(pt)), `Avanzaste sin revisar este nodo. ¿Y si era el ${x}?`),
-                           O('p = p->next->next;', () => setV('p', nx(nx(pt))), 'Te saltas nodos sin revisarlos.'));
-      else bad.push(O(`if (p->value == ${x})`, null, `Ya lo preguntaste: este nodo vale ${known === 'eq' ? x : '≠' + x}.`));
-      bad.push(O(`p->value = ${x};`, () => { pt.v = x; }, `Eso no busca el ${x}: lo escribe. Cambiaste los datos de la lista.`),
-               O('free(p);', () => freeN(pt), 'free libera el nodo; no sirve para recorrer. La lista quedó con un hueco.'));
-      if (pt !== head) bad.push(O('p = l->head;', () => setV('p', head), 'Volver al inicio no aporta: los nodos anteriores ya los revisaste.'));
-      if (known !== 'eq') bad.push(O('return 1;', null, `Todavía no has visto un ${x}.`));
-      bad.push(O('return 0;', null, known === 'eq' ? `Lo encontraste: el ${x} sí está.` : 'Aún quedan nodos sin revisar.'));
-      if (known === 'eq') bad.push(O('p = p->next;', () => setV('p', nx(pt)), `¡Ya lo encontraste! No hace falta seguir.`));
-    } else {
-      bad.push(O(`if (p->value == ${x})`, () => nx(null), 'Segmentation fault: p es NULL, no hay nodo que leer.'),
-               O('p = p->next;', () => nx(null), 'Segmentation fault: p es NULL.'),
-               O('return 1;', null, `Revisaste todos los nodos y ninguno era ${x}.`));
-    }
-  }
-  return { good, bad };
-}
-function check(n) {
-  n.known = n.v === S.L.x ? 'eq' : 'neq';
-}
-
-// ───────────────────────── estado ─────────────────────────
-let LVI = 0, S = null;
+// ───────────────────────── semántica de C ─────────────────────────
+class CErr { constructor(msg, compile) { this.msg = msg; this.compile = compile; } }
+const SEG = 'Segmentation fault: se intentó leer a través de un puntero NULL.';
+const UAF = 'Uso después de free: ese nodo ya fue liberado.';
 const varNamed = name => S.vars.find(v => v.name === name) || null;
+const declared = name => { const v = varNamed(name); return !!(v && v.declared); };
 const live = n => n && !n.dead;
 let NK = 0;
 function mkNode(v, x, y) { return { k: NK++, v, x, y, px: x, py: y, next: null, freed: false, dead: false, known: null, bug: false, tray: -1 }; }
 const addrOf = n => '0x' + (0x3a0 + n.k * 0x18).toString(16);
 
+function spawnPos() {
+  const taken = n => S.nodes.some(m => !m.dead && Math.abs(m.x - n[0]) < 5 && Math.abs(m.y - n[1]) < 5);
+  for (const col of [X2, X1]) for (let r = 0; r < 5; r++) if (!taken([col, Y(r)])) return [col, Y(r)];
+  return [X2, Y(0)];
+}
+// evalúa una expresión del armador: NULL, crearNodo(v), x, x->next, x->next->next, x->prev
+function evalExpr(e) {
+  if (e === 'NULL') return null;
+  const m = /^crearNodo\((\d+)\)$/.exec(e);
+  if (m) {
+    const [x, y] = spawnPos(); const n = mkNode(+m[1], x, y); n.py -= 30; n.isNew = true;
+    S.nodes.push(n); S.made++; return n;
+  }
+  const m2 = /^(l->head|l->tail|\w+)((?:->\w+)*)$/.exec(e);
+  if (!m2) throw new CErr('error de sintaxis', true);
+  const base = m2[1], parts = m2[2] ? m2[2].slice(2).split('->') : [];
+  if (!declared(base)) throw new CErr(`error: '${base}' no está declarada. Primero hay que declararla: Nodo *${base} = …;`, true);
+  let cur = varNamed(base).t;
+  for (const f of parts) {
+    if (f === 'prev') throw new CErr("error: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder.", true);
+    if (!cur) throw new CErr(SEG);
+    if (cur.freed) throw new CErr(UAF);
+    cur = cur.next;
+  }
+  return cur;
+}
+function derefForWrite(name) {
+  const n = varNamed(name).t;
+  if (!n) throw new CErr(SEG + ` (${name} es NULL)`);
+  if (n.freed) throw new CErr(UAF);
+  return n;
+}
+
+// ───────────────────────── estado ─────────────────────────
+let LVI = 0, S = null;
 function loadLevel(i) {
   LVI = (i + LEVELS.length) % LEVELS.length;
   const L = LEVELS[LVI];
   NK = 0;
-  S = { L, nodes: [], vars: [], errors: 0, steps: 0, code: [], state: 'play', slot: 0, gi: 0, gdone: new Set(),
-        tried: new Set(), opts: [], pending: null, toast: null, t: 0, avatar: null, answer: null, leaks: 0 };
+  S = { L, nodes: [], vars: [], errors: 0, lines: 0, code: [], state: 'play', slot: 0, made: 0, undo: [],
+        sel: null, toast: null, t: 0, avatar: { x: 0, y: 0, hop: 0, shake: 0 }, answer: null, leaks: 0 };
   S.nodes = L.list.map((v, j) => { const n = mkNode(v, X1, Y(j)); n.bug = v === L.bug; return n; });
   S.nodes.forEach((n, j) => n.next = S.nodes[j + 1] || null);
-  const vnames = ['l->head'].concat(L.tail ? ['l->tail'] : [], ['p', 'sig', 'nuevo', 'borrar', 'aux', 'ant', 'act']);
-  S.vars = vnames.map(name => ({ name, t: null, declared: false, slot: -1 }));
-  decl('l->head', S.nodes[0]);
-  if (L.tail) decl('l->tail', S.nodes[S.nodes.length - 1]);
-  S.groups = L.kind === 'script' ? (L.groups || invertGroups()) : null;
-  S.avatar = { x: 0, y: 0, hop: 0, shake: 0 };
-
+  S.original = S.nodes.slice();
+  const names = ['l->head'].concat(L.tail ? ['l->tail'] : [], L.vars);
+  S.vars = names.map(name => ({ name, t: null, declared: false, slot: -1 }));
+  declare('l->head', S.nodes[0]);
+  if (L.tail) declare('l->tail', S.nodes[S.nodes.length - 1]);
   addCode('// Nodo: value, next', 'dim');
   addCode('// objetivo: ' + goalText(), 'goal');
   addCode(L.sig + ' {', 'dim');
   $('lvname').textContent = `${LVI + 1}/${LEVELS.length} · ${L.name}`;
-  $('fb').hidden = true;
-  newOptions();
+  hideFb(); renderBuilder();
   showCard('intro');
 }
+function declare(name, n) { const v = varNamed(name); v.declared = true; v.slot = S.slot++; v.t = n; }
 function goalText() {
   const L = S.L;
   if (L.kind === 'search') return `responder si el ${L.x} está (1) o no (0)`;
   return 'l->head → ' + L.goal.join(' → ') + ' → NULL' + (L.goalTail != null ? `, l->tail → ${L.goalTail}` : '') + ', sin fugas';
 }
 
-// ───────────────────────── opciones ─────────────────────────
-function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function newOptions() {
-  let good, bad;
-  if (S.L.kind === 'search') ({ good, bad } = searchOptions());
-  else {
-    const g = S.groups[S.gi];
-    good = (g.all || g.any).filter(o => !S.gdone.has(o.code));
-    bad = g.bad.slice();
-    if (declared('p') && !S.L.noPrev) bad.push(O('p = p->prev;', null, "Error de compilación: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder."));
+// ───────────────────────── armador de líneas ─────────────────────────
+/* Paso 1: qué va a la izquierda (o qué acción).  Paso 2: qué va a la derecha.
+   Las piezas salen del estado actual, así que el alumno puede escribir casi cualquier cosa,
+   incluidas muchas líneas que no compilan o que rompen la lista. */
+function lhsChips() {
+  const L = S.L, out = [];
+  const dv = S.vars.filter(v => v.declared);
+  for (const v of dv) out.push({ kind: 'set', text: v.name, name: v.name });
+  for (const v of dv) out.push({ kind: 'setnext', text: v.name + '->next', name: v.name });
+  for (const v of S.vars.filter(v => !v.declared)) out.push({ kind: 'decl', text: 'Nodo *' + v.name, name: v.name, cls: 'decl' });
+  if (L.kind === 'search') out.push({ kind: 'if', text: `if (_->value == ${L.x})`, cls: 'act' });
+  out.push({ kind: 'free', text: 'free(_)', cls: 'act' });
+  if (L.kind === 'search') { out.push({ kind: 'ret', text: 'return 1;', val: 1, cls: 'act' }); out.push({ kind: 'ret', text: 'return 0;', val: 0, cls: 'act' }); }
+  return out;
+}
+function rhsChips(sel) {
+  const dv = S.vars.filter(v => v.declared && !(sel.kind === 'decl' && v.name === sel.name));
+  const out = [];
+  const ptr = sel.kind === 'set' || sel.kind === 'setnext' || sel.kind === 'decl';
+  if (ptr) out.push({ text: 'NULL' });
+  for (const v of dv) out.push({ text: v.name });
+  for (const v of dv) out.push({ text: v.name + '->next' });
+  if (ptr) {
+    for (const v of dv) if (v.t && !v.t.freed && v.t.next) out.push({ text: v.name + '->next->next' });
+    const p = dv.find(v => !v.name.startsWith('l->'));
+    if (p) out.push({ text: p.name + '->prev' });
+    const left = (S.L.create || []).slice(S.made);
+    if (left.length) out.push({ text: `crearNodo(${left[0]})`, cls: 'mk' });
   }
-  const goodCodes = new Set(good.map(o => o.code));
-  bad = bad.filter(o => (!o.when || o.when()) && !goodCodes.has(o.code));
-  // dedupe por texto
-  const seen = new Set(); bad = bad.filter(o => !seen.has(o.code) && seen.add(o.code));
-  const nBad = Math.max(3, 5 - good.length);
-  S.opts = shuffle(good.map(o => ({ ...o, good: true })).concat(shuffle(bad).slice(0, nBad).map(o => ({ ...o, good: false }))));
-  S.tried = new Set();
-  renderOptions();
+  if (sel.kind === 'decl' && !out.some(c => c.text === sel.name)) out.push({ text: sel.name, cls: '' });   // Nodo *p = p; (no compila)
+  return out;
 }
-function renderOptions() {
-  const box = $('opts');
-  box.innerHTML = '';
-  S.opts.forEach((o, i) => {
+function lineText(sel, rhs) {
+  const hole = rhs == null ? '<span class="hole">&nbsp;</span>' : esc(rhs);
+  if (sel.kind === 'set' || sel.kind === 'setnext' || sel.kind === 'decl') return `${esc(sel.text)} = ${hole};`;
+  if (sel.kind === 'if') return `if (${hole}->value == ${S.L.x})`;
+  if (sel.kind === 'free') return `free(${hole});`;
+  return esc(sel.text);
+}
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function renderBuilder() {
+  const box = $('chips'); box.innerHTML = '';
+  const sel = S.sel;
+  if (S.state !== 'play') { $('ltxt').innerHTML = ''; $('bx').hidden = true; return; }
+  if (!sel) $('ltxt').innerHTML = '<span class="hint">Toca lo que va a la izquierda del <b>=</b>, o una acción.</span>';
+  else $('ltxt').innerHTML = lineText(sel, null);
+  $('bx').hidden = !sel;
+  const chips = sel ? rhsChips(sel) : lhsChips();
+  for (const c of chips) {
     const b = document.createElement('button');
-    b.className = 'opt' + (S.tried.has(o.code) ? ' tried' : '');
-    b.textContent = o.code; b.disabled = S.tried.has(o.code) || S.state !== 'play';
-    b.onclick = () => choose(i);
+    b.className = 'chip ' + (c.cls || ''); b.textContent = c.text;
+    b.onclick = () => sel ? run(sel, c.text) : pick(c);
     box.appendChild(b);
-  });
-  $('ask').textContent = S.state === 'play' ? '¿Qué línea escribes ahora?' : '';
+  }
+  $('bundo').disabled = !S.undo.length;
 }
+function pick(c) {
+  if (c.kind === 'ret') { run(c, null); return; }
+  S.sel = c; renderBuilder();
+}
+$('bx').onclick = () => { S.sel = null; renderBuilder(); };
 
 // ───────────────────────── ejecutar ─────────────────────────
 function snapshot() {
   const idx = n => n ? S.nodes.indexOf(n) : -1;
-  return { nodes: S.nodes.map(n => ({ n, next: idx(n.next), freed: n.freed, dead: n.dead, known: n.known, v: n.v, tray: n.tray })),
-           vars: S.vars.map(v => ({ t: idx(v.t), declared: v.declared, slot: v.slot })), slot: S.slot, nk: NK, leaks: S.leaks };
+  return { nodes: S.nodes.map(n => ({ n, next: idx(n.next), freed: n.freed, dead: n.dead, known: n.known, tray: n.tray })),
+           vars: S.vars.map(v => ({ t: idx(v.t), declared: v.declared, slot: v.slot })), slot: S.slot, nk: NK, leaks: S.leaks,
+           made: S.made, code: S.code.length, lines: S.lines };
 }
 function restore(s) {
   S.nodes = s.nodes.map(o => o.n);
   const at = k => k < 0 ? null : S.nodes[k];
-  s.nodes.forEach(o => Object.assign(o.n, { next: at(o.next), freed: o.freed, dead: o.dead, known: o.known, v: o.v, tray: o.tray }));
+  s.nodes.forEach(o => Object.assign(o.n, { next: at(o.next), freed: o.freed, dead: o.dead, known: o.known, tray: o.tray }));
   s.vars.forEach((o, i) => Object.assign(S.vars[i], { t: at(o.t), declared: o.declared, slot: o.slot }));
-  S.slot = s.slot; NK = s.nk; S.leaks = s.leaks;
+  S.slot = s.slot; NK = s.nk; S.leaks = s.leaks; S.made = s.made; S.lines = s.lines;
+  S.code.length = s.code; renderCode();
 }
-function choose(i) {
-  if (S.state !== 'play' || S.pending) return;
-  const o = S.opts[i];
-  const snap = snapshot();
-  let crash = null;
-  try { if (o.run) o.run(); } catch (e) { if (e instanceof Crash) crash = e.msg; else throw e; }
-  const leaked = crash ? [] : checkLeaks();
-  if (o.good && !crash && !leaked.length) {
-    S.steps++;
-    if (S.L.kind === 'search' && /^if/.test(o.code)) {
-      const n = get('p'); addCode(`  ${o.code} // ${n.known === 'eq' ? 'sí' : '≠' + S.L.x}`);
-    } else addCode('  ' + o.code);
-    if (S.avatar && /^p = p->next/.test(o.code)) S.avatar.hop = 1;
-    beep(620, 0.08, 'triangle', 0.05, 1.3); vibrate(12);
-    advanceScript(o);
-    return;
+function run(sel, rhs) {
+  if (S.state !== 'play') return;
+  S.sel = null;
+  const L = S.L, snap = snapshot();
+  const code = lineText(sel, rhs).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  let note = '';
+  try {
+    if (sel.kind === 'decl') {
+      if (rhs === sel.name) throw new CErr(`error: '${rhs}' se usa en su propia declaración, antes de tener un valor.`, true);
+      const val = evalExpr(rhs); declare(sel.name, val);
+    } else if (sel.kind === 'set') {
+      const val = evalExpr(rhs); varNamed(sel.name).t = val;
+    } else if (sel.kind === 'setnext') {
+      const val = evalExpr(rhs); derefForWrite(sel.name).next = val;
+    } else if (sel.kind === 'free') {
+      const n = evalExpr(rhs);
+      if (n) { if (n.freed) throw new CErr('double free: ese nodo ya estaba liberado.'); n.freed = true; }
+      else note = '  // free(NULL) no hace nada';
+    } else if (sel.kind === 'if') {
+      const n = evalExpr(rhs);
+      if (!n) throw new CErr(SEG + ` (${rhs} es NULL)`);
+      if (n.freed) throw new CErr(UAF);
+      n.known = n.v === L.x ? 'eq' : 'neq';
+      note = n.known === 'eq' ? ' // ¡sí!' : ` // ≠${L.x}`;
+    } else if (sel.kind === 'ret') {
+      const why = checkAnswer(sel.val);
+      if (why) throw new CErr(why, false, true);
+      S.answer = sel.val;
+    }
+  } catch (e) {
+    if (!(e instanceof CErr)) throw e;
+    restore(snap);
+    S.errors++;
+    addCode('  // ✗ ' + code, 'err');
+    showFb('bad', '✗ ' + code, e.msg, [['Entendido', hideFb]]);
+    if (S.avatar) S.avatar.shake = 0.4;
+    beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
+    renderBuilder(); return;
   }
-  // línea mala: se ejecuta para ver qué pasa, se explica y se deshace
-  S.errors++; S.pending = { snap, o };
-  if (S.avatar) S.avatar.shake = 0.4;
-  beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
-  let why = o.why || 'Esa línea no te acerca al objetivo.';
-  if (crash && !o.why) why = crash;
-  else if (crash && !why.startsWith('Segmentation')) why = crash + ' ' + why;
-  if (leaked.length) why += ` (Se perdió el ${leaked.map(n => n.v).join(' y el ')}.)`;
-  $('fbcode').textContent = '✗ ' + o.code; $('fbwhy').textContent = why;
-  $('opts').hidden = true; $('ask').hidden = true; $('fb').hidden = false; $('fbok').focus();
+  S.undo.push(snap);
+  S.lines++;
+  addCode('  ' + code + note);
+  if (/^p = /.test(code) || /^Nodo \*p = /.test(code)) S.avatar.hop = 1;
+  beep(620, 0.08, 'triangle', 0.05, 1.3); vibrate(12);
+  hideFb();
+  const leaked = checkLeaks();
+  if (leaked.length) {
+    const vals = leaked.map(n => n.v).join(' y el ');
+    addCode(`  // ⚠ fuga: el ${vals} quedó sin referencias`, 'leak');
+    beep(500, 0.5, 'sine', 0.05, 0.3);
+    showFb('warn', '⚠ ' + code, `El ${vals} quedó sin ninguna variable ni flecha que lo apunte. En C ya no hay forma de alcanzarlo ni de liberarlo.`,
+      [['↶ Deshacer', undo], ['Seguir así', hideFb]]);
+  }
+  if (sel.kind === 'ret') { finish(); return; }
+  checkGoal();
+  renderBuilder();
 }
-$('fbok').onclick = () => {
-  const p = S.pending; if (!p) return;
-  restore(p.snap); S.pending = null;
-  addCode('  // ✗ ' + p.o.code, 'err');
-  S.tried.add(p.o.code);
-  $('fb').hidden = true; $('opts').hidden = false; $('ask').hidden = false;
-  renderOptions();
-};
-function advanceScript(o) {
-  const L = S.L;
-  if (L.kind === 'search') {
-    if (S.answer != null) { finish(); return; }
-    newOptions(); return;
-  }
-  const g = S.groups[S.gi];
-  S.gdone.add(o.code);
-  const done = g.any ? true : g.all.every(x => S.gdone.has(x.code));
-  if (done) {
-    S.gi++; S.gdone = new Set();
-    if (S.gi >= S.groups.length) { finish(); return; }
-    if (S.groups[S.gi].note) addCode('  ' + S.groups[S.gi].note, 'dim');
-  }
-  newOptions();
+function checkAnswer(val) {
+  const L = S.L, x = L.x;
+  const seen = S.nodes.some(n => n.known === 'eq');
+  if (val === 1) return seen ? null : `Todavía no has visto un ${x}. Con lo que sabes no puedes afirmar que está.`;
+  if (seen) return `Ya encontraste un ${x}: la respuesta es 1.`;
+  const unknown = S.original.filter(n => n.known !== 'neq');
+  if (unknown.some(n => n.dead)) return 'Hay nodos que se perdieron sin revisarlos. Deshaz hasta antes de perderlos.';
+  if (unknown.length) return `Aún hay ${unknown.length} ${unknown.length === 1 ? 'nodo' : 'nodos'} sin revisar: no puedes estar seguro de que el ${x} no está.`;
+  return null;
 }
 function checkLeaks() {
   const seen = new Set(), q = S.vars.filter(v => v.declared).map(v => v.t).filter(n => live(n) && !n.freed);
@@ -483,12 +404,34 @@ function checkLeaks() {
   }
   return out;
 }
+function checkGoal() {
+  const L = S.L; if (L.kind !== 'list') return;
+  const out = [], seen = new Set(); let n = varNamed('l->head').t;
+  while (n && !n.freed && !seen.has(n)) { seen.add(n); out.push(n.v); n = n.next; }
+  let ok = !n && out.length === L.goal.length && out.every((v, i) => v === L.goal[i]);
+  if (ok && L.goalTail != null) { const t = varNamed('l->tail').t; ok = t && !t.freed && t.v === L.goalTail; }
+  // nada vivo fuera de la lista: lo que sobra hay que liberarlo
+  if (ok) ok = S.nodes.every(m => m.dead || m.freed || seen.has(m));
+  if (ok) finish();
+}
+function undo() {
+  if (!S.undo.length) return;
+  restore(S.undo.pop());
+  S.state = 'play'; S.sel = null; hideFb(); showCard(null); renderBuilder();
+}
 function finish() {
   addCode('}', 'dim');
-  S.state = 'won'; renderOptions();
+  S.state = 'won'; renderBuilder();
   [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.05), i * 110)); vibrate([20, 60, 20]);
-  const cur = S; setTimeout(() => { if (S === cur) showCard('won'); }, 700);
+  const cur = S; setTimeout(() => { if (S === cur && S.state === 'won') showCard('won'); }, 800);
 }
+function showFb(kind, code, why, buttons) {
+  const fb = $('fb'); fb.hidden = false; fb.className = 'fb' + (kind === 'warn' ? ' warn' : '');
+  $('fbcode').textContent = code; $('fbwhy').textContent = why;
+  const row = $('fbrow'); row.innerHTML = '';
+  for (const [t, f] of buttons) { const b = document.createElement('button'); b.textContent = t; b.onclick = f; row.appendChild(b); }
+}
+function hideFb() { $('fb').hidden = true; }
 
 // ───────────────────────── tarjetas ─────────────────────────
 function showCard(kind) {
@@ -501,25 +444,35 @@ function showCard(kind) {
       <div class="row"><button id="cgo">Empezar</button></div></div>`;
     $('cgo').onclick = () => showCard(null); $('cgo').focus();
   } else if (kind === 'won') {
-    const stars = S.errors === 0 ? 3 : S.errors <= 2 ? 2 : 1;
+    const clean = S.errors === 0 && S.leaks === 0;
+    let stars = S.lines <= L.best ? 3 : S.lines <= Math.ceil(L.best * 1.5) + 1 ? 2 : 1;
+    if (!clean) stars = Math.min(stars, S.leaks ? 1 : 2);
     const last = LVI === LEVELS.length - 1;
-    const title = L.kind === 'search' ? (S.answer ? `¡Sí, el ${L.x} está!` : `No, el ${L.x} no está`) : '¡Compila y funciona!';
+    const title = L.kind === 'search' ? (S.answer ? `¡Sí, el ${L.x} está!` : `No, el ${L.x} no está`) : (S.leaks ? 'Funciona, pero con fugas' : '¡Compila y funciona!');
+    const notes = [];
+    if (S.leaks) notes.push(`Quedaron <b>${S.leaks}</b> nodo(s) perdidos en memoria.`);
+    if (S.errors) notes.push(`Intentaste <b>${S.errors}</b> ${S.errors === 1 ? 'línea que falló' : 'líneas que fallaron'}.`);
+    if (S.lines < L.best) notes.push('¡Lo hiciste en menos líneas que la solución de referencia!');
     ov.innerHTML = `<div class="card"><h2>${title}</h2>
       <div class="stars" aria-label="${stars} de 3 estrellas">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
-      <p><b>${S.steps}</b> líneas correctas · <b>${S.errors}</b> ${S.errors === 1 ? 'línea mala' : 'líneas malas'}</p>
+      <p><b>${S.lines}</b> líneas · la referencia usa <b>${L.best}</b></p>
+      ${notes.map(n => `<p>${n}</p>`).join('')}
+      <p>Una solución de referencia:</p><pre>${esc(L.ref)}</pre>
       ${last ? '<p>Terminaste el piloto. Lo siguiente sería: listas dobles (donde <code>p->prev</code> sí existe), insertar en orden y tablas hash.</p>' : ''}
       <div class="row"><button id="cn">${last ? 'Volver al nivel 1' : 'Siguiente nivel'}</button><button class="sec" id="cr">Repetir</button></div></div>`;
     $('cn').onclick = () => loadLevel(LVI + 1); $('cr').onclick = () => loadLevel(LVI); $('cn').focus();
   } else if (kind === 'help') {
     ov.innerHTML = `<div class="card"><h2>Cómo se juega</h2>
       <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code>.</p>
-      <p>Abajo eliges la próxima línea de C. Siempre hay varias malas. Si eliges una mala, se ejecuta para que veas qué pasa, se explica y se deshace.</p>
-      <p>Un nodo al que no apunta ninguna variable ni ninguna flecha es una <b>fuga</b>: cae a «memoria perdida».</p>
+      <p>Abajo armas cada línea: primero tocas lo que va a la izquierda del <code>=</code> (o una acción, como <code>free</code>), y después lo que va a la derecha. La línea se ejecuta y se anima.</p>
+      <p>Puedes declarar punteros, crear nodos, avanzar y conectar como quieras. Lo que en C no compila o se cae (segfault, uso después de free) no se ejecuta y se explica.</p>
+      <p>Un nodo sin ninguna variable ni flecha que lo apunte es una <b>fuga</b>: cae a «memoria perdida». Con <b>↶</b> deshaces.</p>
       <div class="row"><button id="cg">Seguir</button></div></div>`;
     $('cg').onclick = () => showCard(null); $('cg').focus();
   }
 }
 $('breset').onclick = () => loadLevel(LVI);
+$('bundo').onclick = undo;
 $('bhelp').onclick = () => showCard('help');
 $('bprev').onclick = () => loadLevel(LVI - 1);
 $('bnext').onclick = () => loadLevel(LVI + 1);
@@ -610,7 +563,7 @@ function buildPaper() {
   for (let y = 0; y <= LH; y += 12.5) { g.beginPath(); g.moveTo(0, y); g.lineTo(LW, y); g.stroke(); }
   g.strokeStyle = '#e0726a'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(MX, 0); g.lineTo(MX, LH); g.stroke();
   g.fillStyle = '#b6b0a6'; g.font = '13px "Patrick Hand", sans-serif'; g.textAlign = 'center';
-  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', (MX + LW) / 2, LH - 48);
+  g.fillText('stack', MX / 2, LH - 8); g.fillText('heap', LW - 22, 12);
 }
 function drawVar(v) {
   const { x, y } = varPos(v);
@@ -690,7 +643,7 @@ function draw() {
   if (!paper) buildPaper();
   ctx.drawImage(paper, 0, 0, LW, LH);
   if (!S) return;
-  if (S.nodes.some(n => n.dead)) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 34); }
+  if (S.nodes.some(n => n.dead)) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 40); }
   for (const n of S.nodes) {
     if (n.dead || !n.next || n.next.dead) continue;
     const a = dotOf(n), t = n.next;
