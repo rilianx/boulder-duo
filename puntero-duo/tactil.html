@@ -189,7 +189,7 @@ function mkNode(v, x, y) { return { k: NK++, v, x, y, px: x, py: y, next: null, 
 const addrOf = n => '0x' + (0x3a0 + n.k * 0x18).toString(16);
 
 function spawnPos() {
-  const taken = n => S.nodes.some(m => !m.dead && Math.abs(m.x - n[0]) < 5 && Math.abs(m.y - n[1]) < 5);
+  const taken = n => S.nodes.some(m => Math.abs(m.x - n[0]) < 5 && Math.abs(m.y - n[1]) < 5);
   for (const col of [X2, X1]) for (let r = 0; r < 5; r++) if (!taken([col, Y(r)])) return [col, Y(r)];
   return [X2, Y(0)];
 }
@@ -374,10 +374,11 @@ function run(sel, rhs) {
   hideFb();
   const leaked = checkLeaks();
   if (leaked.length) {
-    const vals = leaked.map(n => n.v).join(' y el ');
-    addCode(`  // ⚠ fuga: el ${vals} quedó sin referencias`, 'leak');
+    const vals = leaked.map(n => n.v).join(' y el '), pl = leaked.length > 1;
+    addCode(`  // ⚠ fuga: el ${vals} ${pl ? 'quedaron' : 'quedó'} sin referencias`, 'leak');
     beep(500, 0.5, 'sine', 0.05, 0.3);
-    showFb('warn', '⚠ ' + code, `El ${vals} quedó sin ninguna variable ni flecha que lo apunte. En C ya no hay forma de alcanzarlo ni de liberarlo.`,
+    showFb('warn', '⚠ ' + code, pl ? `El ${vals} quedaron sin ninguna variable ni flecha que los apunte. En C ya no hay forma de alcanzarlos ni de liberarlos: quedan transparentes, sin acceso.`
+         : `El ${vals} quedó sin ninguna variable ni flecha que lo apunte. En C ya no hay forma de alcanzarlo ni de liberarlo: queda transparente, sin acceso.`,
       [['↶ Deshacer', undo], ['Seguir así', hideFb]]);
   }
   if (sel.kind === 'ret') { finish(); return; }
@@ -466,7 +467,7 @@ function showCard(kind) {
       <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code>.</p>
       <p>Abajo armas cada línea: primero tocas lo que va a la izquierda del <code>=</code> (o una acción, como <code>free</code>), y después lo que va a la derecha. La línea se ejecuta y se anima.</p>
       <p>Puedes declarar punteros, crear nodos, avanzar y conectar como quieras. Lo que en C no compila o se cae (segfault, uso después de free) no se ejecuta y se explica.</p>
-      <p>Un nodo sin ninguna variable ni flecha que lo apunte es una <b>fuga</b>: cae a «memoria perdida». Con <b>↶</b> deshaces.</p>
+      <p>Un nodo sin ninguna variable ni flecha que lo apunte es una <b>fuga</b>: queda transparente, sin acceso. Con <b>↶</b> deshaces.</p>
       <div class="row"><button id="cg">Seguir</button></div></div>`;
     $('cg').onclick = () => showCard(null); $('cg').focus();
   }
@@ -526,26 +527,38 @@ function rCircle(x, y, r, seed, fill) {
   if (fill) { ctx.fillStyle = fill; ctx.fill(); }
   ctx.stroke();
 }
-function ctrlOf(a, b, k) { const dx = b.x - a.x, dy = b.y - a.y; return { x: (a.x + b.x) / 2 - dy * k, y: (a.y + b.y) / 2 + dx * k }; }
-function qp(a, c, b, t) { const u = 1 - t; return { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y }; }
-function rArrow(a, b, seed, color, width, k = 0.22, dash = null) {
-  const c = ctrlOf(a, b, k);
+/* Flecha a mano en curva cúbica. Sale hacia la derecha desde el punto (casilla next o post-it)
+   y llega al MEDIO del nodo, perpendicular a su borde: por arriba si viene de arriba o del mismo
+   nodo, por abajo si viene de abajo y por la izquierda si viene del costado izquierdo. */
+function arrowTo(a, n, self, lane = 0) {
+  const L = n.px - NW / 2, mid = n.px - 6;
+  const dy = n.py - a.y;
+  let b, c2;
+  if (lane !== 0 || a.x < MX) {   // flechas de variables: siempre por la izquierda, cada una en su carril
+    b = { x: L - 1, y: n.py + lane };
+    return { b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } };
+  }
+  if (self) { b = { x: mid, y: n.py - NH / 2 - 1 }; return { b, c1: { x: a.x + 42, y: a.y - 4 }, c2: { x: mid + 4, y: b.y - 46 } }; }
+  if (dy > NH * 0.9) { b = { x: mid, y: n.py - NH / 2 - 1 }; c2 = { x: mid, y: b.y - 34 }; }
+  else if (dy < -NH * 0.9) { b = { x: mid, y: n.py + NH / 2 + 1 }; c2 = { x: mid, y: b.y + 34 }; }
+  else if (a.x < L) { b = { x: L - 1, y: n.py }; c2 = { x: b.x - 26, y: n.py }; }
+  else { b = { x: mid, y: n.py - NH / 2 - 1 }; c2 = { x: mid, y: b.y - 34 }; }
+  const reach = Math.min(40, Math.max(18, Math.abs(b.x - a.x) * 0.5 + 12));
+  return { b, c1: { x: a.x + reach, y: a.y }, c2 };
+}
+function rArrowC(a, g, seed, color, width, dash = null) {
+  const { b, c1, c2 } = g;
   ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
   if (dash) ctx.setLineDash(dash);
   for (let p = 0; p < 2; p++) {
-    ctx.beginPath(); ctx.moveTo(a.x + J(seed + p, 0.8), a.y + J(seed + p + 9, 0.8));
-    ctx.quadraticCurveTo(c.x + J(seed + p + 3, 2), c.y + J(seed + p + 4, 2), b.x, b.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(a.x + J(seed + p, 0.7), a.y + J(seed + p + 9, 0.7));
+    ctx.bezierCurveTo(c1.x + J(seed + p + 3, 2), c1.y + J(seed + p + 4, 2), c2.x + J(seed + p + 5, 2), c2.y + J(seed + p + 6, 2), b.x, b.y);
+    ctx.stroke();
   }
   ctx.setLineDash([]);
-  const t = qp(a, c, b, 0.88), ang = Math.atan2(b.y - t.y, b.x - t.x), L = 9;
+  const ang = Math.atan2(b.y - c2.y, b.x - c2.x), L = 9;
   rLine(b.x, b.y, b.x - Math.cos(ang - 0.45) * L, b.y - Math.sin(ang - 0.45) * L, seed + 20, 0.6, 1);
   rLine(b.x, b.y, b.x - Math.cos(ang + 0.45) * L, b.y - Math.sin(ang + 0.45) * L, seed + 21, 0.6, 1);
-}
-function entry(from, n, k) {
-  const c = { x: n.px, y: n.py }, ct = ctrlOf(from, c, k);
-  let dx = c.x - ct.x, dy = c.y - ct.y; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
-  const t = Math.min(Math.abs(dx) > 1e-6 ? (NW / 2 + 2) / Math.abs(dx) : 1e9, Math.abs(dy) > 1e-6 ? (NH / 2 + 2) / Math.abs(dy) : 1e9);
-  return { x: c.x - dx * t, y: c.y - dy * t };
 }
 
 // ───────────────────────── dibujo ─────────────────────────
@@ -593,7 +606,7 @@ function nodeLabel(n) {
 function drawNode(n) {
   const x = n.px, y = n.py, L = x - NW / 2, T = y - NH / 2;
   ctx.save();
-  if (n.dead) ctx.globalAlpha = 0.5;
+  if (n.dead) { ctx.globalAlpha = 0.28; ctx.setLineDash([4, 3]); }
   if (n.freed) { ctx.globalAlpha = 0.45; ctx.setLineDash([3, 3]); }
   const found = S.L.kind === 'search' && n.known === 'eq';
   ctx.fillStyle = found ? '#e3f4e6' : '#fffdf6'; ctx.fillRect(L, T, NW, NH);
@@ -612,6 +625,7 @@ function drawNode(n) {
   else { ctx.lineWidth = 1.4; rLine(L + DW + 3, T + NH - 4, L + NW - 3, T + 4, n.k * 5 + 1, 0.5, 1); }
   ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'right';
   ctx.fillText(addrOf(n), L + NW, T + NH + 8);
+  if (n.dead) { ctx.globalAlpha = 0.85; ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('sin acceso', x, T - 7); }
   if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('liberado', x, T - 7); }
   ctx.restore();
 }
@@ -643,11 +657,12 @@ function draw() {
   if (!paper) buildPaper();
   ctx.drawImage(paper, 0, 0, LW, LH);
   if (!S) return;
-  if (S.nodes.some(n => n.dead)) { ctx.fillStyle = '#b7791f'; ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('memoria perdida:', MX + 8, LH - 40); }
   for (const n of S.nodes) {
-    if (n.dead || !n.next || n.next.dead) continue;
+    if (!n.next) continue;
     const a = dotOf(n), t = n.next;
-    rArrow(a, entry(a, t, -0.35), n.k * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, -0.35, t.freed ? [4, 4] : null);
+    ctx.globalAlpha = n.dead ? 0.25 : 1;
+    rArrowC(a, arrowTo(a, t, t === n), n.k * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, t.freed ? [4, 4] : null);
+    ctx.globalAlpha = 1;
   }
   for (const v of S.vars) {
     if (!v.declared) continue;
@@ -655,7 +670,7 @@ function draw() {
     if (!v.t) { drawNull(a.x - 3, a.y, v.slot * 11 + 900); continue; }
     if (v.t.dead) continue;
     const col = v.t.freed ? '#c23a32' : v.name === 'p' ? '#2350b8' : v.name.startsWith('l->') ? '#a0521d' : '#5d574f';
-    rArrow(a, entry(a, v.t, 0.12), v.slot * 31 + 7, col, v.name === 'p' ? 1.7 : 1.3, 0.12, v.t.freed ? [4, 4] : [5, 3]);
+    rArrowC(a, arrowTo(a, v.t, false, ((v.slot % 3) - 1) * 6 || 0.001), v.slot * 31 + 7, col, v.name === 'p' ? 1.7 : 1.3, v.t.freed ? [4, 4] : [5, 3]);
   }
   for (const n of S.nodes) drawNode(n);
   for (const v of S.vars) if (v.declared) drawVar(v);
@@ -664,8 +679,7 @@ function draw() {
 function update(dt) {
   S.t += dt;
   for (const n of S.nodes) {
-    const tx = n.dead ? MX + 24 + n.tray * 34 : n.x, ty = n.dead ? LH - 16 : n.y;
-    n.px = lerp(n.px, tx, Math.min(1, dt * 7)); n.py = lerp(n.py, ty, Math.min(1, dt * 7));
+    n.px = lerp(n.px, n.x, Math.min(1, dt * 7)); n.py = lerp(n.py, n.y, Math.min(1, dt * 7));
   }
   const a = S.avatar;
   if (a) {
