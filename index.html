@@ -2451,8 +2451,9 @@ function explode(cx, cy, toGem, now){
     }
     if (caught.length && caught.every(p => p.doomed)) return;   // already caught: the explosion is on its way
     if (caught.length) {
-      const n = Math.max(3, Math.ceil(450 / tickMs));
-      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n });
+      // the kid on the other phone gets longer: a step it took there before seeing this can still save it
+      const n = Math.max(3, Math.ceil((netRole === 'host' && caught.includes(players[1]) ? 900 : 450) / tickMs));
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy });
       holdKiller(pendingBooms[pendingBooms.length - 1]);   // what caught them waits too; nothing else does
       caught.forEach(p => { p.doomed = true; p.walking = false; p.held = []; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
       sfx.ohno();
@@ -2639,7 +2640,7 @@ function stepPlayer(p){
    a few ticks (half a second at least) while the kid says it, and only then the explosion goes off. The rest of the
    cave goes on. Only when playing in real time: training, turbo and the PC learning a cave explode at once, so the
    rules stay the same as the Python copy. */
-let pendingBooms = [], holdCell = new Uint8Array(W*H);
+let pendingBooms = [], holdCell = new Uint8Array(W*H), blastBy = null;   // blastBy: the kid whose touch set it off
 const deferDeaths = () => mode !== 'train' && speed === 1 && !turbo && !simHook && !hlTrain();
 // the one that caught them: the firefly or butterfly at the centre of the blast, and the rock or gem resting on it
 function holdKiller(e){
@@ -2688,7 +2689,7 @@ function fallObj(i, x, y){
     if (k < steps) {
       const nb = grid[cur + G], cx = (cur + G) % W, cy = (cur + G) / W | 0;
       if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
-      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; explode(cx, cy, false); rockBlast = false; }
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy, nb === BUTT);
     }
     return;
@@ -2710,7 +2711,7 @@ function fallObj(i, x, y){
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
-      if (players[bt-P1].immune <= 0) { rockBlast = true; explode(bx, by, false); rockBlast = false; return; }
+      if (players[bt-P1].immune <= 0) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(bx, by, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
@@ -2733,7 +2734,7 @@ function fallObj(i, x, y){
 function enemy(i, x, y, t){
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { explode(x, y, t === BUTT); return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
     if (n === AMOEBA) { explode(x, y, t === BUTT); return; }
   }
   const d = dir[i];
@@ -4277,6 +4278,14 @@ function netGot(o){
   if (o.t === 'mv' && netRole === 'host') {
     // a step the guest already took on its screen: take it here now (this phone still decides what really happens)
     const p = players[1]; if (!p || p.ai || state !== 'play') return;
+    if (p.doomed) {
+      // on its own screen it moved before seeing the end, so it got away: what only it set off (a rock on its
+      // head, a firefly touching it) does not go off, unless the other kid is caught in it too
+      const inBlast = (e, q) => q && q.alive && Math.abs(q.x - e.cx) <= 1 && Math.abs(q.y - e.cy) <= 1;
+      pendingBooms = pendingBooms.filter(e => !(e.by === p && !inBlast(e, players[0])));
+      holdCell.fill(0); pendingBooms.forEach(holdKiller);
+      if (!pendingBooms.some(e => inBlast(e, p))) { p.doomed = false; p.ohnoUntil = -1e9; }
+    }
     const f0 = netFx.length, e0 = netEv.length;
     p.held = [o.d]; nowT = simT; stepPlayer(p); p.nextAt = simT + tickMs; p.netSeq = o.s;
     netFx.splice(f0);   // its sounds already played over there
@@ -4295,8 +4304,8 @@ function netGot(o){
   if (o.g) { netAG.set(unb64(o.g)); vari.set(unb64(o.v)); dir.set(unb64(o.d)); if (o.b) boss.set(unb64(o.b)); src.fill(-1); netPend = []; }
   if (o.c) for (let k = 0; k < o.c.length; k += 5){ const j = o.c[k]; netAG[j] = o.c[k+1]; vari[j] = o.c[k+2]; dir[j] = o.c[k+3]; boss[j] = o.c[k+4]; }
   // the host's cave, then this phone's own steps it has not confirmed yet on top (dropped if they no longer fit)
-  const me = players[1], ack = o.P[1] ? o.P[1][16] || 0 : 0, hostDoomed = o.P[1] && (!o.P[1][6] || o.P[1][13]);
-  netPend = hostDoomed ? [] : netPend.filter(m => m.s > ack);
+  const me = players[1], ack = o.P[1] ? o.P[1][16] || 0 : 0;
+  netPend = netPend.filter(m => m.s > ack);   // steps the host has not seen yet may still save it
   grid.set(netAG);
   for (let k = 0; k < netPend.length; k++){
     const m = netPend[k], t = grid[m.to];
