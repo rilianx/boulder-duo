@@ -41,7 +41,7 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
 
 .main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(64px,1fr);gap:8px;min-height:0;overflow:hidden}
 .boardcell{position:relative;min-width:0;display:flex;align-items:flex-start;justify-content:center}
-canvas#cv{display:block;touch-action:manipulation;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
+canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
   padding:6px 7px;font-family:var(--code);font-size:clamp(11.5px,3vw,14.5px);line-height:1.4;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
@@ -256,6 +256,7 @@ async function evalPtr(e, ctx) {
     const id = M.nextId++;
     const [x, y] = freeSlot();
     M.nodes[id] = { id, v: null, next: G, freed: false, dead: false, x, y, mallocd: ctx.depth === 0, initV: false, initN: false };
+    if (DRAGPOS[id]) { M.nodes[id].x = DRAGPOS[id].x; M.nodes[id].y = DRAGPOS[id].y; }
     spawnFx(id);
     return id;
   }
@@ -461,7 +462,7 @@ async function run(text) {
 function undo() {
   if (BUSY || REPLAY || !UNDO.length) return;
   const u = UNDO.pop();
-  M = JSON.parse(u.mem); PROG.length = u.prog; renderCode();
+  M = JSON.parse(u.mem); applyDrag(); PROG.length = u.prog; renderCode();
   hideFb(); renderBuilder();
 }
 const PENDING_UNLOCK = [];
@@ -510,7 +511,7 @@ function travel(path) {
 async function replayFrom(top, target) {
   BUSY = true; BUILD = null; hideFb(); closeCard();
   REPLAY = { mode: 'fast', target, cur: null, gate: null, abort: false, next: null };
-  M = JSON.parse(PROG[top].before);
+  M = JSON.parse(PROG[top].before); applyDrag();
   for (const k in AR) delete AR[k];
   let stopAt = null;
   try {
@@ -596,8 +597,9 @@ function caseMem(c) {
     if (prev === null) listOf(lid).head = id; else nodeOf(prev).next = id;
     prev = id; ids.push(id);
   });
-  M.globals.push({ name: 'lista', kind: 'list', t: lid });
+  M.globals.push({ name: 'lista', kind: 'list', t: lid, hidden: true });   // la de main: no se dibuja, pero sostiene la lista
   M.frames.push({ fn: EX.def.fn, locals: [{ name: 'l', kind: 'list', t: lid }, { name: 'v', kind: 'int', val: EX.def.v }] });
+  applyDrag();
   for (const k in POS) delete POS[k];
   for (const k in AR) delete AR[k];
   return ids;
@@ -726,6 +728,7 @@ async function startExercise(def) {
   if (BUSY || REPLAY) return;
   if (!EX) EX = { saved: { M, PROG, UNDO } };
   EX.def = def; EX.edit = def.edit; EX.results = []; EX.hadCrear = UNLOCKED.has('crearNodo');
+  EX.savedDrag = EX.savedDrag || { ...DRAGPOS }; clearDrag();
   PROG = []; UNDO = []; BUILD = null; PATH = null; TAB = 'Variables';
   await rebuildEdit();
   hideFb(); renderExbar(); renderBuilder(); fit();
@@ -736,6 +739,7 @@ async function startExercise(def) {
 function leaveExercise() {
   if (!EX || BUSY) return;
   ({ M, PROG, UNDO } = EX.saved);
+  clearDrag(); Object.assign(DRAGPOS, EX.savedDrag || {});
   for (const k in POS) delete POS[k];
   for (const k in AR) delete AR[k];
   EX = null; BUILD = null; PATH = null; hideFb(); renderExbar(); renderBuilder(); fit();
@@ -1076,11 +1080,12 @@ $('bundo').onclick = undo;
 $('breset').onclick = async () => {
   if (BUSY || REPLAY) return;
   BUILD = null; PATH = null; hideFb();
+  clearDrag();
   if (EX) { PROG = []; EX.results = []; await rebuildEdit(); renderExbar(); }
   else { M = newMem(); PROG = []; UNDO = []; for (const k in POS) delete POS[k]; }
   renderCode(); renderBuilder();
 };
-$('bsort').onclick = () => { if (!BUSY) sortDrawing(); };
+$('bsort').onclick = () => { if (!BUSY) { clearDrag(); sortDrawing(); } };
 
 /* ════════════════════════════════════════════════════════════════════
    7. DIBUJO A MANO
@@ -1249,7 +1254,7 @@ function buildPaper() {
 // posiciones de las variables: primero las de main, luego cada marco de función bajo su nombre
 function varLayout() {
   const out = []; let y = 10;
-  for (const v of M.globals) { out.push({ v, x: 5, y, frame: null }); y += 30; }
+  for (const v of M.globals) { if (v.hidden) continue; out.push({ v, x: 5, y, frame: null }); y += 30; }
   for (const f of M.frames) {
     y += 2; out.push({ header: f.fn + '()', y }); y += 14;
     for (const v of f.locals) { out.push({ v, x: 5, y, frame: f }); y += 28; }
@@ -1465,7 +1470,7 @@ function pathValue(expr) {   // a qué apunta la expresión, sin lanzar errores 
 }
 function hint(title, msg) { showFb('info', title, msg, [['Entendido', hideFb]]); }
 function tapBoard(e) {
-  if (BUSY || !$('ov').hidden) return;
+  if (SUPPRESS_CLICK || BUSY || !$('ov').hidden) return;
   const r = cv.getBoundingClientRect();
   const pt = { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
   const h = hitTest(pt); if (!h) return;
@@ -1540,6 +1545,46 @@ function renderPathBar(box) {
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
+
+/* Arrastrar cajas (nodos y Listas) para ordenar el cuaderno. Un toque sin arrastre sigue siendo un toque.
+   Las posiciones elegidas se guardan aparte (DRAGPOS) y se vuelven a aplicar al deshacer, repetir o probar casos. */
+let DRAG = null, SUPPRESS_CLICK = false;
+const DRAGPOS = {};
+function applyDrag() {
+  for (const [k, p] of Object.entries(DRAGPOS)) {
+    const o = k.startsWith('L') ? M.lists[k] : M.nodes[k];
+    if (o) { o.x = p.x; o.y = p.y; }
+  }
+}
+function clearDrag() { for (const k in DRAGPOS) delete DRAGPOS[k]; }
+const toBoard = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH }; };
+cv.addEventListener('pointerdown', e => {
+  if (BUSY || !$('ov').hidden) return;
+  const pt = toBoard(e), h = hitTest(pt);
+  if (!h || h.kind === 'var') return;
+  const o = h.lid ? M.lists[h.lid] : M.nodes[h.id];
+  if (!o) return;
+  DRAG = { key: h.lid || String(h.id), o, start: pt, dx: o.x - pt.x, dy: o.y - pt.y, moved: false, pid: e.pointerId };
+});
+cv.addEventListener('pointermove', e => {
+  if (!DRAG || e.pointerId !== DRAG.pid) return;
+  const pt = toBoard(e);
+  if (!DRAG.moved && Math.hypot(pt.x - DRAG.start.x, pt.y - DRAG.start.y) < 7) return;
+  if (!DRAG.moved) { DRAG.moved = true; try { cv.setPointerCapture(e.pointerId); } catch (er) {} }
+  const x = Math.max(MX + NW / 2 + 4, Math.min(LW - NW / 2 - 2, pt.x + DRAG.dx));
+  const y = Math.max(NH / 2 + 8, Math.min(LH - NH / 2 - 10, pt.y + DRAG.dy));
+  DRAG.o.x = x; DRAG.o.y = y;
+  const P = DRAG.key.startsWith('L') ? null : POS[DRAG.key];
+  if (P) { P.x = x; P.y = y; }
+  DRAGPOS[DRAG.key] = { x, y };
+});
+const endDrag = e => {
+  if (!DRAG || e.pointerId !== DRAG.pid) return;
+  if (DRAG.moved) { SUPPRESS_CLICK = true; setTimeout(() => { SUPPRESS_CLICK = false; }, 50); }
+  DRAG = null;
+};
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
 let TAP = null;
 function tapFx(h) { TAP = { ...h, t: 1 }; beep(880, 0.04, 'triangle', 0.03); }
 function drawTapHints(layout) {
