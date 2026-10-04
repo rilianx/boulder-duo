@@ -2454,19 +2454,24 @@ const ownClock = p => caveRules() && !p.ai && speed === 1;
    a mole that scurries along the tunnel and digs itself a hole in the floor, two soot puffballs that hop off and
    burrow back into the earth, or a worm that pokes its head out of the ground, looks around and ducks back. */
 let critters = [];
+/* The chance in the drawings (critters, what a bored kid does, rock-paper-scissors) comes from fxSeed, new each game,
+   mixed with where and when it happens: two phones playing together share the seed, so they see the same. */
+let fxSeed = 1;
+const fxRng = (...k) => rng(k.reduce((h, v) => Math.imul(h ^ (v | 0), 0x9E3779B1) ^ (h >>> 15), fxSeed | 0));
 function critterFromRock(r, d, p, force){
-  if (!force && (Math.random() > .5 || mode === 'train')) return;
-  const kind = force || ['mole', 'soot', 'worm'][Math.floor(Math.random() * 3)], rx = r % W, ry = r / W | 0, dx = d === 1 ? 1 : -1;
+  const rnd = fxRng(r, d, level, 1);
+  if (!force && (rnd() > .5 || mode === 'train')) return;
+  const kind = force || ['mole', 'soot', 'worm'][Math.floor(rnd() * 3)], rx = r % W, ry = r / W | 0, dx = d === 1 ? 1 : -1;
   if (kind === 'mole') {
     // out from behind the rock, scurrying on away from the player along the open floor, then it digs in
     let x = rx + dx; if (grid[ry*W + x] !== E) return;
-    const xs = [x]; while (xs.length < 8 && grid[ry*W + x + dx] === E && Math.random() < .8) { x += dx; xs.push(x); }
+    const xs = [x]; while (xs.length < 8 && grid[ry*W + x + dx] === E && rnd() < .8) { x += dx; xs.push(x); }
     critters.push({ kind, y: ry, x0: rx + dx * .6, x1: x, dx, at: simT });
   } else if (kind === 'soot') {
     // from the gap the rock left (where the player now stands), into the nearest dirt
     const holes = [[0, -1], [0, 1], [-dx, 0], [dx, 0], [-dx, -1], [-dx, 1]].map(([ax, ay]) => [p.x + ax, p.y + ay]).filter(([x, y]) => grid[y*W + x] === DIRT);
     if (!holes.length) return;
-    [0, 1].forEach(k => { const [hx, hy] = holes[Math.floor(Math.random() * holes.length)]; critters.push({ kind, x0: p.x - dx * .3 + k * .25 - .1, y0: p.y, x1: hx, y1: hy, at: simT + k * 180, seed: Math.random() * 9 }); });
+    [0, 1].forEach(k => { const [hx, hy] = holes[Math.floor(rnd() * holes.length)]; critters.push({ kind, x0: p.x - dx * .3 + k * .25 - .1, y0: p.y, x1: hx, y1: hy, at: simT + k * 180, seed: rnd() * 9 }); });
   } else {
     // a worm peeks up from the dirt floor next to the player
     const spots = [p.x, p.x - dx, p.x + dx].filter(x => grid[(p.y + 1)*W + x] === DIRT && (grid[p.y*W + x] === E || x === p.x));
@@ -2934,7 +2939,7 @@ function startGame(m){
   $('views').classList.toggle('duo', duo);
 
   if (turbo) setTurbo(false);
-  solo = m === 'solo'; mode = solo ? 'coop' : m;
+  solo = m === 'solo'; mode = solo ? 'coop' : m; fxSeed = Math.random() * 2 ** 31 | 0;
   state = 'play'; lockOrientation();   // initLevel below sets play anyway; needed so the lock is not the menu's
   $('views').classList.toggle('solo', solo || !!netRole);
   $('views').classList.toggle('netguest', netRole === 'guest');
@@ -3686,7 +3691,8 @@ function rpsUpdate(){
   const el = (simT - rps.t0) / 1000, round = Math.floor(el / RPS_LEN);
   if (round !== rps.round) {
     if (rps.round >= 0) { const w = rpsWinner(rps.ch); if (w >= 0) rps.wins[w]++; }
-    rps.round = round; rps.ch = [Math.floor(Math.random() * 3), Math.floor(Math.random() * 3)];
+    const rnd = fxRng(round, a.stepN, b.stepN, level, 2);
+    rps.round = round; rps.ch = [Math.floor(rnd() * 3), Math.floor(rnd() * 3)];
   }
   rpsNow = { ph: el - round * RPS_LEN, ch: rps.ch, w: rpsWinner(rps.ch), wins: rps.wins, left: a.x < b.x ? 0 : 1 };
 }
@@ -3722,11 +3728,11 @@ function idleAct(p){
   const it = idleSecs(p);
   if (it <= 0) { p.idlePlan = null; return ''; }
   if (!p.idlePlan) {
-    const acts = ['look', 'wave', 'tap', 'yawn', 'look', 'tap'].sort(() => Math.random() - .5).slice(0, 2 + Math.floor(Math.random() * 3));
-    let t = 1.5 + Math.random() * 3; const plan = [['', t]];
-    acts.forEach(a => { t += a === 'yawn' ? 2 + Math.random() : 2 + Math.random() * 3; plan.push([a, t]); plan.push(['', t += Math.random() * 2]); });
+    const rnd = fxRng(p.id, p.stepN, level, 3), acts = ['look', 'wave', 'tap', 'yawn', 'look', 'tap'].map(a => [a, rnd()]).sort((u, v) => u[1] - v[1]).map(u => u[0]).slice(0, 2 + Math.floor(rnd() * 3));
+    let t = 1.5 + rnd() * 3; const plan = [['', t]];
+    acts.forEach(a => { t += a === 'yawn' ? 2 + rnd() : 2 + rnd() * 3; plan.push([a, t]); plan.push(['', t += rnd() * 2]); });
     // in the end they get bored: half the time they doze off, otherwise the boy plays with a ball and the girl reads
-    plan.push([Math.random() < .5 ? 'sleep' : p.id === 0 ? 'ball' : 'book', Infinity]);
+    plan.push([rnd() < .5 ? 'sleep' : p.id === 0 ? 'ball' : 'book', Infinity]);
     p.idlePlan = plan;
   }
   return p.idlePlan.find(([, until]) => it < until)[0];
@@ -4198,7 +4204,7 @@ function netGot(o){
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
     caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
-    startGame(o.m); initLevel(o.lv); return;
+    startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); return;
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
   if (o.t !== 's' || !players.length) return;
@@ -4211,15 +4217,6 @@ function netGot(o){
     fallN[j] = GOFF && j === f + GOFF && simT - netMovedAt[f] < tickMs * 1.6 ? Math.min(250, fallN[f] + 1) : 0;
     rot[j] = rot[f] + (j === f + 1 ? 1 : j === f - 1 ? -1 : 0) * Math.PI / 2; netMovedAt[j] = simT;
   }
-  (o.ev || []).forEach(e => {
-    if (e[0] === 'd') { dust.push({ x: e[1], y: e[2], at: simT }); shakeAt = simT; }
-    else if (e[0] === 'l') landAt[e[1]] = simT;
-    else if (e[0] === 'c') critterFromRock(e[1], e[2], players[e[3]]);
-    else if (e[0] === 'f') flyGem(players[e[1]], e[2]);
-    else if (e[0] === 's') starFlash = { at: simT, x: e[1], y: e[2], drop: e[3] };
-    else if (e[0] === 'n') nestPuff.push({ i: e[1], at: simT });
-    else if (e[0] === 'e') exitOpenAt = simT;
-  });
   o.dg.forEach(j => { dugAt[j] = simT; });
   o.P.forEach((a, k) => {
     const p = players[k]; if (!p) return;
@@ -4230,6 +4227,15 @@ function netGot(o){
     if (p.doomed && !was) { p.ohnoAt = simT; p.ohnoUntil = simT + 900; }
   });
   timeLeft = o.tl; magicState = o.ms;
+  (o.ev || []).forEach(e => {
+    if (e[0] === 'd') { dust.push({ x: e[1], y: e[2], at: simT }); shakeAt = simT; }
+    else if (e[0] === 'l') landAt[e[1]] = simT;
+    else if (e[0] === 'c') critterFromRock(e[1], e[2], players[e[3]]);
+    else if (e[0] === 'f') flyGem(players[e[1]], e[2]);
+    else if (e[0] === 's') starFlash = { at: simT, x: e[1], y: e[2], drop: e[3] };
+    else if (e[0] === 'n') nestPuff.push({ i: e[1], at: simT });
+    else if (e[0] === 'e') exitOpenAt = simT;
+  });
   o.fx.forEach(n => { if (sfx[n]) sfx[n](); });
   if (o.st !== state) {
     state = o.st;
@@ -4309,7 +4315,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives }); netFull = true; };
+  const go = m => { netFull = true; startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed }); netFull = true; };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
