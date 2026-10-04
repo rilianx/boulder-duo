@@ -128,7 +128,12 @@ button:disabled{opacity:.4;cursor:default}
 .pmode .views,.pmode .views.solo,.pmode .views.duo{width:100%;max-width:none;margin-inline:auto}
 .pmode .bar{font-size:14px;padding:3px 6px;gap:6px}
 .pmode .overlay{align-items:flex-start} .pmode .overlay .card{margin:auto} .pmode .card .long{display:none}
-.pmode .rotate{display:none!important}
+.pmode .rotate,.lmode .rotate{display:none!important}
+/* sideways phone: the boards side by side, filling the screen */
+.lmode .wrap{padding:2px max(4px, env(safe-area-inset-left)) 2px;gap:2px;min-height:100dvh;box-sizing:border-box;max-width:none}
+body.lmode .views{width:100%!important;max-width:none!important;margin-inline:0;gap:4px}
+.lmode .bar{font-size:13px;padding:2px 6px;gap:6px}
+.lmode .overlay{align-items:flex-start} .lmode .overlay .card{margin:auto} .lmode .card .long{display:none}
 .overlay{overflow:auto}
 .rotate{display:none}
 /* Full screen (or opened from the home screen): no top bar, just one round button in the middle to pause */
@@ -1389,10 +1394,12 @@ const AIW = 17, AIH = 12;               // the PC's view always stays this size
    In steps of a quarter, so the tiles keep whole screen pixels and meet without seams: from seeing the whole
    cave to twice as close. Farther than 1 shows more of the cave (easier), closer shows less (harder). */
 let zoomLevel = 1, ZOOM = 1, CW = VW, CH = VH;
-try { const z = +localStorage.getItem('boulder-duo-zoomv'); zoomLevel = z >= .25 && z <= 2 ? z : localStorage.getItem('boulder-duo-zoom') === '1' ? 1.25 : 1; } catch (e) {}
-const zoomMin = () => Math.min(1, Math.ceil(Math.max(VW / W, VH / H) * 4) / 4);   // never wider than the whole cave
+try { const z = +localStorage.getItem('boulder-duo-zoomv'); zoomLevel = z === 0 && localStorage.getItem('boulder-duo-zoomv') === '0' ? 0 : z >= .25 && z <= 2 ? z : localStorage.getItem('boulder-duo-zoom') === '1' ? 1.25 : 1; } catch (e) {}
+const zoomFit = () => Math.min(VW / W, VH / H);                 // the whole cave on screen
+const zoomMin = () => Math.min(1, zoomFit());
 function setZoom(z, save){
-  zoomLevel = clamp(Math.round(z * 4) / 4, zoomMin(), 2); applyZoom();
+  // quarter steps (crisp tiles); the last step out is exactly the whole cave
+  zoomLevel = z <= zoomFit() + .125 ? 0 : clamp(Math.round(z * 4) / 4, zoomMin(), 2); applyZoom();
   if (save) try { localStorage.setItem('boulder-duo-zoomv', String(zoomLevel)); } catch (e) {}
 }
 /* Upright phone: the boards fill the screen. The view keeps tiles about 32 px wide (12 across on most phones)
@@ -1405,20 +1412,30 @@ function setShape(w, h){
   applyZoom(); if (typeof grid !== 'undefined' && grid && players.length) snapCams();
 }
 function fitBoards(){
-  const up = document.body.classList.contains('touch') && innerHeight > innerWidth;
+  // a phone fills the screen whichever way it is held: turn it and the cave turns with it
+  const touch = document.body.classList.contains('touch'), up = touch && innerHeight > innerWidth;
   document.body.classList.toggle('pmode', up);
-  if (!up) return setShape(17, 12);
+  document.body.classList.toggle('lmode', touch && !up);
+  if (!touch) return setShape(17, 12);
   const views = $('views'), shown = [...views.querySelectorAll('.view')].filter(v => v.offsetParent);
   if (!shown.length) return;
   const n = shown.length, cw = shown[0].clientWidth, bar = shown[0].querySelector('.bar').offsetHeight;
   if (!cw) return;
-  const cols = clamp(Math.round(cw / 32), 10, 17), tile = cw / cols;
-  const top = views.getBoundingClientRect().top + scrollY, gap = n > 1 ? 6 : 0;
-  const avail = (innerHeight - top - 6 - gap - n * (bar + 6)) / n;
-  setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
+  const top = views.getBoundingClientRect().top + scrollY;
+  if (up) {
+    // upright: about 12 tiles across, as many rows as fit (half the height each for two boards)
+    const cols = clamp(Math.round(cw / 32), 10, 17), tile = cw / cols, gap = n > 1 ? 6 : 0;
+    const avail = (innerHeight - top - 6 - gap - n * (bar + 6)) / n;
+    return setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
+  }
+  // sideways: the boards side by side, as tall as the screen, about 32 px tiles
+  const avail = innerHeight - top - 6 - (bar + 6);
+  if (avail < 60) return;
+  const rows = clamp(Math.round(avail / 32), 7, 22), tile = avail / rows;
+  setShape(clamp(Math.floor(cw / tile * 16) / 16, 8, 40), rows);
 }
 addEventListener('resize', () => requestAnimationFrame(fitBoards));
-function applyZoom(){ ZOOM = mode === 'train' ? 1 : Math.max(zoomMin(), zoomLevel); CW = VW / ZOOM; CH = VH / ZOOM; }
+function applyZoom(){ ZOOM = mode === 'train' ? 1 : zoomLevel === 0 ? zoomMin() : Math.max(zoomMin(), zoomLevel); CW = VW / ZOOM; CH = VH / ZOOM; }   // zoomLevel 0: the whole cave
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
@@ -2865,7 +2882,7 @@ function menu(){
     </div>
     <div class="row sets">
       ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
-      <button id="bzoom" class="${zoomLevel !== 1 ? 'on' : ''}">ZOOM: ×${String(zoomLevel).replace('.', ',')}</button>
+      <button id="bzoom" class="${zoomLevel !== 1 ? 'on' : ''}">ZOOM: ${zoomLevel === 0 ? 'CUEVA ENTERA' : '×' + String(zoomLevel).replace('.', ',')}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
@@ -2888,7 +2905,7 @@ function menu(){
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
   $('binf').onclick = () => { infLives = !infLives; try { localStorage.setItem('boulder-duo-inflives', infLives ? '1' : '0'); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
-  $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5].filter(z => z >= zoomMin()); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] || 1, true); menu(); };
+  $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5, 0].filter(z => z === 0 || z > zoomFit() + .125); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] ?? 1, true); menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
@@ -3765,12 +3782,13 @@ function camFocus(k){
   if (o && o.alive) return glidePos(o);
   return [p.x, p.y];
 }
+const camClamp = (v, size, total) => size >= total ? (total - size) / 2 : clamp(v, 0, total - size);
 function snapCams(){
   applyZoom();
   cams.forEach((c, k) => {
     const f = camFocus(k); if (!f) return;
-    c.x = clamp(f[0] - (CW-1)/2, 0, W - CW);
-    c.y = clamp(f[1] - (CH-1)/2, 0, H - CH);
+    c.x = camClamp(f[0] - (CW-1)/2, CW, W);
+    c.y = camClamp(f[1] - (CH-1)/2, CH, H);
   });
 }
 function updateCams(){
@@ -3782,7 +3800,7 @@ function updateCams(){
     const mx = CW * .3, my = CH * .29;   // 5 x 3.5 tiles on the 17 x 12 view
     if (f[0] - c.x < mx) tx = f[0] - mx; else if (f[0] - c.x > CW - 1 - mx) tx = f[0] - (CW - 1 - mx);
     if (f[1] - c.y < my) ty = f[1] - my; else if (f[1] - c.y > CH - 1 - my) ty = f[1] - (CH - 1 - my);
-    tx = clamp(tx, 0, W - CW); ty = clamp(ty, 0, H - CH);
+    tx = camClamp(tx, CW, W); ty = camClamp(ty, CH, H);
     c.x += (tx - c.x) * .14; c.y += (ty - c.y) * .14;
     if (Math.abs(tx - c.x) < .01) c.x = tx;
     if (Math.abs(ty - c.y) < .01) c.y = ty;
@@ -3857,13 +3875,24 @@ function renderOverview(g){
   g.font = '8px "Press Start 2P", monospace'; g.textAlign = 'center';
   g.fillStyle = '#9d978f'; g.fillText('MAPA COMPLETO · ENTRENAMIENTO', VW*T/2, oy - 6 > 8 ? oy - 6 : 12);
 }
+const OFFV = [0, 1].map(() => { const c = document.createElement('canvas'); const g = c.getContext('2d'); return g; });
 function renderView(k){
-  const g = CTX[k], c = cams[k];
+  const main = CTX[k], c = cams[k];
+  let g = main;
   g.setTransform(SS, 0, 0, SS, 0, 0);
   g.fillStyle = '#000'; g.fillRect(0, 0, VW*T, VH*T);
   if (!grid) return;
   if (k === 0 && mode === 'train' && state !== 'menu') return renderOverview(g);
-  const sh = (simT - shakeAt) / 220, shk = sh >= 0 && sh < 1 ? (1 - sh) * 1.6 : 0, zs = SS * ZOOM;
+  const sh = (simT - shakeAt) / 220, shk = sh >= 0 && sh < 1 ? (1 - sh) * 1.6 : 0, zFull = SS * ZOOM;
+  // whole screen pixels per cave pixel: drawn straight; otherwise (the whole cave) drawn at a whole scale on the
+  // side and then scaled smoothly onto the screen, so the tiles never show seams
+  let zs = zFull;
+  if (Math.abs(zFull - Math.round(zFull)) > 1e-6) {
+    zs = Math.max(1, Math.floor(zFull)); g = OFFV[k];
+    const w = Math.ceil(CW * T * zs) + 2, h = Math.ceil(CH * T * zs) + 2;
+    if (g.canvas.width !== w || g.canvas.height !== h) { g.canvas.width = w; g.canvas.height = h; }
+    g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  }
   g.setTransform(zs, 0, 0, zs, 0, 0);       // the cave is drawn zoomed; the texts on top are not
   const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * zs) / zs, oy = Math.round((c.y * T + Math.cos(simT * .11) * shk) * zs) / zs;
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
@@ -3995,6 +4024,11 @@ function renderView(k){
     g.save(); g.strokeStyle = '#ff8a4c'; g.lineWidth = 1; g.setLineDash([3, 2]); g.lineDashOffset = -frame / 4;
     g.strokeRect(wx0*T - ox + .5, wy0*T - oy + .5, (wx1-wx0+1)*T - 1, (wy1-wy0+1)*T - 1); g.restore();
   }
+  if (g !== main) {
+    main.setTransform(1, 0, 0, 1, 0, 0); main.imageSmoothingEnabled = true;
+    main.drawImage(g.canvas, 0, 0, g.canvas.width * zFull / zs, g.canvas.height * zFull / zs);
+    main.imageSmoothingEnabled = false; g = main;
+  }
   g.setTransform(SS, 0, 0, SS, 0, 0);
   const p = players[k];
   if (p && state !== 'menu') {
@@ -4110,7 +4144,7 @@ window.addEventListener('keydown', e => {
   else if (e.code === 'KeyR' && state === 'play') { initLevel(level); }
   else if (e.code === 'KeyM') { toggleSound(); }
   else if (e.code === 'KeyG') { cycleGravity(); }
-  else if ((e.key === '+' || e.key === '-' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract') && state === 'play') { setZoom(zoomLevel + (e.key === '+' || e.code === 'NumpadAdd' ? .25 : -.25), true); }
+  else if ((e.key === '+' || e.key === '-' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract') && state === 'play') { setZoom((zoomLevel || ZOOM) + (e.key === '+' || e.code === 'NumpadAdd' ? .25 : -.25), true); }
   else if (e.code === 'KeyC') { toggleCrt(); }
   else if (e.code === 'Space' && state === 'play') e.preventDefault();
 });
@@ -4169,7 +4203,7 @@ document.addEventListener('pointerdown', e => {
   if (other && !pinch) {
     pinch = { a: other, b: sw }; other.pinch = sw.pinch = true; other.d = sw.d = -1;
     other.ring.remove(); sw.ring.remove(); swipeHeld(sw);
-    pinch.d0 = pinchDist(); pinch.z0 = zoomLevel;
+    pinch.d0 = pinchDist(); pinch.z0 = ZOOM;
   }
   try { document.documentElement.setPointerCapture(e.pointerId); } catch (err) {}
 }, { passive: false });
@@ -4192,7 +4226,7 @@ const swipeEnd = e => {
 // computer: the mouse wheel over a board, or + and −
 addEventListener('wheel', e => {
   if (state !== 'play' || !e.target.closest || !e.target.closest('.view')) return;
-  e.preventDefault(); setZoom(zoomLevel + (e.deltaY < 0 ? .25 : -.25), true);
+  e.preventDefault(); setZoom((zoomLevel || ZOOM) + (e.deltaY < 0 ? .25 : -.25), true);
 }, { passive: false });
 ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => document.addEventListener(t, swipeEnd));
 document.addEventListener('contextmenu', e => { if (document.body.classList.contains('touch') && state === 'play') e.preventDefault(); });
@@ -4360,9 +4394,9 @@ function hostPick(){
 /* In full screen the phone is held the way the game is played: upright on the table for two players
    (cooperative and versus), sideways for one player, against the PC or training. Nothing is locked on the menu. */
 function lockOrientation(){
-  const o = screen.orientation; if (!o || !o.lock || !touchPref || !fsEl()) return;
-  if (state === 'menu') { try { o.unlock(); } catch (e) {} return; }
-  o.lock('portrait').catch(() => {});   // phones play everything upright
+  // the phone may be turned any way: the boards follow it (fitBoards)
+  const o = screen.orientation; if (!o || !o.unlock || !touchPref || !fsEl()) return;
+  try { o.unlock(); } catch (e) {}
 }
 function goLandscape(){
   const el = document.documentElement;
