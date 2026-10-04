@@ -592,6 +592,11 @@ function renderBuilder() {
     for (const [lbl, list] of STMTS) {
       if (lbl !== TAB) continue;
       const g = document.createElement('div'); g.className = 'grp';
+      if (lbl === 'Variables') {   // un toque: el nombre ya viene puesto
+        for (const v of declaredPtrs()) g.appendChild(mkChip(`${v.name} = _;`, '', () => { BUILD = `${v.name} = §ptr;`; renderBuilder(); }));
+        for (const n of NAMES) if (!lookup(n)) g.appendChild(mkChip(`Nodo *${n} = _;`, 'decl', () => { BUILD = `Nodo *${n} = §ptr;`; renderBuilder(); }));
+        box.appendChild(g); continue;
+      }
       if (lbl === 'Atajos') {
         if (!UNLOCKED.has('avanzar')) g.appendChild(mkChip('🔒 p = p->next;', 'locked', () => lockedHint('avanzar')));
         else for (const v of declaredPtrs()) if (v.name !== 'head') g.appendChild(mkChip(`${v.name} = ${v.name}->next;`, 'fn', () => guardRun(`${v.name} = ${v.name}->next;`)));
@@ -1066,9 +1071,9 @@ function draw(dt) {
       ctx.restore(); continue;
     }
     const v = it.v; if (v.kind !== 'ptr') continue;
-    const a = { x: it.x + PW, y: it.y + PH / 2 };
+    const a = { x: it.x + PW - 5, y: it.y + PH / 2 };   // la flecha nace en el puntito del post-it
     const key = 'v' + (it.frame ? it.frame.fn + M.frames.indexOf(it.frame) : '') + v.name;
-    if (v.t === null) { drawNull(a.x - 2, a.y, v.name.charCodeAt(0) * 11 + 900); delete AR[key]; continue; }
+    if (v.t === null) { drawNull(a.x, a.y, v.name.charCodeAt(0) * 11 + 900); delete AR[key]; continue; }
     if (v.t === G || !nodeOf(v.t)) { drawGarbage(a.x, a.y, v.name.charCodeAt(0)); continue; }
     seenKeys.add(key);
     const tgt = arrowGeo(a, posNode(v.t), { fromVar: true, lane: ((lane++ % 3) - 1) * 6 });
