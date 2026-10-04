@@ -95,6 +95,15 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
 .fb button{font-family:var(--body);font-size:18px;padding:5px 14px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);
   border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;cursor:pointer}
 
+.exbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;border:1.5px solid var(--ok);background:#f1f6ef;border-radius:10px 4px 10px 4px;padding:4px 6px}
+.exbar .ttl{font-family:var(--display);font-size:19px;color:var(--ok);margin-right:2px;line-height:1}
+.exbar .case{font-family:var(--body);font-size:14px;padding:2px 6px;border:1.5px solid var(--graphite);background:#fffdf6;color:var(--graphite);border-radius:8px;cursor:pointer}
+.exbar .case.edit{border-color:var(--ink);box-shadow:inset 0 -3px 0 var(--ink)}
+.exbar .case.ok{border-color:var(--ok);color:var(--ok)}
+.exbar .case.bad{border-color:var(--bad);color:var(--bad)}
+.exbar .go{font-family:var(--body);font-size:15px;padding:2px 10px;border:2px solid var(--ok);background:var(--ok);color:#fff;border-radius:8px;cursor:pointer;margin-left:auto}
+.card .exlist{display:flex;flex-direction:column;gap:6px}
+.card .exlist button{text-align:left}
 .overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.88);padding:6px;z-index:2}
 .card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:14px 16px;max-width:460px;width:100%;
   display:flex;flex-direction:column;gap:9px;box-shadow:4px 5px 0 rgba(46,44,42,.18);max-height:100%;overflow-y:auto}
@@ -116,7 +125,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <button class="mini" id="bsort" aria-label="Ordenar el dibujo">⇅</button>
     <button class="mini" id="bexport" aria-label="Ver el programa completo en C">{ }</button>
     <button class="mini" id="breset" aria-label="Empezar de cero">⟲</button>
-    <button class="mini" id="bhelp" aria-label="Ayuda">?</button>
+    <button class="mini" id="bhelp" aria-label="Menú: ejercicios y ayuda">☰</button>
   </header>
 
   <div class="main">
@@ -128,6 +137,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
   </div>
 
   <div class="build">
+    <div class="exbar" id="exbar" hidden></div>
     <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
     <div class="chips" id="chips"></div>
     <div class="fb" id="fb" hidden>
@@ -149,7 +159,10 @@ const $ = id => document.getElementById(id);
 const G = 'G';
 const NAMES = ['head', 'p', 'q', 'nuevo', 'aux', 'sig', 'ant'];
 let M = null;
-function newMem() { return { nodes: {}, globals: [], frames: [], nextId: 1 }; }
+function newMem() { return { nodes: {}, lists: {}, globals: [], frames: [], nextId: 1, nextList: 1 }; }
+const listOf = id => M.lists[id];
+const LX = 104;   // columna de las cajas Lista, entre el margen y los nodos
+function newList() { const id = 'L' + M.nextList++; M.lists[id] = { id, head: null, x: LX, y: Y(Object.keys(M.lists).length) }; return id; }
 const nodeOf = id => M.nodes[id];
 const liveIds = () => Object.keys(M.nodes).map(Number);
 
@@ -168,17 +181,17 @@ const FUNCS = {
     body: ['Nodo *n = malloc(sizeof(Nodo));', 'n->value = v;', 'n->next = NULL;', 'return n;'],
     unlock: 'Crea un nodo con malloc e inicializa sus dos campos: value y next.' },
   insertarInicio: {
-    sig: 'Nodo *insertarInicio(Nodo *head, int v)', params: [['head', 'ptr'], ['v', 'int']], returns: true,
-    body: ['Nodo *n = crearNodo(v);', 'n->next = head;', 'return n;'],
-    unlock: 'Pon un nodo delante del primero de una lista y luego mueve la variable que apuntaba al primero.' },
+    sig: 'void insertarInicio(Lista *l, int v)', params: [['l', 'list'], ['v', 'int']], returns: false,
+    body: ['Nodo *n = crearNodo(v);', 'n->next = l->head;', 'l->head = n;'],
+    unlock: 'Se desbloquea al completar el ejercicio «Insertar al inicio» (menú ☰).' },
   insertarDespues: {
     sig: 'void insertarDespues(Nodo *p, int v)', params: [['p', 'ptr'], ['v', 'int']], returns: false,
     body: ['Nodo *n = crearNodo(v);', 'n->next = p->next;', 'p->next = n;'],
-    unlock: 'Mete un nodo justo después de otro sin perder lo que venía detrás.' },
+    unlock: 'Se desbloqueará con su ejercicio (próximamente).' },
   eliminarSiguiente: {
     sig: 'void eliminarSiguiente(Nodo *p)', params: [['p', 'ptr']], returns: false,
     body: ['Nodo *b = p->next;', 'p->next = b->next;', 'free(b);'],
-    unlock: 'Haz que un nodo se salte al siguiente y después libera el que quedó afuera.' },
+    unlock: 'Se desbloqueará con su ejercicio (próximamente).' },
 };
 const FUNC_ORDER = ['crearNodo', 'insertarInicio', 'insertarDespues', 'eliminarSiguiente'];
 // Atajos: una línea común que pasa a ser un solo toque cuando el alumno ya la escribió a mano.
@@ -221,7 +234,15 @@ function evalChain(e) {
   if (!v) throw new CErr(`error: '${base}' no está declarada` + (M.frames.length ? ` dentro de ${M.frames.at(-1).fn}()` : '') + '.', 'compile');
   if (v.kind === 'int') throw new CErr(`error: '${base}' es un int, no un puntero.`, 'compile');
   let cur = v.t, path = base;
+  if (v.kind === 'list') {   // l->head…: primero el campo head de la Lista, después los next de los nodos
+    if (!parts.length) throw new CErr(`error: '${base}' es un Lista *, no un Nodo *. Su primer nodo es ${base}->head.`, 'compile');
+    const f = parts.shift();
+    if (f !== 'head') throw new CErr(`error: 'Lista' no tiene un miembro llamado '${f}'. Tiene uno solo: head.`, 'compile');
+    if (cur === null) throw new CErr(`Segmentation fault: ${base} es NULL.`, 'run');
+    cur = listOf(cur).head; path += '->head';
+  }
   for (const f of parts) {
+    if (f === 'head') throw new CErr("error: 'Nodo' no tiene un miembro llamado 'head'. head es un campo de la Lista.", 'compile');
     if (f === 'prev') throw new CErr("error: 'Nodo' no tiene un miembro llamado 'prev'. En una lista simple no se puede retroceder.", 'compile');
     if (f !== 'next') throw new CErr(`error: 'Nodo' no tiene un miembro llamado '${f}'.`, 'compile');
     cur = deref(cur, path).next; path += '->next';
@@ -253,6 +274,7 @@ function evalInt(e) {
 async function callFn(name, args, ctx, wantValue) {
   const F = FUNCS[name];
   if (!F) throw new CErr(`error: la función '${name}' no existe.`, 'compile');
+  if (ctx.depth === 0 && EX && name === EX.def.fn) throw new CErr(`error: estás escribiendo ${name}(); no puedes llamarla dentro de sí misma.`, 'compile');
   if (ctx.depth === 0 && !ctx.replay && !UNLOCKED.has(name)) throw new CErr(`error: '${name}' todavía no está definida. ${F.unlock}`, 'compile');
   if (wantValue && !F.returns) throw new CErr(`error: ${name}() es void, no devuelve un puntero.`, 'compile');
   if (args.length !== F.params.length) throw new CErr(`error: ${name}() recibe ${F.params.length} argumento(s).`, 'compile');
@@ -261,7 +283,11 @@ async function callFn(name, args, ctx, wantValue) {
   for (let i = 0; i < args.length; i++) {
     const [pn, pk] = F.params[i];
     if (pk === 'int') locals.push({ name: pn, kind: 'int', val: evalInt(args[i]) });
-    else locals.push({ name: pn, kind: 'ptr', t: await evalPtr(args[i], ctx) });
+    else if (pk === 'list') {
+      const lv = lookup(args[i]);
+      if (!lv || lv.kind !== 'list') throw new CErr(`error: ${name}() espera un Lista * (por ejemplo l), no '${args[i]}'.`, 'compile');
+      locals.push({ name: pn, kind: 'list', t: lv.t });
+    } else locals.push({ name: pn, kind: 'ptr', t: await evalPtr(args[i], ctx) });
   }
   M.frames.push({ fn: name, locals });
   let ret;
@@ -275,7 +301,7 @@ async function callFn(name, args, ctx, wantValue) {
       const r = await execStmt(line, { depth: ctx.depth + 1, sub, path, replay: ctx.replay });
       if (r && 'ret' in r) { ret = r.ret; break; }
     }
-    if (!REPLAY || REPLAY.mode === 'play') await sleep(STEP_MS * 0.6);
+    if (!FAST && (!REPLAY || REPLAY.mode === 'play')) await sleep(STEP_MS * 0.6);
   } finally { M.frames.pop(); }
   return ret;
 }
@@ -292,7 +318,6 @@ async function execStmt(text, ctx) {
     const n = nodeOf(id);
     if (n.freed) throw new CErr('double free: ese nodo ya estaba liberado.', 'run');
     n.freed = true;
-    if (top && n.bypassed) unlock('eliminarSiguiente');
     return;
   }
   if ((m = /^if \((.+)->value == (.+)\)$/.exec(text))) {
@@ -323,6 +348,22 @@ async function execStmt(text, ctx) {
   if (eq < 0 || !text.endsWith(';')) throw new CErr('error de sintaxis.', 'compile');
   const lhs = text.slice(0, eq), rhs = text.slice(eq + 3, -1);
 
+  if ((m = /^Lista \*(\w+)$/.exec(lhs))) {
+    if (lookup(m[1])) throw new CErr(`error: '${m[1]}' ya está declarada.`, 'compile');
+    let id;
+    if (rhs === 'crearLista()') id = newList();
+    else { const o = lookup(rhs); if (!o || o.kind !== 'list') throw new CErr(`error: a un Lista * solo se le puede asignar otra lista o crearLista().`, 'compile'); id = o.t; }
+    scope().push({ name: m[1], kind: 'list', t: id });
+    return;
+  }
+  if ((m = /^(\w+)->head$/.exec(lhs))) {
+    const lv = lookup(m[1]);
+    if (!lv) throw new CErr(`error: '${m[1]}' no está declarada.`, 'compile');
+    if (lv.kind !== 'list') throw new CErr(`error: '${m[1]}' es un Nodo *; los nodos no tienen campo head (tienen value y next).`, 'compile');
+    const val = await evalPtr(rhs, ctx);
+    listOf(lv.t).head = val;
+    return;
+  }
   if ((m = /^Nodo \*(\w+)$/.exec(lhs))) {
     if (lookup(m[1])) throw new CErr(`error: '${m[1]}' ya está declarada.`, 'compile');
     if (rhs === m[1] || rhs.startsWith(m[1] + '->')) throw new CErr(`error: '${m[1]}' se usa en su propia declaración, antes de tener un valor.`, 'compile');
@@ -342,17 +383,14 @@ async function execStmt(text, ctx) {
     const n = deref(evalChain(m[1]), m[1]);
     const old = n.next;
     n.next = val; if (top) n.initN = true;
-    if (top && val !== null && val !== G && val !== old && old !== null && old !== G && nodeOf(val) && nodeOf(val).next === old) unlock('insertarDespues');
-    if (top && old !== null && old !== G && nodeOf(old) && val === nodeOf(old).next && val !== old) nodeOf(old).bypassed = true;
     return;
   }
   if (/^\w+$/.test(lhs)) {
     const v = lookup(lhs);
     if (!v) throw new CErr(`error: '${lhs}' no está declarada. Primero: Nodo *${lhs} = …;`, 'compile');
-    const old = v.t;
+    if (v.kind === 'list') throw new CErr(`error: '${lhs}' es un Lista *. Para cambiar su primer nodo escribe ${lhs}->head = …;`, 'compile');
     const val = await evalPtr(rhs, ctx);
     v.t = val;
-    if (top && old !== null && old !== G && val !== null && val !== G && val !== old && nodeOf(val) && nodeOf(val).next === old) unlock('insertarInicio');
     if (top && rhs === lhs + '->next') unlock('avanzar');
     return;
   }
@@ -361,7 +399,9 @@ async function execStmt(text, ctx) {
 
 // Un nodo al que no llega ninguna variable (de ningún marco) ni ninguna flecha queda sin acceso.
 function checkLeaks() {
-  const roots = M.globals.concat(...M.frames.map(f => f.locals)).filter(v => v.kind === 'ptr').map(v => v.t);
+  const vars = M.globals.concat(...M.frames.map(f => f.locals));
+  const roots = vars.filter(v => v.kind === 'ptr').map(v => v.t)
+    .concat(vars.filter(v => v.kind === 'list' && v.t !== null && listOf(v.t)).map(v => listOf(v.t).head));
   const seen = new Set(), q = roots.filter(id => id !== null && id !== G && nodeOf(id) && !nodeOf(id).freed);
   while (q.length) {
     const id = q.pop(); if (seen.has(id)) continue; seen.add(id);
@@ -440,7 +480,9 @@ function unlock(name) {
 let REPLAY = null;   // { mode: 'pause'|'play'|'fast', target, cur, gate, abort, next }
 class Abort {}
 // Marca el ritmo antes de cada paso: espera normal, o una pausa que suelta el botón «siguiente».
+let FAST = false;   // al probar casos: sin animación
 async function pace(path) {
+  if (FAST) return;
   if (!REPLAY) { await sleep(STEP_MS); return; }
   REPLAY.cur = path;
   if (REPLAY.mode === 'fast') {
@@ -524,6 +566,182 @@ function FUNC_NAME_AT(path) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
+   4c. EJERCICIOS
+   Se escribe el cuerpo de una función dentro de su marco. Las mismas líneas se repiten
+   sobre varios casos (lista vacía, un nodo, varios) y cada caso se revisa por separado.
+   Completar el ejercicio desbloquea la función en el modo libre.
+   ════════════════════════════════════════════════════════════════════ */
+const EXERCISES = [
+  { id: 'insertarInicio', fn: 'insertarInicio', title: 'Insertar al inicio', v: 7,
+    sig: 'void insertarInicio(Lista *l, int v)',
+    intro: 'Escribe el cuerpo de <code>insertarInicio</code>: debe dejar un nodo nuevo con <code>v</code> al comienzo de la lista <code>l</code>.<br><br>Estás <b>dentro de la función</b>: en el stack ves sus parámetros <code>l</code> y <code>v</code> (copias de lo que le pasó <code>main</code>). Las mismas líneas se van a probar con una lista vacía, con un nodo, con tres y con un caso oculto.',
+    cases: [{ name: 'vacía', list: [] }, { name: '1 nodo', list: [5] }, { name: '3 nodos', list: [5, 2, 8] }, { name: 'oculto', list: [4, 1, 6, 3], hidden: true }],
+    edit: 2,
+    ref: 'void insertarInicio(Lista *l, int v) {\n  Nodo *n = crearNodo(v);\n  n->next = l->head;\n  l->head = n;\n}',
+    expect: (orig, v) => [v].concat(orig) },
+];
+let EX = null;   // { def, edit, results, saved }
+let DONE = new Set();
+try { DONE = new Set(JSON.parse(localStorage.getItem('punteroC.done') || '[]')); } catch (e) {}
+function saveDone() { try { localStorage.setItem('punteroC.done', JSON.stringify([...DONE])); } catch (e) {} }
+
+// memoria de un caso: main tiene la lista; la función ya fue llamada y su marco está arriba
+function caseMem(c) {
+  M = newMem();
+  const lid = newList();
+  let prev = null; const ids = [];
+  c.list.forEach((v, i) => {
+    const id = M.nextId++;
+    M.nodes[id] = { id, v, next: null, freed: false, dead: false, x: COLS[i % COLS.length], y: Y(Math.floor(i / COLS.length) % ROWS) };
+    if (prev === null) listOf(lid).head = id; else nodeOf(prev).next = id;
+    prev = id; ids.push(id);
+  });
+  M.globals.push({ name: 'lista', kind: 'list', t: lid });
+  M.frames.push({ fn: EX.def.fn, locals: [{ name: 'l', kind: 'list', t: lid }, { name: 'v', kind: 'int', val: EX.def.v }] });
+  for (const k in POS) delete POS[k];
+  for (const k in AR) delete AR[k];
+  return ids;
+}
+// repite todas las líneas sobre el caso de edición, sin animar, para dejar la memoria y los "antes" al día
+async function rebuildEdit() {
+  caseMem(EX.def.cases[EX.edit]);
+  FAST = true;
+  try {
+    for (const e of PROG) {
+      if (!e.before) continue;
+      e.before = JSON.stringify(M);
+      await execStmt(e.src, { depth: 0, sub: null, path: '0', replay: true });
+      checkLeaks();
+    }
+  } finally { FAST = false; }
+  UNDO = PROG.map((e, i) => e.before ? { mem: e.before, prog: i } : null).filter(Boolean);
+}
+// ejecuta las líneas en un caso y revisa el resultado
+async function runCase(i, animate) {
+  const c = EX.def.cases[i];
+  const orig = caseMem(c);
+  const lines = PROG.filter(e => e.before);
+  if (!animate) FAST = true;
+  let k = 0;
+  try {
+    for (; k < lines.length; k++) {
+      if (animate) { VIEW = { k }; renderCode(); await sleep(STEP_MS); }
+      await execStmt(lines[k].src, { depth: 0, sub: null, path: '0', replay: true });
+      checkLeaks();
+    }
+  } catch (e) {
+    FAST = false;
+    if (!(e instanceof CErr)) throw e;
+    return { ok: false, line: lines[k] && lines[k].src, msg: e.msg };
+  }
+  FAST = false;
+  if (animate) { VIEW = { k: lines.length }; renderCode(); await sleep(STEP_MS); }
+  M.frames.pop();   // la función termina: su marco desaparece
+  checkLeaks();
+  const lost = Object.values(M.nodes).filter(n => n.dead);   // todo lo que quedó sin acceso, durante o al final
+  const want = EX.def.expect(c.list, EX.def.v);
+  const got = [], gotIds = [], seen = new Set();
+  let id = listOf(M.globals[0].t).head, bad = null;
+  while (id !== null) {
+    if (id === G) { bad = 'la lista termina en un puntero basura (un next sin inicializar).'; break; }
+    const n = nodeOf(id);
+    if (!n || n.freed) { bad = 'la lista pasa por un nodo liberado.'; break; }
+    if (seen.has(id)) { bad = 'la lista tiene un ciclo: nunca llega a NULL.'; break; }
+    seen.add(id); got.push(n.v); gotIds.push(id); id = n.next;
+  }
+  const show = a => a.length ? a.join(' → ') + ' → NULL' : 'NULL (vacía)';
+  if (bad) return { ok: false, msg: 'Al terminar, ' + bad };
+  if (lost.length) {
+    const nm = lost.map(n => n.v ?? '¿?'), pl = nm.length > 1;
+    const vals = pl ? nm.slice(0, -1).join(', el ') + ' y el ' + nm.at(-1) : String(nm[0]);
+    return { ok: false, msg: `${pl ? `El ${vals} quedaron` : `El ${vals} quedó`} sin acceso (fuga): la lista terminó ${show(got)} y se esperaba ${show(want)}.` };
+  }
+  if (got.length !== want.length || got.some((v, j) => v !== want[j])) return { ok: false, msg: `La lista quedó ${show(got)} y se esperaba ${show(want)}.` };
+  const keep = gotIds.slice(1);
+  if (keep.some((nid, j) => nid !== orig[j])) return { ok: false, msg: 'Los valores están bien, pero los nodos que ya estaban fueron reemplazados por otros: hay que reusarlos, no copiarlos.' };
+  return { ok: true };
+}
+let VIEW = null;   // { k }: línea que se está mostrando al ver un caso
+async function probar() {
+  if (BUSY || REPLAY) return;
+  if (!PROG.some(e => e.before)) { hint('Primero escribe', 'Todavía no hay líneas en la función. Escribe al menos una y luego prueba.'); return; }
+  BUSY = true; BUILD = null; PATH = null; hideFb(); renderBuilder();
+  const res = [];
+  for (let i = 0; i < EX.def.cases.length; i++) res.push(await runCase(i, false));
+  EX.results = res;
+  await rebuildEdit();
+  BUSY = false; renderBuilder(); renderExbar();
+  const all = res.every(r => r.ok);
+  const rows = EX.def.cases.map((c, i) => `<li>${res[i].ok ? '✅' : '❌'} <b>${c.hidden ? 'oculto' : c.name}</b>${res[i].ok ? '' : ': ' + esc(res[i].msg)}</li>`).join('');
+  if (!all) {
+    showCard(`<h2>Casi: revisa los casos</h2><ul>${rows}</ul><p>Toca un caso en la barra verde para verlo correr paso a paso.</p><div class="row"><button id="cg">Seguir</button></div>`, () => { $('cg').onclick = closeCard; $('cg').focus(); });
+    beep(160, 0.12, 'square', 0.03);
+    return;
+  }
+  const n = PROG.filter(e => e.before).length, best = EX.hadCrear ? 3 : 4;
+  const stars = n <= best ? 3 : n <= best + 2 ? 2 : 1;
+  const first = !DONE.has(EX.def.id);
+  DONE.add(EX.def.id); saveDone();
+  if (!UNLOCKED.has(EX.def.fn)) { UNLOCKED.add(EX.def.fn); saveUnlocks(); }
+  [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle', 0.05), i * 110));
+  showCard(`<h2>¡Funciona en todos los casos!</h2>
+    <div style="font-size:34px;color:#d9a400;letter-spacing:4px">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</div>
+    <ul>${rows}</ul>
+    <p>Usaste <b>${n}</b> líneas; la referencia usa ${best}${EX.hadCrear ? '' : ' (con <code>malloc</code>; con <code>crearNodo</code> bastan 3)'}.</p>
+    ${first ? `<p>🔓 <b>${EX.def.fn}()</b> queda desbloqueada en el modo libre.</p>` : ''}
+    <p>Una solución de referencia:</p><pre>${esc(EX.def.ref)}</pre>
+    <div class="row"><button id="cg">Seguir</button><button class="sec" id="cfree">Ir al modo libre</button></div>`, () => {
+    $('cg').onclick = closeCard; $('cfree').onclick = () => { closeCard(); leaveExercise(); }; $('cg').focus();
+  });
+}
+async function viewCase(i) {
+  if (BUSY || REPLAY) return;
+  if (!PROG.some(e => e.before)) { EX.edit = i; EX.results = []; await rebuildEdit(); renderExbar(); renderBuilder(); return; }
+  BUSY = true; BUILD = null; PATH = null; hideFb(); EX.viewing = i; renderExbar(); renderBuilder();
+  VIEW = null;
+  const r = await runCase(i, true);
+  EX.results[i] = r;
+  const c = EX.def.cases[i];
+  showFb(r.ok ? 'info' : 'bad', (r.ok ? '✓ ' : '✗ ') + 'caso ' + (c.hidden ? 'oculto' : c.name), r.ok ? 'En este caso la función hace lo pedido.' : (r.line ? `En «${r.line}»: ` : '') + r.msg,
+    [['Volver a editar', async () => { hideFb(); VIEW = null; EX.viewing = null; await rebuildEdit(); BUSY = false; renderExbar(); renderBuilder(); }]]);
+}
+function renderExbar() {
+  const bar = $('exbar');
+  if (!EX) { bar.hidden = true; return; }
+  bar.hidden = false; bar.innerHTML = '';
+  const t = document.createElement('span'); t.className = 'ttl'; t.textContent = EX.def.title; bar.appendChild(t);
+  EX.def.cases.forEach((c, i) => {
+    const r = EX.results[i];
+    const b = document.createElement('button');
+    b.className = 'case' + (i === EX.edit ? ' edit' : '') + (r ? (r.ok ? ' ok' : ' bad') : '');
+    b.textContent = (r ? (r.ok ? '✓ ' : '✗ ') : '') + (c.hidden && !r ? '?' : c.name) + (i === EX.edit ? ' ✎' : '');
+    b.disabled = c.hidden;
+    b.title = c.hidden ? 'Caso oculto: se revisa al probar' : i === EX.edit ? 'Caso en el que estás escribiendo' : 'Ver este caso paso a paso';
+    b.onclick = () => viewCase(i);
+    bar.appendChild(b);
+  });
+  const go = document.createElement('button'); go.className = 'go'; go.textContent = '▶ Probar'; go.onclick = probar; bar.appendChild(go);
+}
+async function startExercise(def) {
+  if (BUSY || REPLAY) return;
+  if (!EX) EX = { saved: { M, PROG, UNDO } };
+  EX.def = def; EX.edit = def.edit; EX.results = []; EX.hadCrear = UNLOCKED.has('crearNodo');
+  PROG = []; UNDO = []; BUILD = null; PATH = null; TAB = 'Variables';
+  await rebuildEdit();
+  hideFb(); renderExbar(); renderBuilder(); fit();
+  showCard(`<h2>${def.title}</h2><pre>${esc(def.sig)} { … }</pre><p>${def.intro}</p>
+    <p>La barra verde muestra los casos: el marcado con ✎ es en el que escribes. <b>▶ Probar</b> corre tus líneas en todos.</p>
+    <div class="row"><button id="cgo">Empezar</button></div>`, () => { $('cgo').onclick = closeCard; $('cgo').focus(); });
+}
+function leaveExercise() {
+  if (!EX || BUSY) return;
+  ({ M, PROG, UNDO } = EX.saved);
+  for (const k in POS) delete POS[k];
+  for (const k in AR) delete AR[k];
+  EX = null; BUILD = null; PATH = null; hideFb(); renderExbar(); renderBuilder(); fit();
+}
+
+/* ════════════════════════════════════════════════════════════════════
    5. ARMADOR DE LÍNEAS
    Una plantilla tiene huecos §tipo que se llenan tocando piezas:
    §new nombre sin declarar · §var variable declarada · §lv expresión que apunta a un nodo
@@ -536,13 +754,22 @@ const STMTS = [
   ['Campos', [['§lv->next = §ptr;', ''], ['§lv->value = §num;', '']]],
   ['Memoria', [['free(§ptr);', '']]],
   ['Consultas', [['if (§lv->value == §num)', ''], ['if (§lv == NULL)', ''], ['printf("%d", §lv->value);', '']]],
-  ['Funciones', [['insertarDespues(§lv, §num);', 'fn:insertarDespues'], ['eliminarSiguiente(§lv);', 'fn:eliminarSiguiente']]],
+  ['Funciones', [['insertarInicio(§list, §num);', 'fn:insertarInicio'], ['insertarDespues(§lv, §num);', 'fn:insertarDespues'], ['eliminarSiguiente(§lv);', 'fn:eliminarSiguiente']]],
   ['Atajos', []],
 ];
-const declaredPtrs = () => M.globals.filter(v => v.kind === 'ptr');
+// lo que se ve desde donde se escribe: en un ejercicio, las variables de la función
+const declaredPtrs = () => scope().filter(v => v.kind === 'ptr');
+const listVars = () => scope().filter(v => v.kind === 'list');
+const anyVars = () => declaredPtrs().length + listVars().length > 0;
 function piecesFor(type) {
   const vs = declaredPtrs();
   const out = [];
+  if (type === 'list') for (const l of listVars()) out.push({ text: l.name });
+  if (type === 'lv' || type === 'ptr') for (const l of listVars()) {
+    out.push({ text: l.name + '->head' });
+    const h = l.t !== null && listOf(l.t) ? listOf(l.t).head : null;
+    if (h !== null && h !== G && nodeOf(h) && !nodeOf(h).freed) out.push({ text: l.name + '->head->next' });
+  }
   if (type === 'new') for (const n of NAMES) if (!lookup(n)) out.push({ text: n });
   if (type === 'var') for (const v of vs) out.push({ text: v.name });
   if (type === 'lv' || type === 'ptr') {
@@ -556,15 +783,17 @@ function piecesFor(type) {
   if (type === 'ptr') {
     out.push({ text: 'malloc(sizeof(Nodo))', cls: 'mk' });
     out.push({ text: 'crearNodo(§num)', label: 'crearNodo(…)', cls: 'fn', fn: 'crearNodo' });
-    out.push({ text: 'insertarInicio(§lv, §num)', label: 'insertarInicio(…)', cls: 'fn', fn: 'insertarInicio' });
   }
-  if (type === 'num') for (let i = 0; i <= 9; i++) out.push({ text: String(i), cls: 'num' });
+  if (type === 'num') {
+    for (const iv of scope().filter(v => v.kind === 'int')) out.push({ text: iv.name, cls: 'fn' });   // parámetros int, como v
+    for (let i = 0; i <= 9; i++) out.push({ text: String(i), cls: 'num' });
+  }
   return out;
 }
 function holeHTML(text) {
   let first = true;
   return esc(text).replace(/§(\w+)/g, (_, t) => {
-    const lab = { new: 'nombre', var: 'variable', lv: 'nodo', ptr: 'valor', num: 'n' }[t] || t;
+    const lab = { new: 'nombre', var: 'variable', lv: 'nodo', ptr: 'valor', num: 'n', list: 'lista' }[t] || t;
     const h = `<span class="hole${first ? ' cur' : ''}">${lab}</span>`; first = false; return h;
   });
 }
@@ -582,7 +811,7 @@ function renderBuilder() {
   if (!BUILD) {
     $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
     if (PATH) { renderPathBar(box); return; }
-    const empty = !declaredPtrs().length;
+    const empty = !anyVars();
     if (empty) TAB = 'Variables';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
     for (const [lbl] of STMTS) {
@@ -598,6 +827,7 @@ function renderBuilder() {
       if (lbl === 'Variables') {   // un toque: el nombre ya viene puesto
         for (const v of declaredPtrs()) g.appendChild(mkChip(`${v.name} = _;`, '', () => { BUILD = `${v.name} = §ptr;`; renderBuilder(); }));
         for (const n of NAMES) if (!lookup(n)) g.appendChild(mkChip(`Nodo *${n} = _;`, 'decl', () => { BUILD = `Nodo *${n} = §ptr;`; renderBuilder(); }));
+        if (!EX && !lookup('l')) g.appendChild(mkChip('Lista *l = crearLista();', 'decl', () => run('Lista *l = crearLista();')));
         box.appendChild(g); continue;
       }
       if (lbl === 'Atajos') {
@@ -608,9 +838,13 @@ function renderBuilder() {
           t.textContent = 'Declara un puntero para recorrer (por ejemplo p) y aquí aparece su atajo para avanzar.'; g.appendChild(t);
         }
       }
+      if (lbl === 'Campos') for (const l of listVars()) g.appendChild(mkChip(`${l.name}->head = _;`, '', () => { BUILD = `${l.name}->head = §ptr;`; renderBuilder(); }));
       for (const [tpl, kind] of list) {
         const fn = kind.startsWith('fn:') ? kind.slice(3) : null;
-        if (lbl !== 'Variables' && lbl !== 'Funciones' && !declaredPtrs().length) continue;
+        if (EX && fn === EX.def.fn) continue;
+        if (fn === 'insertarInicio' && UNLOCKED.has(fn) && !listVars().length) continue;
+        if (lbl !== 'Variables' && lbl !== 'Funciones' && !anyVars()) continue;
+        if (lbl === 'Campos' && !declaredPtrs().length && !listVars().some(l => l.t !== null && listOf(l.t) && listOf(l.t).head !== null)) continue;
         if (tpl.startsWith('Nodo') && !piecesFor('new').length) continue;
         if (tpl.startsWith('§var') && !declaredPtrs().length) continue;
         const label = tpl.replace(/§\w+/g, '_');
@@ -619,14 +853,14 @@ function renderBuilder() {
       }
       if (g.children.length) box.appendChild(g);
     }
-    if (declaredPtrs().length) {
+    if (anyVars()) {
       const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
       tip.textContent = 'También puedes tocar un post-it en el dibujo y seguir las flechas para elegir un puntero.';
       box.appendChild(tip);
     }
-    if (!declaredPtrs().length) {
+    if (!anyVars()) {
       const p = document.createElement('p'); p.className = 'hint'; p.style.margin = '0'; p.style.fontSize = '15px'; p.style.color = 'var(--soft)';
-      p.textContent = 'La memoria está vacía. Empieza declarando un puntero, por ejemplo Nodo *head = malloc(sizeof(Nodo));';
+      p.textContent = 'La memoria está vacía. Empieza creando una lista (Lista *l = crearLista();) o declarando un puntero, por ejemplo Nodo *p = malloc(sizeof(Nodo));';
       box.appendChild(p);
     }
     return;
@@ -634,9 +868,9 @@ function renderBuilder() {
   $('ltxt').innerHTML = '<span class="hint">Completando la línea en el cuaderno ↑</span>'; $('bx').hidden = false;
   if (PATH) renderPathBar(box);
   const ht = HOLE.exec(BUILD)[1];
-  if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num') {
+  if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num' || ht === 'list') {
     const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-    tip.textContent = ht === 'num' ? 'Toca un número, o el valor de un nodo en el dibujo.' : ht === 'var' ? 'Toca una pieza, o un post-it en el dibujo.' : 'Toca una pieza, o en el dibujo parte de un post-it y sigue las flechas.';
+    tip.textContent = ht === 'num' ? 'Toca un número, o el valor de un nodo en el dibujo.' : ht === 'var' || ht === 'list' ? 'Toca una pieza, o un post-it en el dibujo.' : 'Toca una pieza, o en el dibujo parte de un post-it y sigue las flechas.';
     if (!PATH) box.appendChild(tip);
   }
   const type = HOLE.exec(BUILD)[1];
@@ -673,7 +907,10 @@ function lockedHint(fn) {
    ════════════════════════════════════════════════════════════════════ */
 function renderCode() {
   const el = $('code');
-  const lines = ['<div class="ln dim">// Nodo: int value; Nodo *next;</div>', '<div class="ln dim">int main(void) {</div>'];
+  const lines = EX && EX.def
+    ? ['<div class="ln dim">// Nodo: value, next · Lista: head</div>', `<div class="ln dim">${esc(EX.def.sig)} {</div>`]
+    : ['<div class="ln dim">// Nodo: int value; Nodo *next;  ·  Lista: Nodo *head;</div>', '<div class="ln dim">int main(void) {</div>'];
+  let execK = 0;
   const cur = REPLAY && REPLAY.cur ? REPLAY.cur.split('.').map(Number) : null;
   const order = path => {   // -1 ya pasó · 0 es el paso actual · 1 viene después · 2 contiene al actual
     if (!cur) return -1;
@@ -684,8 +921,9 @@ function renderCode() {
   const walk = (list, depth) => {
     for (const e of list) {
       const isFn = e.sub && e.sub.length;
-      const o = order(e._path);
-      const cls = ['ln', e.cls || '', isFn ? 'fn' : '', isFn && e.open !== false ? 'open' : '', o === 0 ? 'cur' : o === 1 ? 'fut' : '', (e.before || depth) ? 'jump' : ''].join(' ');
+      let o = order(e._path);
+      if (VIEW && !depth) { o = e.before ? (execK === VIEW.k ? 0 : execK > VIEW.k ? 1 : -1) : -1; if (e.before) execK++; }
+      const cls = ['ln', e.cls || '', isFn ? 'fn' : '', isFn && e.open !== false ? 'open' : '', o === 0 ? 'cur' : o === 1 ? 'fut' : '', (e.before || depth) && !VIEW ? 'jump' : ''].join(' ');
       const tg = isFn ? `<span class="tg">${e.open !== false ? '▾' : '▸'}</span>` : '';
       lines.push(`<div class="${cls}" data-path="${e._path}">${tg}${'  '.repeat(depth ? 0 : 1)}${esc(e.text)}</div>`);
       if (isFn && e.open !== false) { lines.push('<div class="sub">'); walk(e.sub, depth + 1); lines.push('</div>'); }
@@ -699,6 +937,7 @@ function renderCode() {
     if (PATH) h = h.replace(/<span class="hole cur">[^<]*<\/span>/, `<span class="hole cur">${esc(PATH.expr)}</span>`);
     lines.push(`<div class="ln draft">  ${h}</div>`);
   } else if (PATH && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr)}</span> …</div>`);
+  if (EX && EX.def) lines.push('<div class="ln dim">}</div>', `<div class="ln dim">// main: insertarInicio(lista, ${EX.def.v});</div>`);
   el.innerHTML = lines.join('');
   el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
     ev.stopPropagation();
@@ -709,7 +948,7 @@ function renderCode() {
   el.querySelectorAll('.ln.jump').forEach(d => d.onclick = () => travel(d.dataset.path));
   PROG.forEach(e => { if (e.cls === 'new') setTimeout(() => { if (e.cls === 'new') e.cls = ''; }, 1600); });
   const c = el.querySelector('.ln.cur');
-  if (c) c.scrollIntoView({ block: 'nearest' }); else if (!REPLAY) el.scrollTop = el.scrollHeight;
+  if (c) c.scrollIntoView({ block: 'nearest' }); else if (!REPLAY && !VIEW) { el.scrollTop = el.scrollHeight; const d = el.querySelector('.ln.draft'); if (d && EX) d.scrollIntoView({ block: 'nearest' }); }
 }
 function showFb(kind, code, why, buttons) {
   const fb = $('fb'); fb.hidden = false; $('chips').hidden = true; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
@@ -742,6 +981,7 @@ function exportC() {
   const used = new Set();
   const scan = list => list.forEach(e => { for (const f of FUNC_ORDER) if (e.text.includes(f + '(')) used.add(f); if (e.sub) scan(e.sub); });
   scan(PROG);
+  if (EX && EX.def) used.delete(EX.def.fn);
   if (used.has('insertarInicio') || used.has('insertarDespues')) used.add('crearNodo');
   const defs = FUNC_ORDER.filter(f => used.has(f)).map(f => `${FUNCS[f].sig} {\n${FUNCS[f].body.map(l => '  ' + l).join('\n')}\n}\n`).join('\n');
   const body = PROG.filter(e => e.cls !== 'err').map(e => {
@@ -751,7 +991,13 @@ function exportC() {
     if (t.startsWith('printf(')) t = t.replace('"%d"', '"%d\\n"');
     return '  ' + t;
   }).join('\n');
-  return `#include <stdio.h>\n#include <stdlib.h>\n\ntypedef struct Nodo {\n  int value;\n  struct Nodo *next;\n} Nodo;\n\n${defs}${defs ? '\n' : ''}int main(void) {\n${body}${body ? '\n' : ''}  return 0;\n}\n`;
+  const head = `#include <stdio.h>\n#include <stdlib.h>\n\ntypedef struct Nodo {\n  int value;\n  struct Nodo *next;\n} Nodo;\n\ntypedef struct Lista {\n  Nodo *head;\n} Lista;\n\nLista *crearLista(void) {\n  Lista *l = malloc(sizeof(Lista));\n  l->head = NULL;\n  return l;\n}\n\n`;
+  if (EX && EX.def) {   // el ejercicio: la función del alumno y un main que la prueba con el caso de edición
+    const c = EX.def.cases[EX.edit];
+    const build = c.list.slice().reverse().map(v => `  insertarInicio(lista, ${v});`).join('\n');
+    return head + defs + (defs ? '\n' : '') + `${EX.def.sig} {\n${body}${body ? '\n' : ''}}\n\nint main(void) {\n  Lista *lista = crearLista();\n${build}${build ? '\n' : ''}  insertarInicio(lista, ${EX.def.v});\n  for (Nodo *p = lista->head; p != NULL; p = p->next) printf("%d ", p->value);\n  printf("\\n");\n  return 0;\n}\n`;
+  }
+  return head + `${defs}${defs ? '\n' : ''}int main(void) {\n${body}${body ? '\n' : ''}  return 0;\n}\n`;
 }
 /* Registro para consultas: todo lo que pasó (también lo que falló, con su mensaje) y cómo quedó la memoria.
    Sirve para pegarlo en un chat o un correo y revisar juntos qué ocurrió. */
@@ -764,7 +1010,11 @@ function debugReport() {
   });
   walk(PROG, '  ');
   out.push('', '// memoria al final:');
-  for (const v of M.globals) out.push(`  ${v.name} = ${addr(v.t)}` + (v.t !== null && v.t !== G && nodeOf(v.t) ? (nodeOf(v.t).freed ? '  (apunta a memoria liberada)' : `  (value ${nodeOf(v.t).v ?? '¿?'})`) : ''));
+  if (EX && EX.def) out.splice(2, 0, `// ejercicio: ${EX.def.title} · caso ${EX.def.cases[EX.edit].name}` + (EX.results.length ? ' · resultados: ' + EX.results.map((r, i) => (r && r.ok ? '✓' : '✗') + EX.def.cases[i].name + (r && !r.ok ? ' (' + r.msg + ')' : '')).join(', ') : ''));
+  const vline = v => v.kind === 'int' ? `  ${v.name} = ${v.val}` : v.kind === 'list' ? `  ${v.name} = ${v.t === null ? 'NULL' : 'Lista ' + v.t + ' (head = ' + addr(listOf(v.t).head) + ')'}`
+    : `  ${v.name} = ${addr(v.t)}` + (v.t !== null && v.t !== G && nodeOf(v.t) ? (nodeOf(v.t).freed ? '  (apunta a memoria liberada)' : `  (value ${nodeOf(v.t).v ?? '¿?'})`) : '');
+  for (const v of M.globals) out.push(vline(v));
+  for (const f of M.frames) { out.push(`  [${f.fn}()]`); for (const v of f.locals) out.push('  ' + vline(v)); }
   for (const id of liveIds()) {
     const n = nodeOf(id);
     out.push(`  ${addrOf(id)}: { value: ${n.v ?? '¿?'}, next: ${addr(n.next)} }` + (n.freed ? '  liberado' : '') + (n.dead ? '  sin acceso' : ''));
@@ -793,6 +1043,17 @@ function showReport() {
 $('bexport').onclick = showProgram;
 function selectPre() { const r = document.createRange(); r.selectNodeContents($('expre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('ccopy').textContent = 'Seleccionado: copia con el menú'; }
 $('bhelp').onclick = () => {
+  const ex = EXERCISES.map((d, i) => `<button class="${EX && EX.def === d ? '' : 'sec'}" data-ex="${i}">${DONE.has(d.id) ? '✅' : '✎'} ${i + 1}. ${esc(d.title)} · <code>${esc(d.fn)}</code></button>`).join('');
+  showCard(`<h2>Menú</h2>
+    <p><b>Ejercicios</b> (cada uno desbloquea su función en el modo libre):</p>
+    <div class="exlist">${ex}<button class="sec" disabled>✎ 2. Insertar después · próximamente</button></div>
+    <div class="row">${EX ? '<button class="sec" id="cfree">← Volver al modo libre</button>' : ''}<button class="sec" id="chelp">Cómo funciona</button><button class="sec" id="cclose2">Cerrar</button></div>`, () => {
+    document.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { closeCard(); startExercise(EXERCISES[+b.dataset.ex]); });
+    if ($('cfree')) $('cfree').onclick = () => { closeCard(); leaveExercise(); };
+    $('chelp').onclick = showHelp; $('cclose2').onclick = closeCard;
+  });
+};
+function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
     <p>Abajo eliges una línea y llenas sus huecos tocando piezas. La línea se ejecuta y se anima. A la derecha queda el programa.</p>
@@ -800,7 +1061,7 @@ $('bhelp').onclick = () => {
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
       <li>Un nodo que nadie apunta queda transparente: <b>sin acceso</b>.</li>
-      <li>Las <b>funciones</b> y los <b>atajos</b> (como <code>p = p->next;</code>) se desbloquean cuando haces a mano lo mismo que hacen. Al usar una función, toca su línea para ver los pasos por dentro.</li>
+      <li><code>crearNodo</code> y el atajo <code>p = p->next;</code> se desbloquean haciéndolos a mano. Las <b>operaciones de lista</b> (<code>insertarInicio</code>…) se desbloquean al completar su <b>ejercicio</b> (menú ☰). Al usar una función, toca su línea para ver los pasos por dentro.</li>
       <li>Si una línea usa dos o más <code>->next</code> seguidos, aparece una advertencia antes de ejecutarla.</li>
     </ul>
     <p>⇅ ordena el dibujo · { } muestra el programa completo · ↶ deshace.</p>
@@ -808,11 +1069,17 @@ $('bhelp').onclick = () => {
     <div class="row"><button id="cg">Seguir</button><button class="sec" id="call">Desbloquear todas (profesor)</button><button class="sec" id="cnone">Volver a bloquear</button></div>`, () => {
     $('cg').onclick = closeCard;
     $('call').onclick = () => { ALL_UNLOCKS.forEach(f => UNLOCKED.add(f)); saveUnlocks(); closeCard(); renderBuilder(); };
-    $('cnone').onclick = () => { UNLOCKED.clear(); saveUnlocks(); closeCard(); renderBuilder(); };
+    $('cnone').onclick = () => { UNLOCKED.clear(); DONE.clear(); saveUnlocks(); saveDone(); closeCard(); renderBuilder(); };
   });
-};
+}
 $('bundo').onclick = undo;
-$('breset').onclick = () => { if (BUSY || REPLAY) return; M = newMem(); PROG = []; UNDO = []; BUILD = null; hideFb(); renderCode(); renderBuilder(); };
+$('breset').onclick = async () => {
+  if (BUSY || REPLAY) return;
+  BUILD = null; PATH = null; hideFb();
+  if (EX) { PROG = []; EX.results = []; await rebuildEdit(); renderExbar(); }
+  else { M = newMem(); PROG = []; UNDO = []; for (const k in POS) delete POS[k]; }
+  renderCode(); renderBuilder();
+};
 $('bsort').onclick = () => { if (!BUSY) sortDrawing(); };
 
 /* ════════════════════════════════════════════════════════════════════
@@ -822,7 +1089,7 @@ const LW = 400, LH = 250;
 const MX = 70;
 const NW = 62, NH = 30, DW = 40;
 const PW = 60, PH = 24;
-const COLS = [116, 198, 280, 362], ROWS = 3;
+const COLS = [178, 260, 342], ROWS = 3;   // a la izquierda queda la columna de las cajas Lista (LX)
 const Y = i => 46 + i * 76;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -843,11 +1110,12 @@ function shake() { FX.shake = 0.4; }
 // Ordenar: las listas que salen de cada variable, en orden, columna por columna. Lo liberado sin referencias se borra.
 function sortDrawing() {
   const order = [], seen = new Set();
-  for (const v of M.globals) {
+  const starts = Object.values(M.lists).map(l => ({ t: l.head })).concat(M.globals.filter(v => v.kind === 'ptr'));
+  for (const v of starts) {
     let id = v.t;
     while (id !== null && id !== G && nodeOf(id) && !seen.has(id)) { seen.add(id); order.push(id); id = nodeOf(id).next; }
   }
-  const pointed = new Set(M.globals.map(v => v.t).concat(Object.values(M.nodes).map(n => n.next)));
+  const pointed = new Set(M.globals.map(v => v.t).concat(Object.values(M.nodes).map(n => n.next), Object.values(M.lists).map(l => l.head)));
   for (const id of liveIds()) if (!seen.has(id)) { if (nodeOf(id).freed && !pointed.has(id)) delete M.nodes[id]; else order.push(id); }
   order.forEach((id, i) => { const n = nodeOf(id); if (!n) return; n.x = COLS[i % COLS.length]; n.y = Y(Math.floor(i / COLS.length) % ROWS); });
 }
@@ -882,7 +1150,7 @@ function rCircle(x, y, r, seed, fill) {
    por la izquierda si es una variable del margen. */
 function arrowGeo(a, n, opts) {
   const L = n.x - NW / 2, mid = n.x - 6;
-  if (opts.fromVar && n.x > COLS[0] + 20) {   // nodo lejos del margen: la flecha llega por arriba para no cruzar otros nodos
+  if (opts.fromVar && !opts.toList) {   // a un nodo: la flecha llega por arriba, sin cruzar la caja Lista ni otros nodos
     const b = { x: mid + opts.lane, y: n.y - NH / 2 - 1 };
     return { a, b, c1: { x: a.x + 40, y: Math.min(a.y, b.y - 30) }, c2: { x: b.x, y: b.y - 30 } };
   }
@@ -994,7 +1262,18 @@ function drawVar(it) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(v.kind === 'int' ? `${v.name} = ${v.val}` : v.name, v.kind === 'int' ? 0 : -4, 1);
   ctx.restore();
-  if (v.kind === 'ptr') { ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + PW - 5, y + PH / 2, 2.4, 0, 7); ctx.fill(); }
+  if (v.kind === 'ptr' || v.kind === 'list') { ctx.fillStyle = '#2e2c2a'; ctx.beginPath(); ctx.arc(x + PW - 5, y + PH / 2, 2.4, 0, 7); ctx.fill(); }
+}
+// caja Lista: [head | •], con su título encima
+function drawList(L) {
+  const x = L.x, y = L.y, l = x - NW / 2, Tp = y - NH / 2;
+  ctx.fillStyle = '#f1f6ef'; ctx.fillRect(l, Tp, NW, NH);
+  ctx.strokeStyle = '#2f6b45'; ctx.lineWidth = 1.8; rRect(l, Tp, NW, NH, 911);
+  rLine(l + DW, Tp, l + DW, Tp + NH, 913, 0.6, 1);
+  ctx.fillStyle = '#2f6b45'; ctx.font = '15px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('head', l + DW / 2, y + 1);
+  ctx.font = '11px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Lista', l, Tp - 7);
+  if (L.head === null) { ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.4; rLine(l + DW + 3, Tp + NH - 4, l + NW - 3, Tp + 4, 917, 0.5, 1); }
 }
 function drawNode(n) {
   const P = POS[n.id], x = P.x, y = P.y, L = x - NW / 2, Tp = y - NH / 2;
@@ -1036,7 +1315,8 @@ function draw(dt) {
   const posNode = id => ({ x: POS[id].x, y: POS[id].y });
   const seenKeys = new Set();
   const layout = varLayout();
-  // primero las cajas (nodos y post-its) y encima las flechas, para que se vean nacer del punto
+  // primero las cajas (listas, nodos y post-its) y encima las flechas, para que se vean nacer del punto
+  for (const L of Object.values(M.lists)) drawList(L);
   for (const id of liveIds()) drawNode(nodeOf(id));
   drawTapHints(layout);
   for (const it of layout) if (it.v) drawVar(it);
@@ -1054,6 +1334,16 @@ function draw(dt) {
     drawArrow(AR[key], id * 101 + 1, t.freed ? '#c23a32' : '#2e2c2a', 1.8, t.freed ? [4, 4] : null);
     ctx.globalAlpha = 1;
   }
+  // head de cada lista
+  for (const L of Object.values(M.lists)) {
+    const a = { x: L.x + NW / 2 - (NW - DW) / 2, y: L.y }, key = 'l' + L.id;
+    if (L.head === null || L.head === G || !nodeOf(L.head)) continue;
+    seenKeys.add(key);
+    AR[key] = lerpGeo(AR[key] || arrowGeo(a, { x: a.x, y: a.y }, {}), nextGeo(a, key, L.head), k * 1.2);
+    AR[key].a = a;
+    const t = nodeOf(L.head);
+    drawArrow(AR[key], 777, t.freed ? '#c23a32' : '#2f6b45', 1.9, t.freed ? [4, 4] : null);
+  }
   // variables
   let lane = 0;
   for (const it of layout) {
@@ -1064,9 +1354,19 @@ function draw(dt) {
       ctx.fillText(w > MX - 6 ? it.header.slice(0, Math.floor((MX - 14) / (w / it.header.length))) + '…' : it.header, 3, it.y + 9);
       ctx.restore(); continue;
     }
-    const v = it.v; if (v.kind !== 'ptr') continue;
+    const v = it.v; if (v.kind !== 'ptr' && v.kind !== 'list') continue;
     const a = { x: it.x + PW - 5, y: it.y + PH / 2 };   // la flecha nace en el puntito del post-it
     const key = 'v' + (it.frame ? it.frame.fn + M.frames.indexOf(it.frame) : '') + v.name;
+    if (v.kind === 'list') {   // un Lista * apunta a la caja Lista
+      if (v.t === null || !listOf(v.t)) { drawNull(a.x, a.y, 905); continue; }
+      seenKeys.add(key);
+      const L = listOf(v.t);
+      const tgt = arrowGeo(a, { x: L.x, y: L.y }, { fromVar: true, toList: true, lane: ((lane++ % 3) - 1) * 5 });
+      AR[key] = lerpGeo(AR[key] || { a: { ...a }, b: { ...a }, c1: { ...a }, c2: { ...a } }, tgt, k * 1.2);
+      AR[key].a = a;
+      drawArrow(AR[key], 333 + v.name.charCodeAt(0), it.frame ? '#2350b8' : '#2f6b45', 1.4, [5, 3]);
+      continue;
+    }
     if (v.t === null) { drawNull(a.x, a.y, v.name.charCodeAt(0) * 11 + 900); delete AR[key]; continue; }
     if (v.t === G || !nodeOf(v.t)) { drawGarbage(a.x, a.y, v.name.charCodeAt(0)); continue; }
     seenKeys.add(key);
@@ -1081,7 +1381,8 @@ function draw(dt) {
   // el punto de origen va encima de su flecha
   ctx.fillStyle = '#2e2c2a';
   for (const id of liveIds()) { const n = nodeOf(id); if (n.next !== null && !n.dead) { const P = POS[id]; ctx.beginPath(); ctx.arc(P.x + NW / 2 - (NW - DW) / 2, P.y, 3, 0, 7); ctx.fill(); } }
-  for (const it of layout) if (it.v && it.v.kind === 'ptr') { ctx.beginPath(); ctx.arc(it.x + PW - 5, it.y + PH / 2, 2.6, 0, 7); ctx.fill(); }
+  for (const it of layout) if (it.v && (it.v.kind === 'ptr' || it.v.kind === 'list')) { ctx.beginPath(); ctx.arc(it.x + PW - 5, it.y + PH / 2, 2.6, 0, 7); ctx.fill(); }
+  for (const L of Object.values(M.lists)) if (L.head !== null) { ctx.beginPath(); ctx.arc(L.x + NW / 2 - (NW - DW) / 2, L.y, 3, 0, 7); ctx.fill(); }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1103,7 +1404,7 @@ function fit() {
   const cell = $('cell').getBoundingClientRect();
   // el dibujo usa a lo más el 42 % del alto, y menos si el menú de abajo crece: el código siempre conserva unas líneas
   const free = innerHeight - document.querySelector('header').offsetHeight - document.querySelector('.build').offsetHeight - 110;
-  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, Math.min(innerHeight * 0.42, free) / LH));
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, Math.min(innerHeight * (EX ? 0.34 : 0.4), free) / LH));
   DPR = Math.min(3, window.devicePixelRatio || 1);
   if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
     SC = s;
@@ -1123,7 +1424,11 @@ new ResizeObserver(fit).observe(document.querySelector('.build'));
    Sin línea en curso, tocar un puntero empieza su asignación.
    ════════════════════════════════════════════════════════════════════ */
 function hitTest(pt) {
-  for (const it of varLayout()) if (it.v && !it.frame && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
+  for (const it of varLayout()) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1)) && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
+  for (const L of Object.values(M.lists)) {
+    const l = L.x - NW / 2, Tp = L.y - NH / 2;
+    if (pt.y >= Tp - 6 && pt.y <= Tp + NH + 6 && pt.x >= l - 4 && pt.x <= l + NW + 6) return { kind: pt.x >= l + DW - 2 ? 'lhead' : 'list', lid: L.id };
+  }
   const ids = liveIds().reverse();
   for (const id of ids) {
     const P = POS[id]; if (!P) continue;
@@ -1138,10 +1443,16 @@ const holeType = () => BUILD && (HOLE.exec(BUILD) || [])[1];
    Se parte tocando el post-it de una variable y se avanza tocando la casilla next del nodo marcado.
    PATH guarda la expresión que se va armando (p, p->next, p->next->next…). */
 let PATH = null;
-function pathValue(expr) {   // a qué apunta la expresión, sin lanzar errores
+function pathValue(expr) {   // a qué apunta la expresión, sin lanzar errores ({ list } si es la caja Lista)
   const parts = expr.split('->'); const base = parts.shift();
-  const v = lookup(base); if (!v || v.kind !== 'ptr') return undefined;
+  const v = lookup(base); if (!v || (v.kind !== 'ptr' && v.kind !== 'list')) return undefined;
   let cur = v.t;
+  if (v.kind === 'list') {
+    if (cur === null || !listOf(cur)) return undefined;
+    if (!parts.length) return { list: cur };
+    if (parts.shift() !== 'head') return undefined;
+    cur = listOf(cur).head;
+  }
   for (const f of parts) { if (cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) return undefined; cur = nodeOf(cur).next; }
   return cur;
 }
@@ -1160,6 +1471,13 @@ function tapBoard(e) {
     if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
     PATH = { expr: h.v.name }; renderBuilder(); return;
   }
+  if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
+    if (BUILD && (type === 'var' || type === 'num')) return;
+    const cur = PATH ? pathValue(PATH.expr) : undefined;
+    if (h.kind === 'lhead' && cur && cur.list === h.lid) { tapFx(h); PATH.expr += '->head'; renderBuilder(); return; }
+    hint('Por un puntero', 'A la Lista también se llega por un puntero: toca el post-it que la apunta (por ejemplo l) y luego su casilla head.');
+    return;
+  }
   const n = nodeOf(h.id);
   if (h.kind === 'node') {
     if (BUILD && type === 'num' && n.v !== null && !n.dead) { tapFx(h); fill(String(n.v)); return; }
@@ -1171,7 +1489,7 @@ function tapBoard(e) {
   if (!PATH) { hint('Primero un puntero', 'Para llegar a esa casilla, parte tocando el post-it de una variable y sigue las flechas hasta ese nodo.'); return; }
   const cur = pathValue(PATH.expr);
   if (cur !== h.id) {
-    hint(PATH.expr, cur === null ? `${PATH.expr} es NULL: no hay casilla next que seguir.` : `Esa casilla no es la del nodo al que apunta ${PATH.expr}. Sigue las flechas: toca la casilla next del nodo marcado.`);
+    hint(PATH.expr, cur === null ? `${PATH.expr} es NULL: no hay casilla next que seguir.` : cur && cur.list ? `${PATH.expr} apunta a una Lista: primero toca su casilla head.` : `Esa casilla no es la del nodo al que apunta ${PATH.expr}. Sigue las flechas: toca la casilla next del nodo marcado.`);
     return;
   }
   tapFx(h);
@@ -1186,16 +1504,18 @@ function startFromPath(tpl) { const expr = PATH.expr; PATH = null; BUILD = tpl.r
 function renderPathBar(box) {
   const g = document.createElement('div'); g.className = 'grp';
   const val = pathValue(PATH.expr);
-  if (BUILD) g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath));
-  else {
+  const isList = val && val.list;
+  if (BUILD) { if (!isList || holeType() === 'list') g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath)); }
+  else if (!isList) {
     g.appendChild(mkChip(PATH.expr + ' = _;', 'fn', () => startFromPath('§e = §ptr;')));
     if (val !== null && val !== undefined && val !== G) g.appendChild(mkChip(PATH.expr + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
   }
-  if (PATH.expr.endsWith('->next')) g.appendChild(mkChip('⌫ quitar ->next', '', () => { PATH.expr = PATH.expr.slice(0, -6); renderBuilder(); }));
+  const tail = PATH.expr.match(/->(next|head)$/);
+  if (tail) g.appendChild(mkChip('⌫ quitar ->' + tail[1], '', () => { PATH.expr = PATH.expr.slice(0, -tail[0].length); renderBuilder(); }));
   g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
   box.appendChild(g);
   const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-  tip.textContent = val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : 'Para seguir la flecha, toca la casilla next del nodo marcado en el dibujo.';
+  tip.textContent = isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : 'Para seguir la flecha, toca la casilla next del nodo marcado en el dibujo.';
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
@@ -1208,14 +1528,18 @@ function drawTapHints(layout) {
   const a = 0.35 + 0.2 * Math.sin(T * 5);
   if (PATH && !BUSY) {   // el nodo al que llega el camino, con su casilla next lista para seguir
     const id = pathValue(PATH.expr);
-    if (id !== null && id !== undefined && id !== G && POS[id]) {
+    if (id && id.list) {
+      const L = listOf(id.list), l = L.x - NW / 2, Tp = L.y - NH / 2;
+      ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(l - 4, Tp - 4, NW + 8, NH + 8, 448, 0.7); ctx.restore();
+      glow(l + DW, Tp, NW - DW, NH, a + 0.15);
+    } else if (id !== null && id !== undefined && id !== G && POS[id]) {
       const P = POS[id], L = P.x - NW / 2, Tp = P.y - NH / 2;
       ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(L - 4, Tp - 4, NW + 8, NH + 8, 447, 0.7); ctx.restore();
       if (nodeOf(id).next !== null) glow(L + DW, Tp, NW - DW, NH, a + 0.15);
     }
-    for (const it of layout) if (it.v && !it.frame && it.v.kind === 'ptr') glow(it.x, it.y, PW, PH, a * 0.6);
+    for (const it of layout) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1))) glow(it.x, it.y, PW, PH, a * 0.6);
   } else if (want && BUILD) {
-    if (type !== 'num') for (const it of layout) if (it.v && !it.frame && it.v.kind === 'ptr') glow(it.x, it.y, PW, PH, a);
+    if (type !== 'num') for (const it of layout) if (it.v && it.v.kind !== 'int' && (!it.frame || it.frame === M.frames.at(-1))) glow(it.x, it.y, PW, PH, a);
     if (type === 'num') for (const id of liveIds()) {
       const n = nodeOf(id), P = POS[id]; if (n.dead || n.freed || !P || n.v === null) continue;
       glow(P.x - NW / 2, P.y - NH / 2, DW, NH, a);
@@ -1225,6 +1549,7 @@ function drawTapHints(layout) {
     TAP.t -= 0.05;
     ctx.save(); ctx.globalAlpha = TAP.t; ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.5;
     if (TAP.kind === 'var') { const it = layout.find(o => o.v === TAP.v); if (it) rRect(it.x - 3, it.y - 3, PW + 6, PH + 6, 444, 0.6); }
+    else if (TAP.lid && listOf(TAP.lid)) { const L = listOf(TAP.lid); rRect(L.x - NW / 2 + DW - 2, L.y - NH / 2 - 3, NW - DW + 5, NH + 6, 449, 0.6); }
     else if (POS[TAP.id]) { const P = POS[TAP.id], L = P.x - NW / 2, Tp = P.y - NH / 2; if (TAP.kind === 'next') rRect(L + DW - 2, Tp - 3, NW - DW + 5, NH + 6, 445, 0.6); else rRect(L - 3, Tp - 3, DW + 4, NH + 6, 446, 0.6); }
     ctx.restore();
   }
