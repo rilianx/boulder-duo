@@ -2391,7 +2391,7 @@ function initLevel(n){
   buttBase = 0; for (let i=0; i<W*H; i++) if (grid[i] === BUTT) buttBase++;
   timeAcc = 0; exitOpenShown = false; exitSeen = [-1, -1]; caveShownAt = frame; applyGravity(); snapCams();
   state = 'play'; hideOverlay(); updateHud();
-  if (netRole === 'host' && netLink) { netSend({ t: 'lv', lv: level, tk: tickN, L: players.map(p => p.lives) }); netNewCave(); }
+  if (netRole === 'host' && netLink) { netSend({ t: 'lv', lv: level, tk: tickN, hw: Math.round(performance.now()), ph: 0, L: players.map(p => p.lives) }); netNewCave(); }
 }
 
 /* ---------- rules ---------- */
@@ -4325,7 +4325,7 @@ function netSettle(){
   netPredS[rp.id] = { d: last.d, at: srcAt[i], cell: i };
 }
 function netSettleNow(){
-  if (!grid || state !== 'play') return;
+  if (!grid || (state !== 'play' && state !== 'pause')) return;   // a step that came just as the game was paused counts too
   const todo = netLog.filter(e => !e.done && e.lv === level && e.k <= tickN);
   if (!todo.length) return;
   let first = todo[0]; for (const e of todo) if (netKey(e) < netKey(first)) first = e;
@@ -4378,7 +4378,7 @@ function netFrame(){
   const now = performance.now();
   netTrim();
   if (netRole === 'host') {
-    if (state !== netSt) { netSt = state; netSend({ t: 'st', st: state, ov: state === 'play' || state === 'menu' ? '' : [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300) }); }
+    if (state !== netSt) { netSt = state; netSend({ t: 'st', st: state, tk: tickN, hw: Math.round(now), ph: Math.round(simT - worldT), ov: state === 'play' || state === 'menu' ? '' : [...ov.querySelectorAll('h2, p')].map(e => e.textContent.trim()).filter(Boolean).join('\n').slice(0, 300) }); }
     if (state === 'play' && now - netSyncAt >= NET_BEAT) { netSyncAt = now; netSend({ t: 'tk', hw: Math.round(now), tk: tickN, ph: Math.round(simT - worldT) }); }
   }
 }
@@ -4397,11 +4397,23 @@ function netGot(o){
   }
   if (o.t === 'lv') {
     if (state === 'menu' || !players.length) return;
-    initLevel(o.lv); tickN = o.tk | 0; (o.L || []).forEach((l, k) => { if (players[k]) players[k].lives = l; }); netNewCave(); return;
+    initLevel(o.lv); tickN = o.tk | 0; (o.L || []).forEach((l, k) => { if (players[k]) players[k].lives = l; });
+    if (o.hw !== undefined) { netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph }; worldT = simT; }
+    netNewCave(); return;
   }
   if (o.t === 'menu') { state = 'menu'; guestWait('El otro celular volvió al menú y está eligiendo el juego…'); return; }
   if (o.t === 'st') {
     if (o.st === state || !players.length) return;
+    // stopping (pause, end of the cave): first reach the tick the host stopped at, so both stand on the same one
+    if (state === 'play' && o.st !== 'play' && o.tk !== undefined) { let n = 0; while (tickN < o.tk && state === 'play' && n++ < 12) { worldT = nowT = simT; tick(); netSave(); netSettle(); } }
+    if (state === 'play' && o.st !== 'play' && o.tk !== undefined && tickN > o.tk && netHist.has(o.tk)) {
+      // a little ahead: back to that tick, with the steps taken in it
+      netReplaying = true; netLoad(o.tk);
+      netLog.forEach(e => { if (e.lv === level && e.k >= o.tk) e.done = false; });
+      netLog.filter(e => e.lv === level && e.k === o.tk).sort((a, b) => netKey(a) - netKey(b)).forEach(e => netDo(e, simT));
+      netReplaying = false;
+    }
+    if (o.hw !== undefined) { netClockSeen(o.hw); netT0 = { tk: o.tk, at: o.hw - o.ph }; worldT = simT; }   // its ticks stood still meanwhile
     state = o.st;
     if (state === 'play') hideOverlay();
     else if (state !== 'menu') guestWait((o.ov || '') + '\n\nEl otro celular decide cómo seguir.');
