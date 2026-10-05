@@ -3778,8 +3778,9 @@ function idleAct(p){
   return p.idlePlan.find(([, until]) => it < until)[0];
 }
 function glidePos(p){
-  const i = p.y*W + p.x, from = src[i], k = glideK(i), v = netPredVec(p);
-  return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k + v[0], p.y + ((from / W | 0) - p.y) * k + v[1]] : [p.x + v[0], p.y + v[1]];
+  if (netRole && netDisp[p.id] && isRemote(p)) return netDisp[p.id];   // the other phone's kid, where it is drawn
+  const i = p.y*W + p.x, from = src[i], k = glideK(i);
+  return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k, p.y + ((from / W | 0) - p.y) * k] : [p.x, p.y];
 }
 function camFocus(k){
   const p = players[k], o = players[1-k];
@@ -3931,9 +3932,9 @@ function renderView(k){
       g.drawImage(dirtCut(DVAR[i], openMask(i), true), px, py, T, T);
       if (tt === ROCK || tt === GEM) { drawThing(g, s, i, px, py, 0, tt === ROCK); continue; }
     }
-    const pv = (tt === P1 || tt === P2) && netRole ? netPredVec(players[tt - P1]) : NOV;   // the other phone's kid, a little ahead
-    if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k + pv[0]) * T - ox, (y + ((from / W | 0) - y) * k + pv[1]) * T - oy]); }
-    else if (pv !== NOV) glide.push([s, i, 0, (x + pv[0]) * T - ox, (y + pv[1]) * T - oy]);
+    const dp = (tt === P1 || tt === P2) && netRole && isRemote(players[tt - P1]) ? netDisp[tt - P1] : null;
+    if (dp) glide.push([s, i, 0, dp[0] * T - ox, dp[1] * T - oy]);   // the other phone's kid, where it is drawn
+    else if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   drawAmbient(g, ox, oy, x0, y0);
@@ -4094,6 +4095,7 @@ function drawExitHint(g, k, ox, oy){
 }
 let shownState = '';
 function render(){
+  if (netRole) netDispUpdate();
   if (state !== shownState) {
     // the middle button pauses while playing; on the menu it moves to the top and leaves full screen
     shownState = state; document.body.dataset.state = state;
@@ -4291,38 +4293,50 @@ function netDo(e, t){
   p.held = [e.d]; nowT = Math.min(t, simT); stepPlayer(p); p.held = h; e.done = true;   // never a time ahead of the screen
 }
 // put the steps of the log in their place: straight away if they are the newest, else go back and work it out again
-/* Drawing only: the other phone's kid, if it was walking, is drawn going on towards its next cell while its step is
-   on the way (up to half a cell); when the step comes it carries on from there, and if it does not come (it stopped
-   or turned) the drawing slides back. The cave itself never moves on a guess. */
-const netPredS = [null, null], NOV = [0, 0];
+/* Drawing only: the other phone's kid. It is drawn at a position of its own that follows the real one, a bit faster
+   than it walks (1.6 times), so a step that arrives late, or two at once, make it hurry instead of jump (only a big
+   gap, like coming back somewhere else, is crossed at once). And once it has taken two steps in a row the same way, it is
+   drawn going on towards its next cell (up to half a cell) while the next step is on the way; if that step does
+   not come (it stopped or turned), the drawing slides back. The cave itself never moves on a guess. */
+const netPredS = [null, null], netDisp = [null, null];
+let netDispT = 0;
 function netPredOff(p){
   const q = netPredS[p.id];
-  if (!q || !isRemote(p) || !p.alive || p.exited || p.doomed || state !== 'play' || q.cell !== p.y*W + p.x) return 0;
+  if (!q || q.streak < 2 || !p.alive || p.exited || p.doomed || state !== 'play' || q.cell !== p.y*W + p.x) return 0;
   const t = grid[q.cell + OFF[q.d]];
   if (!(t === E || t === DIRT || t === GEM)) return 0;
-  const e = simT - (q.at + tickMs), half = tickMs / 2;
+  const e = simT - (srcAt[q.cell] + tickMs), half = tickMs / 2;   // since its walk into this cell ended
   if (e <= 0) return 0;
   if (e <= half) return e / tickMs;
-  if (e <= half + 250) return .5;            // waiting for the step
+  if (e <= half + 250) return .5;                    // waiting for the step
   return Math.max(0, .5 - (e - half - 250) / 300);   // it did not come: back to its cell
 }
-function netPredVec(p){ const o = p && netRole ? netPredOff(p) : 0; return o ? [DXY[netPredS[p.id].d][0] * o, DXY[netPredS[p.id].d][1] * o] : NOV; }
+function netTruePos(p){
+  const i = p.y*W + p.x, from = src[i], k = glideK(i), o = netPredOff(p);
+  let x = p.x, y = p.y;
+  if (from >= 0 && k > 0) { x += (from % W - p.x) * k; y += ((from / W | 0) - p.y) * k; }
+  if (o) { const v = DXY[netPredS[p.id].d]; x += v[0] * o; y += v[1] * o; }
+  return [x, y];
+}
+function netDispUpdate(){
+  const dt = Math.max(0, simT - netDispT); netDispT = simT;
+  players.forEach(p => {
+    if (!isRemote(p) || !p.alive || p.exited) { netDisp[p.id] = null; return; }
+    const t = netTruePos(p), d = netDisp[p.id];
+    const dx = d ? t[0] - d[0] : 0, dy = d ? t[1] - d[1] : 0, dist = Math.hypot(dx, dy), max = 1.6 * dt / tickMs;
+    netDisp[p.id] = !d || dist > 2.5 || dist <= max ? t : [d[0] + dx / dist * max, d[1] + dy / dist * max];
+  });
+}
 function netSettle(){
-  const rp = netRole ? players.find(isRemote) : null;
-  const was = rp && { n: rp.stepN, at: rp.alive ? glidePos(rp) : null };
+  const rp = netRole ? players.find(isRemote) : null, n0 = rp ? rp.stepN : 0;
   netSettleNow();
-  if (!rp || rp.stepN === was.n || !rp.alive || !was.at) return;
-  // the other kid stepped (maybe a while ago, worked out again now): its walk goes on from where it was drawn,
-  // neither jumping ahead nor back, and its next step is expected one step later
-  const i = rp.y*W + rp.x, from = src[i];
+  if (!rp || rp.stepN === n0 || !rp.alive) return;
+  // the other kid stepped: count how many steps in a row it has taken the same way
   const last = netLog.filter(e => e.id === rp.id && e.done && e.lv === level).reduce((a, e) => !a || netKey(e) > netKey(a) ? e : a, null);
   if (!last) return;
-  if (from >= 0 && Math.abs(from % W - rp.x) + Math.abs((from / W | 0) - rp.y) === 1) {
-    const ux = rp.x - from % W, uy = rp.y - (from / W | 0);
-    const done = clamp((was.at[0] - from % W) * ux + (was.at[1] - (from / W | 0)) * uy, 0, .95);
-    srcAt[i] = simT - done * tickMs;
-  }
-  netPredS[rp.id] = { d: last.d, at: srcAt[i], cell: i };
+  const q = netPredS[rp.id], i = rp.y*W + rp.x;
+  const onRun = q && q.d === last.d && q.cell === i - OFF[last.d] && last.k - q.k <= 2;   // the step right after the last one, same way
+  netPredS[rp.id] = { d: last.d, cell: i, k: last.k, streak: onRun ? q.streak + 1 : 1 };
 }
 function netSettleNow(){
   if (!grid || (state !== 'play' && state !== 'pause')) return;   // a step that came just as the game was paused counts too
