@@ -3778,8 +3778,8 @@ function idleAct(p){
   return p.idlePlan.find(([, until]) => it < until)[0];
 }
 function glidePos(p){
-  const i = p.y*W + p.x, from = src[i], k = glideK(i);
-  return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k, p.y + ((from / W | 0) - p.y) * k] : [p.x, p.y];
+  const i = p.y*W + p.x, from = src[i], k = glideK(i), v = netPredVec(p);
+  return from >= 0 && k > 0 ? [p.x + (from % W - p.x) * k + v[0], p.y + ((from / W | 0) - p.y) * k + v[1]] : [p.x + v[0], p.y + v[1]];
 }
 function camFocus(k){
   const p = players[k], o = players[1-k];
@@ -3931,7 +3931,9 @@ function renderView(k){
       g.drawImage(dirtCut(DVAR[i], openMask(i), true), px, py, T, T);
       if (tt === ROCK || tt === GEM) { drawThing(g, s, i, px, py, 0, tt === ROCK); continue; }
     }
-    if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
+    const pv = (tt === P1 || tt === P2) && netRole ? netPredVec(players[tt - P1]) : NOV;   // the other phone's kid, a little ahead
+    if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k + pv[0]) * T - ox, (y + ((from / W | 0) - y) * k + pv[1]) * T - oy]); }
+    else if (pv !== NOV) glide.push([s, i, 0, (x + pv[0]) * T - ox, (y + pv[1]) * T - oy]);
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   drawAmbient(g, ox, oy, x0, y0);
@@ -4289,7 +4291,40 @@ function netDo(e, t){
   p.held = [e.d]; nowT = Math.min(t, simT); stepPlayer(p); p.held = h; e.done = true;   // never a time ahead of the screen
 }
 // put the steps of the log in their place: straight away if they are the newest, else go back and work it out again
+/* Drawing only: the other phone's kid, if it was walking, is drawn going on towards its next cell while its step is
+   on the way (up to half a cell); when the step comes it carries on from there, and if it does not come (it stopped
+   or turned) the drawing slides back. The cave itself never moves on a guess. */
+const netPredS = [null, null], NOV = [0, 0];
+function netPredOff(p){
+  const q = netPredS[p.id];
+  if (!q || !isRemote(p) || !p.alive || p.exited || p.doomed || state !== 'play' || q.cell !== p.y*W + p.x) return 0;
+  const t = grid[q.cell + OFF[q.d]];
+  if (!(t === E || t === DIRT || t === GEM)) return 0;
+  const e = simT - (q.at + tickMs), half = tickMs / 2;
+  if (e <= 0) return 0;
+  if (e <= half) return e / tickMs;
+  if (e <= half + 250) return .5;            // waiting for the step
+  return Math.max(0, .5 - (e - half - 250) / 300);   // it did not come: back to its cell
+}
+function netPredVec(p){ const o = p && netRole ? netPredOff(p) : 0; return o ? [DXY[netPredS[p.id].d][0] * o, DXY[netPredS[p.id].d][1] * o] : NOV; }
 function netSettle(){
+  const rp = netRole ? players.find(isRemote) : null;
+  const was = rp && { n: rp.stepN, at: rp.alive ? glidePos(rp) : null };
+  netSettleNow();
+  if (!rp || rp.stepN === was.n || !rp.alive || !was.at) return;
+  // the other kid stepped (maybe a while ago, worked out again now): its walk goes on from where it was drawn,
+  // neither jumping ahead nor back, and its next step is expected one step later
+  const i = rp.y*W + rp.x, from = src[i];
+  const last = netLog.filter(e => e.id === rp.id && e.done && e.lv === level).reduce((a, e) => !a || netKey(e) > netKey(a) ? e : a, null);
+  if (!last) return;
+  if (from >= 0 && Math.abs(from % W - rp.x) + Math.abs((from / W | 0) - rp.y) === 1) {
+    const ux = rp.x - from % W, uy = rp.y - (from / W | 0);
+    const done = clamp((was.at[0] - from % W) * ux + (was.at[1] - (from / W | 0)) * uy, 0, .95);
+    srcAt[i] = simT - done * tickMs;
+  }
+  netPredS[rp.id] = { d: last.d, at: srcAt[i], cell: i };
+}
+function netSettleNow(){
   if (!grid || state !== 'play') return;
   const todo = netLog.filter(e => !e.done && e.lv === level && e.k <= tickN);
   if (!todo.length) return;
