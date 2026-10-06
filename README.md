@@ -112,6 +112,10 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 Ver [`rl/README.md`](rl/README.md).
 
+## Comienzo seguro
+
+Al empezar cada cueva, el juego la prueba unos segundos (100 ticks) con los niños quietos en la entrada, sin que se vea ni cuente. Si alguno moriría ahí (una roca que baja, una luciérnaga que pasa, la ameba...), los pone en el lugar más cercano que se alcanza desde la entrada donde no les pasaría nada. Así cambia el comienzo de, por ejemplo, el intermedio 3 de Boulder Dash 1 y las cuevas C, E, H y N de Boulder Dash 2. Si cerca no hay ningún lugar seguro (la cueva I y el intermedio 3 de Boulder Dash 2, hechos para esquivar desde el primer segundo), los niños empiezan protegidos (parpadeando) hasta su primer paso, y un momento más.
+
 ## Vidas, reaparecer y reiniciar
 
 - **VIDAS ∞ (COOPERATIVO)** (botón del menú): en cooperativo (y con 1 jugador) las vidas no se acaban; el marcador muestra ∞.

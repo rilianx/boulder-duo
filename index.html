@@ -2380,11 +2380,14 @@ function initLevel(n){
   if (HL.cur) hlEnd('t');
   level = n; dust = []; pendingBooms = []; holdCell.fill(0); critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
-  const spawns = (mode === 'train' && !hlTrain()) || simHook ? genLevel(n) : genCave(n);
+  const gen = (mode === 'train' && !hlTrain()) || simHook;
+  startUnsafe = false;
+  const spawns = gen ? genLevel(n) : safeSpawns(genCave(n));
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
     p.gems = 0; p.exited = false; p.doomed = false; p.dieX = undefined; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
-    if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = 16; grid[p.y*W+p.x] = p.cell; }
+    // no safe spot anywhere near (a cave made for dodging from the first second): protected until the first step
+    if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = startUnsafe ? 450 : 16; p.waitMove = startUnsafe; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
   });
   for (let i=0; i<W*H; i++) untouched[i] = grid[i] === ROCK ? 1 : 0;
@@ -2608,7 +2611,8 @@ function stepPlayer(p){
   const [dx, dy] = DXY[d];
   if (dx) p.face = dx < 0 ? 1 : 0;
   const i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
-  const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; p.actAt = nowT; p.x += dx; p.y += dy; p.walking = true; p.stepN++; };
+  const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; p.actAt = nowT; p.x += dx; p.y += dy; p.walking = true; p.stepN++;
+    if (p.waitMove) { p.waitMove = false; p.immune = Math.min(p.immune, 16); } };   // protected start: a moment more after the first step
   if (t === E || t === DIRT) { go(); p.push = 0; if (t === DIRT) { sfx.step(); p.dig = d; dugAt[j] = nowT; } }
   else if (t === STAR) {
     go(); p.push = 0; sfx.open(); if (!netReplaying) starFlash = { at: nowT, x: p.x, y: p.y };
@@ -2764,7 +2768,7 @@ function tick(){
   tickN++; moved.fill(0);
   if (netRole) { netRngS = Math.imul(fxSeed ^ tickN, 0x9E3779B1) ^ level; crng = netRng; }   // two phones: the same chance at the same tick
   if (pendingBooms.length) runPendingBooms(); landThisTick = false;
-  players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
+  if (!probing) players.forEach(p => { if (p.ai && !p.external) aiThink(p); });
   const order = (netRole ? tickN : frame) & 1 ? [players[1], players[0]] : [players[0], players[1]];
   order.forEach(p => {
     if (!ownClock(p)) return stepPlayer(p);
@@ -2826,7 +2830,7 @@ function tick(){
 const active = () => players.filter(p => !p.exited && (p.alive || p.respawn > 0)).length;
 
 function checkEnd(){
-  if (state !== 'play' || netRole === 'guest') return;   // two phones: the host decides how a cave ends
+  if (state !== 'play' || netRole === 'guest' || probing) return;   // two phones: the host decides how a cave ends
   if (hlTrain()) {
     // learning a cave: every life of the PC is one attempt at the same cave
     const a = players[1];
@@ -4270,22 +4274,60 @@ let netRngS = 0, netReplaying = false, netLog = [], netHist = new Map(), netSeq 
 // no sound twice: going back over ticks already played is silent
 Object.keys(sfx).forEach(k => { const f = sfx[k]; sfx[k] = (...a) => netReplaying ? undefined : f(...a); });
 function netRng(){ netRngS = netRngS + 0x6D2B79F5 | 0; let t = Math.imul(netRngS ^ netRngS >>> 15, 1 | netRngS); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt'];
-// a copy of everything the game needs, taken after each tick
-function netSave(){
-  if (!netRole || !grid) return;
-  netHist.set(tickN, {
-    t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell].map(a => a.slice()),
+const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt', 'waitMove'];
+// a copy of everything the game needs (taken after each tick when two phones play, and by the start-spot check)
+function stateSnap(){
+  return { t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell].map(a => a.slice()),
     pb: pendingBooms.map(e => ({ ...e })), p: players.map(q => PKEYS.map(k => q[k])),
-    sc: [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS] });
-  netHist.delete(tickN - NET_HIST);
+    sc: [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS, tickN, exitOpenAt, starFlash] };
 }
-function netLoad(k){
-  const h = netHist.get(k);
+function stateLoad(h){
   [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell].forEach((a, i) => a.set(h.A[i]));
   pendingBooms = h.pb.map(e => ({ ...e })); players.forEach((q, i) => PKEYS.forEach((k2, j) => { q[k2] = h.p[i][j]; }));
-  [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS] = h.sc;
-  tickN = k;
+  [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS, tickN, exitOpenAt, starFlash] = h.sc;
+}
+function netSave(){
+  if (!netRole || !grid) return;
+  netHist.set(tickN, stateSnap());
+  netHist.delete(tickN - NET_HIST);
+}
+function netLoad(k){ stateLoad(netHist.get(k)); tickN = k; }
+/* A safe place to start: the cave is tried for a few seconds (100 ticks) with the kids standing still at the
+   entrance, quietly and without touching anything for real. If one of them would die there (a rock coming down,
+   a firefly passing by, the amoeba...), the nearest spot the kids can reach from the entrance where they would
+   not is used instead. Both phones playing together find the same one. */
+let probing = false, startUnsafe = false;
+function startSafe(a, b){
+  const keep = stateSnap(), kc = crng, kr = netReplaying, ks = state, kh = players.map(p => p.held);
+  probing = true; netReplaying = true; crng = rng(987654321); state = 'play';
+  let dead = false;
+  const kids = players.filter((p, k) => p.lives > 0 && !(solo && k === 1));
+  players.forEach((p, k) => {
+    const c = k ? b : a, on = kids.includes(p);
+    p.alive = on; p.exited = false; p.doomed = false; p.immune = 0; p.respawn = -1; p.held = [];
+    if (on && c) { p.x = c[0]; p.y = c[1]; grid[c[1]*W + c[0]] = p.cell; fall[c[1]*W + c[0]] = 0; }
+  });
+  for (let t = 0; t < 100 && !dead && state === 'play'; t++){ tick(); dead = kids.some(p => !p.alive || p.doomed); }
+  stateLoad(keep); crng = kc; netReplaying = kr; state = ks; players.forEach((p, k) => { p.held = kh[k]; });
+  probing = false;
+  return !dead;
+}
+function safeSpawns(sp){
+  if (!grid || !caveRules() || !players.length) return sp;
+  const two = players.filter((p, k) => p.lives > 0 && !(solo && k === 1)).length > 1;
+  const free = i => grid[i] === E || grid[i] === DIRT;
+  const partner = c => { for (const d of [1, 3, 2, 0]) { const j = c + OFF[d]; if (free(j)) return j; } return -1; };
+  const xy = i => [i % W, i / W | 0];
+  if (startSafe(sp[0], sp[1])) return sp;
+  // the cells reachable from the entrance through dirt and empty space, nearest first
+  const start = sp[0][1]*W + sp[0][0], seen = new Set([start]), q = [start];
+  for (let h = 0; h < q.length && h < 80; h++){
+    const c = q[h];
+    if (h > 0) { const pj = two ? partner(c) : c; if (pj >= 0 && startSafe(xy(c), xy(pj))) return [xy(c), xy(pj)]; }
+    for (const d of [1, 3, 2, 0]) { const j = c + OFF[d]; if (!seen.has(j) && free(j)) { seen.add(j); q.push(j); } }
+  }
+  startUnsafe = true;
+  return sp;   // nowhere safe close by: the cave's own entrance, and the kids start protected (see initLevel)
 }
 const netKey = e => e.k * 1e6 + e.id * 1e5 + e.s;   // order inside a tick: J1 before J2, then in the order they were taken
 function netDo(e, t){
@@ -4347,8 +4389,9 @@ function netSettleNow(){
   if (first.k === tickN && !later) { todo.sort((a, b) => netKey(a) - netKey(b)).forEach(e => netDo(e, simT)); return; }
   const k0 = first.k;
   if (!netHist.has(k0)) { netLate++; todo.forEach(e => netDo(e, simT)); return; }   // too old to go back: just take it
-  const now = tickN, liveT = worldT, keepNow = nowT;
+  const now = tickN, liveT = worldT, keepNow = nowT, paused = state === 'pause';
   netReplaying = true; netRolls++;
+  if (paused) state = 'play';   // working the ticks out again needs them to run, even while the game is paused
   netLoad(k0);
   netLog.forEach(e => { if (e.lv === level && e.k >= k0) e.done = false; });
   for (let k = k0; k <= now; k++){
@@ -4359,6 +4402,7 @@ function netSettleNow(){
     worldT = nowT = next ? next.t : liveT; tick(); netSave();
   }
   netReplaying = false; worldT = liveT; nowT = keepNow;
+  if (paused && state === 'play') state = 'pause';
 }
 // this phone's kid takes a step: into the log, done here at once (in order), and off to the other phone
 function netStep(p, t0){
