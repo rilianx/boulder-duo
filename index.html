@@ -66,7 +66,6 @@ button.b1{border-color:var(--p1)} button.b2{border-color:var(--p2)}
 .views.solo.netguest .p1v{display:none} .views.solo.netguest .p2v{display:flex}
 .cavegrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;width:100%}
 .cavegrid button{font-size:10px;padding:8px 2px;position:relative} .cavegrid button span{position:absolute;top:-6px;right:-3px;color:#ffd84a;font-size:12px;text-shadow:0 0 3px #000} .cavegrid button.on{border-color:var(--warn);color:var(--warn)}
-.cavegrid.big{grid-template-columns:repeat(4,minmax(0,1fr))}
 .seed{align-items:center} .seed label{font-family:var(--display);font-size:12px;letter-spacing:.05em}
 .seed input{font-family:var(--display);font-size:14px;width:9em;padding:10px 8px;background:var(--panel);color:var(--ink);border:2px solid var(--line)}
 @media (max-height:600px){ .card .long{display:none} .card{gap:10px} .card .row button{padding:9px 12px} } .sets button.on{border-color:var(--warn);color:var(--warn)}
@@ -1891,8 +1890,8 @@ function genBigCave(seed, opts = {}){
   return { w: BW, h: BH, grid: g, starts, exit, pattern, pockets: placed, gems, moved, added, seed };
 }
 // the big random caves as a cave set of their own: 16 maps, five levels of speed like the others
-/* The seed: the 16 caves of the set are the maps of seeds bigSeed .. bigSeed + 15 (1 to 16 unless one writes
-   another in ELEGIR CUEVA). Two phones playing together use the host's. */
+/* The seed: one picks a single cave by its seed in ELEGIR CUEVA (or one at random); winning it goes on to the next
+   seed, and after 16 the speed level goes up, like the other sets. Two phones playing together use the host's. */
 const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200], BIG_SEED_MAX = 999999;
 CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
   ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
@@ -3166,13 +3165,14 @@ function setStartN(n){ startMem[caveSet] = n; try { localStorage.setItem(startKe
 function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^Aleatoria (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
 function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
+  // random caves: just the one of the seed, at the chosen level (the ones after it follow when it is won)
+  if (caveSet === 'rnd' && idx) { setStartN(1 + lvl * cs.length); return caveMenu(); }
   initLevel(n0); state = 'menu';
   showOverlay(`<div class="card">
     <h2>ELEGIR CUEVA</h2>
-    <div class="cavegrid${caveSet === 'rnd' ? ' big' : ''}">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}${starsGot[caveKey(i)] ? ' got' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}${starsGot[caveKey(i)] ? '<span>★</span>' : ''}</button>`).join('')}</div>
-    <p>Estrellas: ${cs.filter((c, i) => starsGot[caveKey(i)]).length} de ${cs.length}</p>
     ${caveSet === 'rnd' ? `<div class="row seed"><label for="bseed">SEMILLA</label><input id="bseed" type="number" inputmode="numeric" min="1" max="${BIG_SEED_MAX}" value="${bigSeed}"><button id="bseedok">USAR</button><button id="bseedrnd">AL AZAR</button></div>
-    <p>Las 16 cuevas son las semillas ${bigSeed} a ${bigSeed + BIG_N - 1}: la misma semilla da siempre el mismo mapa.</p>` : ''}
+    <p>La misma semilla da siempre el mismo mapa${starsGot[caveKey(0)] ? ' (★ ya tienes su estrella)' : ''}. Al ganarla se sigue con la siguiente.</p>` : `<div class="cavegrid">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}${starsGot[caveKey(i)] ? ' got' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}${starsGot[caveKey(i)] ? '<span>★</span>' : ''}</button>`).join('')}</div>
+    <p>Estrellas: ${cs.filter((c, i) => starsGot[caveKey(i)]).length} de ${cs.length}</p>`}
     <div class="row sets lvls">${[0,1,2,3,4].map(l => `<button data-l="${l}" class="${l === lvl ? 'on' : ''}">NIVEL ${l + 1}</button>`).join('')}</div>
     <p>${caveLabel(n0)}${caveTitle(n0) ? ' · ' + caveTitle(n0) : ''} · ${need} diamantes · ${timeLeft} s</p>
     <div class="row"><button id="bpdone" class="b1">LISTO</button></div>
@@ -3181,7 +3181,6 @@ function caveMenu(){
   ov.querySelectorAll('.lvls button').forEach(b => b.onclick = () => { setStartN(idx + 1 + +b.dataset.l * cs.length); caveMenu(); });
   $('bpdone').onclick = menu; onEnter = menu;
   if (caveSet === 'rnd') {
-    // a new seed: the first of its 16 caves, at the same level
     const useSeed = v => { setBigSeed(v, true); setStartN(1 + lvl * cs.length); caveMenu(); };
     $('bseedok').onclick = () => useSeed($('bseed').value);
     $('bseedrnd').onclick = () => useSeed(1 + Math.floor(Math.random() * BIG_SEED_MAX));
