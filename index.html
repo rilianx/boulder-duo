@@ -1386,7 +1386,7 @@ Line=12 8 12 10 STEELWALL
 /* The cave is W x H cells: 40 x 22 like the originals, or 80 x 44 for the big random caves (setSize). Every array
    indexed by cell is made for the biggest (MAXN) so it never has to be made again. */
 let W = 40, H = 22;
-const T = 16, TICK = 120, MAXW = 80, MAXH = 44, MAXN = Math.max(MAXW * MAXH, 4 * 45 * 22);   // the biggest: a big random cave, or the endless cave's window
+const T = 16, TICK = 120, MAXW = 80, MAXH = 44, MAXN = Math.max(MAXW * MAXH, 135 * 54);   // the biggest: a big random cave, or the endless cave's window (3 x 2 tiles of 45 x 27)
 /* Length of a tick in the original caves, by difficulty level: level 1 is the slowest. The random levels of the
    training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
 const CAVE_TICK = [170, 145, 120, 105, 92];
@@ -2751,173 +2751,268 @@ function genBig(n, lvl, P){
 }
 
 /* ---------- the endless cave ----------
-   Boulder Dash 1's caves A to P (with M*, without the intermissions) one after the other to the right, for ever,
-   over and over, each lap at the next difficulty level. Each piece (a "chunk") is one cave (40 x 22, with its steel
-   border) and, after it, a passage 5 wide: a patch of earth with some boulders and a firefly or two between steel,
-   at the height of the cave's exit on its left and of the next cave's entrance on its right. There is no clock.
-   - The cave's exit is the door: it opens with the diamonds the cave asks for (between the two in cooperative,
-     each their own in versus) and whoever walks into it comes out at the start of the passage. The next cave is
-     entered through its left side, where its entrance was.
-   - Local maps: only the chunk each kid is in, and the one after it, are kept (a "window" of 4 slots of 45 columns,
-     never more). If they are apart, the chunks between them are not there; slots that are not next to each other
-     in the world are kept apart by steel. A chunk nobody is in any more is forgotten; if a kid behind reaches it
-     later it is built anew (its door stays open if it was already opened). There is no going back into a forgotten
-     one: the way in from it is steel.
+   Boulder Dash 1's caves A to P (with M*, without the intermissions) one after another, for ever, over and over,
+   each lap at the next difficulty level. The way goes on to the right, or up or down: each cave leads on from the
+   side its exit is nearest to (never up or down twice in a row, so the way never comes back on itself).
+   - A cave's exit and the next one's entrance are always open: a tunnel of earth from each to the cave's side,
+     and between the two caves a passage, a few cells wide, through a band of steel: earth with some boulders and
+     space and maybe a firefly. It joins them for real: kids, boulders and enemies all go through.
+   - Local maps: only the piece ("chunk": a cave and the steel band after and below it) each kid is in and the one
+     after it are kept, in a window of 3 x 2 tiles of 45 x 27 cells. If the kids are apart, the chunks between them
+     are not there and their passages are shut with steel. A chunk nobody is in any more is forgotten; if a kid
+     behind reaches it later it is built anew.
    - The amoeba and the magic wall of each cave keep their own clocks, and the amoeba grows only while somebody is
-     in its cave.
+     in its cave. There is no clock and nothing to unlock: diamonds are points.
    Everything comes from the chunk number, so two phones build the same chunks, and the window moves inside the tick
    (and is part of the saved state), so they move it at the same moment. */
-const INF_CW = 45, INF_SLOTS = 4, INF_W = INF_CW * INF_SLOTS, INF_H = 22, INF_NONE = -99;
-const INF_CAVES = CAVE_SETS.bd1.caves.filter(c => c.props.Intermission !== 'true');
+const INF_TW = 45, INF_TH = 27, INF_WC = 3, INF_WR = 2, INF_SLOTS = INF_WC * INF_WR, INF_W = INF_TW * INF_WC, INF_H = INF_TH * INF_WR, INF_NONE = -99;
+const INF_CAVES = CAVE_SETS.bd1.caves.filter(c => c.props.Intermission !== 'true'), INF_N = INF_CAVES.length;
 const INF_IO = INF_CAVES.map(c => { const L = caveLayout(c, 0); return { inbox: L.inbox, outbox: L.outbox || [38, 20] }; });
-const infCi = k => ((k % INF_CAVES.length) + INF_CAVES.length) % INF_CAVES.length;
-const infLvl = k => Math.max(0, Math.min(4, Math.floor(k / INF_CAVES.length)));
-const infRow = y => Math.max(1, Math.min(INF_H - 2, y));
-let INF = null;   // the state: { lay: chunk in each slot, rec: per loaded chunk, open: doors opened, best: farthest per kid }
-let infSeenC = [null, null], infViewP = null, infTL = [], infDV = new Uint8Array(MAXN), DV = DVAR;
+const INF_STEP = [[1, 0], [0, -1], [0, 1]];   // 0 right, 1 up, 2 down
+const inner = ([x, y]) => [Math.max(1, Math.min(38, x)), Math.max(1, Math.min(20, y))];
+// the way on from each cave: the side its exit is nearest to, but right after going up or down, right
+const INF_DIR = (() => { let prev = 0; return INF_IO.map(({ outbox }) => {
+  const [ex, ey] = inner(outbox); let d = 0, best = 39 - ex;
+  if (ey < best) { d = 1; best = ey; } if (21 - ey < best) d = 2;
+  if (prev !== 0) d = 0; return prev = d;
+}); })();
+const infCi = k => ((k % INF_N) + INF_N) % INF_N;
+const infLvl = k => Math.max(0, Math.min(4, Math.floor(k / INF_N)));
+const infDir = k => k < 0 ? 0 : INF_DIR[infCi(k)];
+// where each chunk is in the world, in tiles (cave A at 0,0; the starting room just left of it)
+const INF_PRE = [[0, 0]]; INF_DIR.forEach((d, i) => INF_PRE.push([INF_PRE[i][0] + INF_STEP[d][0], INF_PRE[i][1] + INF_STEP[d][1]]));
+function infPos(k){
+  if (k < 0) return [-1, 0];
+  const lap = Math.floor(k / INF_N), r = k % INF_N, L = INF_PRE[INF_N];
+  return [lap * L[0] + INF_PRE[r][0], lap * L[1] + INF_PRE[r][1]];
+}
+// the doors, on the cave's own side (cave coordinates): its way out, and its way in from the one before
+function infExitDoor(k){
+  if (k < 0) return [39, inner(INF_IO[0].inbox)[1]];
+  const [ex, ey] = inner(INF_IO[infCi(k)].outbox), d = infDir(k);
+  return d === 0 ? [39, ey] : d === 1 ? [ex, 0] : [ex, 21];
+}
+function infEntryDoor(k){
+  const [ix, iy] = inner(INF_IO[infCi(k)].inbox), d = infDir(k - 1);
+  return d === 0 ? [0, iy] : d === 1 ? [ix, 21] : [ix, 0];
+}
+let INF = null;   // the state: { lay: chunk in each tile of the window, rec: per loaded chunk, best: farthest cave per kid }
+let infViewP = null, infTL = [], infDV = new Uint8Array(MAXN), DV = DVAR;
 const infHere = new Uint8Array(INF_SLOTS), infAmN = new Int32Array(INF_SLOTS), infAmCan = new Uint8Array(INF_SLOTS);
-// the passage after chunk k: its rows, from the exit of cave k (a) to the entrance of cave k + 1 (b), at least 10
-function infBand(k){
-  const a = infRow(k < 0 ? INF_IO[0].inbox[1] : INF_IO[infCi(k)].outbox[1]), b = infRow(INF_IO[infCi(k + 1)].inbox[1]);
-  let lo = Math.min(a, b), hi = Math.max(a, b);
-  while (hi - lo + 1 < 10) { if (hi < INF_H - 2) hi++; if (hi - lo + 1 < 10 && lo > 1) lo--; }
-  return { lo, hi, a, b };
+const infSlotXY = (x, y) => (x / INF_TW | 0) + INF_WC * (y / INF_TH | 0);
+const infSlotOf = i => infSlotXY(i % W, i / W | 0);
+const infOrg = s => [(s % INF_WC) * INF_TW, (s / INF_WC | 0) * INF_TH];
+const infInCave = (x, y) => x % INF_TW < 40 && y % INF_TH < 22;
+// the chunk a kid at (x, y) belongs to: the tile's, except in the steel band under a cave that was gone up into
+// (that passage is the one before's)
+function infBaseAt(x, y){
+  const k = INF.lay[infSlotXY(x, y)]; if (k === undefined || k === INF_NONE) return null;
+  return y % INF_TH >= 22 && x % INF_TW < 40 && infDir(k - 1) === 1 ? k - 1 : k;
 }
-const infSlotOf = i => (i % W) / INF_CW | 0;
-const infChunkAt = i => INF.lay[infSlotOf(i)];
-// the cave a kid is in or heading to (in a passage: the next one)
-const infCaveOfX = x => { const k = INF.lay[x / INF_CW | 0]; return k === INF_NONE ? k : k + (x % INF_CW >= 40 ? 1 : 0); };
+// the cave a kid is in, or is heading to in a passage
+const infCaveAt = (x, y) => { const b = infBaseAt(x, y); return b === null ? null : infInCave(x, y) ? INF.lay[infSlotXY(x, y)] : b + 1; };
 function infRecFor(k){
-  if (INF.rec[k]) return INF.rec[k];
-  const c = INF_CAVES[infCi(k)], lvl = infLvl(k), P = c.props;
+  const c = INF_CAVES[infCi(Math.max(0, k))], lvl = infLvl(k), P = c.props;
   const num = (key, def) => { const v = (P[key] || '').split(/\s+/).filter(Boolean).map(Number); return v.length ? v[Math.min(lvl, v.length - 1)] : def; };
-  const need = num('DiamondsRequired', 10);
-  return INF.rec[k] = { need, needEach: Math.max(1, Math.ceil(need * .6)), g: [0, 0], shown: false,
-    am: { slow: Math.round(num('AmoebaTime', 0) * 1000 / CAVE_TICK[lvl]), ticks: 0 }, mg: { time: num('MagicWallTime', 0), state: 0, left: 0 } };
+  return INF.rec[k] = { am: { slow: Math.round(num('AmoebaTime', 0) * 1000 / CAVE_TICK[lvl]), ticks: 0 }, mg: { time: num('MagicWallTime', 0), state: 0, left: 0 } };
 }
+const infMagicAt = i => { const r = INF.rec[INF.lay[infSlotOf(i)]]; return r ? r.mg : { state: 2 }; };
+function infTileEach(s, fn){ const [bx, by] = infOrg(s); for (let y = by; y < by + INF_TH; y++) for (let x = bx; x < bx + INF_TW; x++) fn(y*W + x, x - bx, y - by); }
 function infClearSlot(s){
-  for (let y = 0; y < H; y++) for (let x = 0; x < INF_CW; x++) {
-    const i = y*W + s*INF_CW + x;
+  infTileEach(s, i => {
     grid[i] = STEEL; dir[i] = 0; fall[i] = 0; aux[i] = 0; src[i] = -1; srcAt[i] = 0; dugAt[i] = -1e9; fallN[i] = 0; rot[i] = 0; landAt[i] = -1e9;
     fallT[i] = 0; untouched[i] = 0; boss[i] = 0; holdCell[i] = 0; vari[i] = 0; infDV[i] = 0;
-  }
-}
-// build chunk k (cave k and the passage after it) in slot s, as new
-function infBuild(k, s){
-  infClearSlot(s);
-  const bx = s * INF_CW, at = (x, y) => y*W + bx + x;
-  for (let y = 0; y < H; y++) for (let x = 0; x < INF_CW; x++) {
-    const i = at(x, y), wx = (k + 1) * INF_CW + x;
-    vari[i] = Math.floor(hash(wx * 7919 + y * 31) * 240); infDV[i] = Math.floor(hash(wx * 13 + y * 977 + 7) * 4);
-  }
-  if (k >= 0) {
-    const L = caveLayout(INF_CAVES[infCi(k)], infLvl(k));
-    for (let y = 0; y < H; y++) for (let x = 0; x < 40; x++) { grid[at(x, y)] = L.g[y*40 + x]; dir[at(x, y)] = L.d[y*40 + x]; }
-    // the way in: from the left side to where the entrance was (or a little way in)
-    const [ix, iy] = L.inbox, ry = infRow(iy);
-    grid[at(ix, iy)] = DIRT;
-    for (let x = 1; x <= Math.min(Math.max(2, ix - 1), 3); x++) if (grid[at(x, ry)] !== EXIT) grid[at(x, ry)] = DIRT;
-    for (let i = 0; i < W*H; i++) if (infSlotOf(i) === s && grid[i] === ROCK) untouched[i] = 1;
-  }
-  // the passage: earth with some boulders and space between steel, one or two fireflies away from where kids come in
-  const bd = infBand(k), R = rng((k + 11) * 104729 + 77);
-  for (let y = bd.lo; y <= bd.hi; y++) for (let x = 40; x < INF_CW; x++) {
-    const r = R(); grid[at(x, y)] = k < 0 ? (r < .1 ? ROCK : DIRT) : r < .07 ? E : r < .24 ? ROCK : DIRT;
-  }
-  const keep = (x, y) => (Math.abs(x - 40) + Math.abs(y - bd.a) <= 3) || (Math.abs(x - 44) + Math.abs(y - bd.b) <= 1);
-  if (k >= 0) for (let n = 1 + (R() < .5 ? 1 : 0), tries = 0; n > 0 && tries < 40; tries++) {
-    const x = 40 + Math.floor(R() * 5), y = bd.lo + Math.floor(R() * (bd.hi - bd.lo + 1));
-    if (keep(x, y)) continue;
-    grid[at(x, y)] = FIRE; dir[at(x, y)] = Math.floor(R() * 4); n--;
-  }
-  for (const [x, y] of [[40, bd.a], [41, bd.a], [40, bd.a - 1], [41, bd.a - 1], [44, bd.b], [43, bd.b]]) if (y >= bd.lo && y <= bd.hi) grid[at(x, y)] = DIRT;
-  if (k < 0) for (const x of [41, 42]) { grid[at(x, bd.a)] = E; if (bd.a - 1 >= bd.lo) grid[at(x, bd.a - 1)] = DIRT; }
-  const r = infRecFor(k); r.g = [0, 0]; r.shown = false; r.am.ticks = 0; r.mg.state = 0; r.mg.left = 0;
-}
-// the way into each cave from the passage before it: open only when that passage is the slot just before
-function infDoors(){
-  INF.lay.forEach((k, s) => {
-    if (k === INF_NONE || k < 0) return;
-    const i = infRow(INF_IO[infCi(k)].inbox[1]) * W + s * INF_CW;
-    if (s > 0 && INF.lay[s - 1] === k - 1) { if (grid[i] === STEEL) grid[i] = DIRT; }
-    else if (grid[i] !== P1 && grid[i] !== P2) { grid[i] = STEEL; fall[i] = 0; }
   });
 }
-// what follows from the window (not saved): each slot's colours, the dirt look, the pace, the cave's numbers
+// build chunk k as new in tile s: its cave with the tunnels to its doors (the doors themselves stay steel until
+// a passage is there), and steel around
+function infBuild(k, s){
+  infClearSlot(s);
+  const [bx, by] = infOrg(s), [gx, gy] = infPos(k), at = (x, y) => (by + y)*W + bx + x;
+  // the look of each cell (world coordinates, kept positive for hash)
+  infTileEach(s, (i, x, y) => { const wx = (gx + 1000) * INF_TW + x, wy = (gy + 1000) * INF_TH + y; vari[i] = Math.floor(hash(wx * 7919 + wy * 31 + 5) * 240); infDV[i] = Math.floor(hash(wx * 13 + wy * 977 + 7) * 4); });
+  const dig = (a, b) => {
+    // a straight tunnel of earth from a to b, both inside the cave (diamonds stay where they are)
+    const dx = Math.sign(b[0] - a[0]), dy = Math.sign(b[1] - a[1]);
+    for (let [x, y] = a; ; x += dx, y += dy) { const i = at(x, y); if (grid[i] !== GEM) { grid[i] = DIRT; dir[i] = 0; } if (x === b[0] && y === b[1]) break; }
+  };
+  const toward = (d, side) => [Math.max(1, Math.min(38, d[0])), Math.max(1, Math.min(20, d[1]))];
+  if (k >= 0) {
+    const L = caveLayout(INF_CAVES[infCi(k)], infLvl(k));
+    for (let y = 0; y < 22; y++) for (let x = 0; x < 40; x++) { grid[at(x, y)] = L.g[y*40 + x]; dir[at(x, y)] = L.d[y*40 + x]; }
+    // the exit and the entrance are just open ways now: tunnels to the doors
+    if (L.outbox) grid[at(...L.outbox)] = L.outbox[0] % 39 && L.outbox[1] % 21 ? DIRT : STEEL;
+    dig(inner(INF_IO[infCi(k)].outbox), toward(infExitDoor(k)));
+    grid[at(...L.inbox)] = DIRT; dig(inner(L.inbox), toward(infEntryDoor(k)));
+    for (let y = 0; y < 22; y++) for (let x = 0; x < 40; x++) if (grid[at(x, y)] === ROCK) untouched[at(x, y)] = 1;
+  } else {
+    // the starting room, at the right of its tile, with a tunnel to its door
+    const ry = infExitDoor(-1)[1];
+    for (let y = Math.max(1, ry - 2); y <= Math.min(20, ry + 3); y++) for (let x = 32; x <= 38; x++) grid[at(x, y)] = DIRT;
+    grid[at(35, ry)] = E; grid[at(36, ry)] = E;
+  }
+  infRecFor(k);
+}
+// the passage from chunk k's exit to chunk k + 1's entrance (both in the window, side by side the right way):
+// the cells it takes, and their fill
+function infPassageCells(k){
+  const s0 = INF.lay.indexOf(k), s1 = INF.lay.indexOf(k + 1), [b0x, b0y] = infOrg(s0), [b1x, b1y] = infOrg(s1), d = infDir(k), [sx, sy] = INF_STEP[d];
+  const ea = infExitDoor(k), eb = infEntryDoor(k + 1);
+  const A = [b0x + ea[0] + sx, b0y + ea[1] + sy], B = [b1x + eb[0] - sx, b1y + eb[1] - sy];
+  // out of the door, to the middle of the band, along it, and into the other door
+  const pts = d === 0 ? [A, [A[0] + 2, A[1]], [A[0] + 2, B[1]], B] : [A, [A[0], A[1] + 2 * sy], [B[0], A[1] + 2 * sy], B];
+  const cells = new Map(), path = [];
+  for (let n = 0; n + 1 < pts.length; n++) {
+    const [p, q] = [pts[n], pts[n + 1]], dx = Math.sign(q[0] - p[0]), dy = Math.sign(q[1] - p[1]);
+    for (let [x, y] = p; ; x += dx, y += dy) { path.push([x, y]); if (x === q[0] && y === q[1]) break; }
+  }
+  path.forEach(([x, y]) => { for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    const cx = x + ox, cy = y + oy; if (cx < 0 || cy < 0 || cx >= W || cy >= H || infInCave(cx, cy)) continue;
+    cells.set(cy*W + cx, 1);
+  } });
+  return { cells, path, A, B };
+}
+function infPassageBuild(k){
+  const { cells, path, A, B } = infPassageCells(k), R = rng((k + 11) * 104729 + 77);
+  for (const i of cells.keys()) { const r = R(); grid[i] = r < .07 ? E : r < .22 ? ROCK : DIRT; dir[i] = 0; fall[i] = 0; aux[i] = 0; src[i] = -1; untouched[i] = grid[i] === ROCK ? 1 : 0; }
+  // clear by the doors, and maybe a firefly in the middle
+  path.slice(0, 2).concat(path.slice(-2)).forEach(([x, y]) => { grid[y*W + x] = DIRT; });
+  if (k >= 0 && R() < .7) {
+    const mids = [...cells.keys()].filter(i => { const x = i % W, y = i / W | 0; return Math.abs(x - A[0]) + Math.abs(y - A[1]) > 3 && Math.abs(x - B[0]) + Math.abs(y - B[1]) > 3; });
+    if (mids.length) { const i = mids[Math.floor(R() * mids.length)]; grid[i] = FIRE; dir[i] = Math.floor(R() * 4); }
+  }
+}
+// is the passage after chunk k in the window (both chunks there, and placed the way the world has them)?
+function infHosted(lay, k){
+  const s0 = lay.indexOf(k), s1 = lay.indexOf(k + 1); if (s0 < 0 || s1 < 0) return false;
+  const [sx, sy] = INF_STEP[infDir(k)];
+  return s1 % INF_WC === s0 % INF_WC + sx && (s1 / INF_WC | 0) === (s0 / INF_WC | 0) + sy;
+}
+// after the window changed: passages that came along are kept, new ones built, the rest of every steel band is
+// steel; doors open where a passage is
+function infLinks(old, moved){
+  const keep = new Map();
+  INF.lay.forEach(k => { if (k === INF_NONE || !infHosted(INF.lay, k)) return; if (old && infHosted(old, k) && !moved.has(k) && !moved.has(k + 1)) keep.set(k, 1); });
+  const kept = new Set(); keep.forEach((v, k) => { for (const i of infPassageCells(k).cells.keys()) kept.add(i); });
+  for (let s = 0; s < INF_SLOTS; s++) infTileEach(s, (i, x, y) => {
+    if ((x < 40 && y < 22) || kept.has(i)) return;
+    if (grid[i] === P1 || grid[i] === P2) return;
+    grid[i] = STEEL; dir[i] = 0; fall[i] = 0; aux[i] = 0; src[i] = -1;
+  });
+  INF.lay.forEach(k => { if (k !== INF_NONE && infHosted(INF.lay, k) && !keep.has(k)) infPassageBuild(k); });
+  infDoors();
+}
+function infDoors(){
+  INF.lay.forEach((k, s) => {
+    if (k === INF_NONE) return;
+    const [bx, by] = infOrg(s), set = ([x, y], open) => {
+      const i = (by + y)*W + bx + x;
+      if (open) { if (grid[i] === STEEL) grid[i] = DIRT; }
+      else if (grid[i] !== P1 && grid[i] !== P2) { grid[i] = STEEL; fall[i] = 0; }
+    };
+    set(infExitDoor(k), infHosted(INF.lay, k));
+    if (k >= 0) set(infEntryDoor(k), infHosted(INF.lay, k - 1));
+  });
+}
+// what follows from the window (not saved): each tile's colours, the dirt look, the pace
 function infRefresh(){
   infTL = INF.lay.map(k => tilesFor(palFromColors((INF_CAVES[infCi(Math.max(0, k))].props.Colors || 'Orange Gray1 White').split(/\s+/))));
   DV = infDV;
-  const ks = players.filter(p => p.alive || p.respawn > 0).map(p => infCaveOfX(p.alive ? p.x : (p.dieX ?? p.x))).filter(k => Number.isFinite(k) && k !== INF_NONE);
-  const rear = ks.length ? Math.max(0, Math.min(...ks)) : 0;
-  tickMs = CAVE_TICK[infLvl(rear)];
+  const ks = players.filter(p => p.alive || p.respawn > 0).map(p => p.alive ? infBaseAt(p.x, p.y) : infBaseAt(p.dieX ?? p.x, p.dieY ?? p.y)).filter(k => k !== null && Number.isFinite(k));
+  const rear = ks.length ? Math.min(...ks) : 0;
+  tickMs = CAVE_TICK[infLvl(Math.max(0, rear))];
   const s0 = INF.lay.indexOf(rear); TL = infTL[s0 >= 0 ? s0 : 0];
-  const r = INF.rec[rear]; if (r) { need = r.need; needEach = r.needEach; }
 }
-// the drawing follows the window when it moves (or when an older state comes back): the cameras and the drawn kids
+// the drawing follows the window when it moves (or when an older state comes back): cameras and drawn kids
 function infCamShift(oldLay, newLay){
   if (!oldLay || oldLay.join() === newLay.join()) return;
-  const dx = x => { const os = x / INF_CW | 0, k = oldLay[os], ns = newLay.indexOf(k); return k === INF_NONE || ns < 0 ? 0 : (ns - os) * INF_CW; };
-  cams.forEach((c, k) => { const p = players[k]; if (p) c.x += dx(Math.max(0, Math.min(W - 1, Math.round(c.x + CW / 2)))); });
-  netDisp.forEach((d, k) => { if (d) d[0] += dx(Math.max(0, Math.min(W - 1, Math.round(d[0])))); });
+  const d = (x, y) => {
+    x = Math.max(0, Math.min(W - 1, Math.round(x))); y = Math.max(0, Math.min(H - 1, Math.round(y)));
+    const os = infSlotXY(x, y), k = oldLay[os], ns = newLay.indexOf(k);
+    if (k === INF_NONE || ns < 0) return [0, 0];
+    const [ox, oy] = infOrg(os), [nx, ny] = infOrg(ns); return [nx - ox, ny - oy];
+  };
+  cams.forEach(c => { const [dx, dy] = d(c.x + CW / 2, c.y + CH / 2); c.x += dx; c.y += dy; });
+  netDisp.forEach(p => { if (p) { const [dx, dy] = d(p[0], p[1]); p[0] += dx; p[1] += dy; } });
   netPredS[0] = netPredS[1] = null;
-  dust = []; critters = []; nestPuff = []; exitSeen = [-1, -1];
+  dust = []; critters = []; nestPuff = [];
 }
 const INF_ARR = () => [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV];
-// move the window to the chunks the kids need: theirs and the one after each, in world order
-function infRelayout(){
-  const ks = [];
+// the chunks each kid needs (its own and the next), in runs; and where they go in the window: each run keeps the
+// world's shape, and as many chunks as can stay where they are
+function infWanted(){
+  const runs = [];
   players.forEach(p => {
     if (p.exited || !(p.alive || p.respawn > 0)) return;
-    const k = INF.lay[(p.alive ? p.x : (p.dieX ?? p.x)) / INF_CW | 0];
-    if (k !== INF_NONE) ks.push(k, k + 1);
+    const b = p.alive ? infBaseAt(p.x, p.y) : infBaseAt(p.dieX ?? p.x, p.dieY ?? p.y);
+    if (b !== null) runs.push([b, b + 1]);
   });
-  const want = [...new Set(ks)].sort((a, b) => a - b).slice(0, INF_SLOTS);
-  const cur = INF.lay.filter(k => k !== INF_NONE);
-  if (!want.length || (want.length === cur.length && want.every((k, n) => k === INF.lay[n]))) return;
-  const old = INF.lay.slice(), lay = Array(INF_SLOTS).fill(INF_NONE); want.forEach((k, n) => { lay[n] = k; });
-  const A = INF_ARR(), copy = A.map(a => a.slice());
+  runs.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  runs.forEach(r => { const last = out[out.length - 1]; if (last && r[0] <= last[last.length - 1]) { for (let k = last[last.length - 1] + 1; k <= r[1]; k++) last.push(k); } else out.push(r.slice()); });
+  return out;
+}
+function infPack(runs, old){
+  const shapes = runs.map(run => {
+    const p0 = infPos(run[0]), c = run.map(k => { const p = infPos(k); return [p[0] - p0[0], p[1] - p0[1], k]; });
+    const mx = Math.min(...c.map(v => v[0])), my = Math.min(...c.map(v => v[1]));
+    return c.map(([x, y, k]) => [x - mx, y - my, k]);
+  });
+  const lay = Array(INF_SLOTS).fill(INF_NONE); let best = null;
+  const go = (n, cost) => {
+    if (best && cost >= best.cost) return;
+    if (n === shapes.length) { best = { lay: lay.slice(), cost }; return; }
+    for (let oy = 0; oy < INF_WR; oy++) for (let ox = 0; ox < INF_WC; ox++) {
+      const c = shapes[n].map(([x, y, k]) => [x + ox, y + oy, k]);
+      if (c.some(([x, y]) => x >= INF_WC || y >= INF_WR || lay[y * INF_WC + x] !== INF_NONE)) continue;
+      c.forEach(([x, y, k]) => { lay[y * INF_WC + x] = k; });
+      go(n + 1, cost + c.filter(([x, y, k]) => old[y * INF_WC + x] !== k).length);
+      c.forEach(([x, y]) => { lay[y * INF_WC + x] = INF_NONE; });
+    }
+  };
+  go(0, 0);
+  return best && best.lay;
+}
+function infRelayout(){
+  const runs = infWanted(); if (!runs.length) return;
+  const lay = infPack(runs, INF.lay); if (!lay || lay.join() === INF.lay.join()) return;
+  const old = INF.lay.slice(), A = INF_ARR(), copy = A.map(a => a.slice()), moved = new Set();
   INF.lay = lay;
-  for (const k in INF.rec) if (!want.includes(+k)) delete INF.rec[k];
+  for (const k in INF.rec) if (!lay.includes(+k)) delete INF.rec[k];
+  const mapCell = i => {
+    const x = i % W, y = i / W | 0, os = infSlotXY(x, y), ns = lay.indexOf(old[os]);
+    if (old[os] === INF_NONE || ns < 0) return -1;
+    const [ox, oy] = infOrg(os), [nx, ny] = infOrg(ns); return (y + ny - oy) * W + x + nx - ox;
+  };
   lay.forEach((k, s) => {
     const os = k === INF_NONE ? -1 : old.indexOf(k);
-    if (os < 0) { if (k === INF_NONE) infClearSlot(s); else infBuild(k, s); return; }
-    const d = (s - os) * INF_CW;
-    for (let y = 0; y < H; y++) for (let x = 0; x < INF_CW; x++) {
-      const i = y*W + s*INF_CW + x, j = y*W + os*INF_CW + x;
+    if (os < 0) { if (k === INF_NONE) infClearSlot(s); else { infBuild(k, s); moved.add(k); } return; }
+    const [ox, oy] = infOrg(os), [nx, ny] = infOrg(s);
+    infTileEach(s, (i, x, y) => {
+      const j = (oy + y) * W + ox + x;
       A.forEach((a, n) => { a[i] = copy[n][j]; });
-      if (src[i] >= 0) src[i] += d;
-    }
+      if (copy[5][j] >= 0) src[i] = mapCell(copy[5][j]);
+    });
   });
-  const mapX = x => { const os = x / INF_CW | 0, ns = lay.indexOf(old[os]); return old[os] === INF_NONE || ns < 0 ? null : x + (ns - os) * INF_CW; };
   players.forEach(p => {
-    for (const key of ['x', 'sx', 'dieX']) if (p[key] !== undefined) { const nx = mapX(p[key]); if (nx !== null) p[key] = nx; else if (key !== 'x') p[key] = p.x; }
+    const m = (kx, ky) => { if (p[kx] === undefined) return; const j = mapCell(p[ky] * W + p[kx]); if (j >= 0) { p[kx] = j % W; p[ky] = j / W | 0; } else if (kx !== 'x') { p[kx] = p.x; p[ky] = p.y; } };
+    m('x', 'y'); m('sx', 'sy'); m('dieX', 'dieY');
   });
-  pendingBooms = pendingBooms.filter(e => { const nx = mapX(e.cx); if (nx === null) return false; e.cx = nx; return true; });
-  infDoors(); infCamShift(old, lay); infRefresh();
+  pendingBooms = pendingBooms.filter(e => { const j = mapCell(e.cy * W + e.cx); if (j < 0) return false; e.cx = j % W; e.cy = j / W | 0; return true; });
+  infLinks(old, moved); infCamShift(old, lay); infRefresh();
 }
-// the cave starts: the passage before cave A (where the kids are) and cave A
+// the cave starts: the starting room (where the kids are) and cave A, side by side
 function genEndless(){
   grid = new Uint8Array(W*H); fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
   resetCaveRules(1); starIdx = -1; boss.fill(0); starPending = -1; starIsGem = false;
-  INF = { lay: [-1, 0, INF_NONE, INF_NONE], rec: {}, open: {}, best: [0, 0] };
+  INF = { lay: Array(INF_SLOTS).fill(INF_NONE), rec: {}, best: [0, 0] };
+  INF.lay[0] = -1; INF.lay[1] = 0;
   INF.lay.forEach((k, s) => { if (k === INF_NONE) infClearSlot(s); else infBuild(k, s); });
-  infDoors(); infRefresh();
+  infLinks(null, new Set()); infRefresh();
   timeLeft = 999;   // there is no clock (it never runs)
-  const a = infBand(-1).a;
-  return [[41, a], [42, a]];
-}
-// a kid walks into an open exit: out at the start of the passage after the cave
-function infThrough(p, i, j){
-  const s = infSlotOf(j), k = INF.lay[s], bd = infBand(k), bx = s * INF_CW;
-  const spots = [[40, bd.a], [41, bd.a], [40, bd.a - 1], [40, bd.a + 1], [41, bd.a - 1], [41, bd.a + 1], [42, bd.a]];
-  for (const [x, y] of spots) {
-    const c = y*W + bx + x;
-    if (y < bd.lo || y > bd.hi || !(grid[c] === E || grid[c] === DIRT)) continue;
-    grid[i] = E; src[i] = -1; grid[c] = p.cell; fall[c] = 0; src[c] = -1; moved[c] = 1; dugAt[c] = -1e9;
-    p.x = c % W; p.y = c / W | 0; p.actAt = nowT; p.walking = true; p.stepN++; p.push = 0;
-    sfx.exit(); return;
-  }
+  const ry = infExitDoor(-1)[1];
+  return [[35, ry], [36, ry]];
 }
 // each tick: move the window if needed, see who is in which cave, and how far each kid has got
 function infTickStart(){
@@ -2925,28 +3020,20 @@ function infTickStart(){
   infHere.fill(0); infAmN.fill(0); infAmCan.fill(0);
   players.forEach(p => {
     if (!p.alive) return;
-    if (p.x % INF_CW < 40) infHere[p.x / INF_CW | 0] = 1;
-    const k = infCaveOfX(p.x); if (Number.isFinite(k) && k > INF.best[p.id]) INF.best[p.id] = k;
+    if (infInCave(p.x, p.y)) infHere[infSlotXY(p.x, p.y)] = 1;
+    const k = infCaveAt(p.x, p.y); if (k !== null && k > INF.best[p.id]) INF.best[p.id] = k;
   });
-  INF.lay.forEach(k => { const r = INF.rec[k]; if (r && !r.shown && players.some(p => !p.ai && (INF.open[k] || (mode === 'versus' ? r.g[p.id] >= r.needEach : r.g[0] + r.g[1] >= r.need)))) { r.shown = true; exitOpenAt = nowT; sfx.open(); } });
 }
-// the exit of the cave a kid is in or heading to
+// the way on from where a kid is: the exit door of its cave (or of the cave its passage leads to)
 function infExitFor(p){
-  const s = INF.lay.indexOf(infCaveOfX(p.x)); if (s < 0) return -1;
-  for (let i = 0; i < W*H; i++) if (grid[i] === EXIT && infSlotOf(i) === s) return i;
-  return -1;
+  const k = infCaveAt(p.x, p.y), s = k === null ? -1 : INF.lay.indexOf(k); if (s < 0) return -1;
+  const [bx, by] = infOrg(s), [x, y] = infExitDoor(k); return (by + y) * W + bx + x;
 }
 // where a kid is: the cave's letter, its level and how many caves it has crossed
 function infLabel(p){
-  const k = Math.max(0, infCaveOfX(p.x)), lv = infLvl(k);
+  const k = Math.max(0, infCaveAt(p.x, p.y) ?? 0), lv = infLvl(k);
   return 'CUEVA ' + caveShort(INF_CAVES[infCi(k)].props.Name) + (lv ? '·' + (lv + 1) : '') + ' · ' + k;
 }
-function infOpen(i){
-  // in cooperative (and alone) a door once opened stays open, also if its cave has to be built again
-  const k = infChunkAt(i), r = INF.rec[k];
-  if (r && mode === 'coop' && r.g[0] + r.g[1] >= r.need) INF.open[k] = 1;
-}
-const infMagicAt = i => { const r = INF.rec[infChunkAt(i)]; return r ? r.mg : { state: 2 }; };
 // the run is over: how far they got, and the best so far
 let infBestEver = 0;
 try { infBestEver = +localStorage.getItem('boulder-duo-inf-best') || 0; } catch (e) {}
@@ -2993,12 +3080,7 @@ function initLevel(n){
 
 /* ---------- rules ---------- */
 function exitOpenFor(p, j){
-  if (INF) {
-    // the endless cave: the door of the cave that cell is in (or of the cave the kid is in or heading to)
-    const k = j !== undefined ? infChunkAt(j) : infCaveOfX(p.x), r = INF.rec[k];
-    if (!r) return false;
-    return !!INF.open[k] || (mode === 'versus' ? r.g[p.id] >= r.needEach : r.g[0] + r.g[1] >= r.need);
-  }
+  if (INF) return false;   // the endless cave has no exits to open: its ways are always open
   return mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
 }
 function exitVisiblyOpen(i){
@@ -3049,7 +3131,6 @@ let rockBlast = false, blastOne = false, hlDied = false;
 // friendly mode: a gem that falls on a kid's head is caught and counted
 function catchGem(p, i){
   const over = INF ? exitOpenFor(p, i) : mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
-  if (INF) { const r = INF.rec[infChunkAt(i)]; if (r) r.g[p.id]++; infOpen(i); }
   p.gems++; p.score += over ? gemExtra : gemVal; flyGem(p, i); sfx.gem();
   if (p.ai) { p.aiR += 5; p.epGems++; }
   grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
@@ -3229,11 +3310,9 @@ function stepPlayer(p){
   }
   else if (t === GEM) {
     const over = INF ? exitOpenFor(p, j) : mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
-    if (INF) { const r = INF.rec[infChunkAt(j)]; if (r) r.g[p.id]++; infOpen(j); }
     p.gems++; p.score += over ? gemExtra : gemVal; flyGem(p, j); go(); sfx.gem(); p.push = 0;
     if (p.ai) { p.aiR += 5; p.epGems++; }
   }
-  else if (t === EXIT && INF) { if (exitOpenFor(p, j)) infThrough(p, i, j); }
   else if (t === EXIT && exitOpenFor(p)) {
     if (p.ai && aiKind === 'astar') hlEnd('x');
     grid[i] = E; p.alive = false; p.exited = true; p.x += dx; p.y += dy;
@@ -3428,7 +3507,7 @@ function tick(){
     if (infAmN[s]) {
       r.am.ticks++;
       const to = !infAmCan[s] ? GEM : infAmN[s] >= 200 ? ROCK : -1;
-      if (to >= 0) { for (let y = 0; y < H; y++) for (let x = s*INF_CW; x < (s + 1)*INF_CW; x++) { const i = y*W + x; if (grid[i] === AMOEBA) { grid[i] = to; fall[i] = 0; aux[i] = 0; } } sfx.open(); }
+      if (to >= 0) { infTileEach(s, i => { if (grid[i] === AMOEBA) { grid[i] = to; fall[i] = 0; aux[i] = 0; } }); sfx.open(); }
     }
     if (r.mg.state === 1 && (r.mg.left -= tickMs) <= 0) r.mg.state = 2;
   });
@@ -3585,7 +3664,7 @@ function caveMenu(){
     if (n0 !== 1) setStartN(1);
     initLevel(1); state = 'menu';
     showOverlay(`<div class="card"><h2>CUEVA INFINITA</h2>
-      <p>Las cuevas A a P de Boulder Dash 1, una tras otra hacia la derecha, sin fin: cada vuelta en el nivel siguiente. Con los diamantes de cada cueva se abre su salida, que lleva a un pasillo y a la cueva siguiente. No hay reloj.</p>
+      <p>Las cuevas A a P de Boulder Dash 1, una tras otra sin fin (a la derecha, hacia arriba o hacia abajo), cada vuelta en el nivel siguiente. La salida de cada cueva está siempre abierta y un pasillo la une con la entrada de la siguiente: por ahí pasan los niños, las rocas y los enemigos. No hay reloj; los diamantes dan puntos.</p>
       <p>Récord: ${infBestEver} cuevas cruzadas.</p>
       <div class="row"><button id="bpdone" class="b1">LISTO</button></div></div>`);
     $('bpdone').onclick = menu; onEnter = menu; return;
@@ -4356,8 +4435,7 @@ function updateHud(){
   if (!players.length) return;
   const team = players[0].gems + players[1].gems;
   players.forEach((p, k) => {
-    const ir = INF && INF.rec[Math.max(0, infCaveOfX(p.x))];
-    if (ir) $('g'+k).textContent = mode === 'versus' ? `${ir.g[p.id]}/${ir.needEach}` : `${ir.g[0] + ir.g[1]}/${ir.need}`;
+    if (INF) $('g'+k).textContent = mode === 'versus' ? p.gems : team;   // the endless cave: just how many
     else $('g'+k).textContent = mode === 'versus' ? `${p.gems}/${needEach}` : `${team}/${need}`;
     $('l'+k).textContent = mode === 'train' && k === 0 ? '—' : p.exited ? 'SALIÓ' : p.ai || endless(p) ? '∞' : p.lives;
     $('s'+k).textContent = p.score;
@@ -4722,8 +4800,8 @@ function renderView(k){
       g.fillStyle = 'rgba(0,0,0,.7)'; g.fillRect((VW*T - w)/2, 8, w, 16);
       g.fillStyle = k ? '#ff8a4c' : '#5fb4ff'; g.fillText(msg, VW*T/2, 20);
     }
-    if (INF) { const c = infCaveOfX(p.x); if (infSeenC[k] !== c) { infSeenC[k] = c; exitSeen[k] = -1; } }
-    if (open && !p.exited && !p.ai) drawExitHint(g, k, ox, oy);
+    if (INF && !p.exited) drawExitHint(g, k, ox, oy);   // the endless cave: an arrow to the way on
+    else if (open && !p.exited && !p.ai) drawExitHint(g, k, ox, oy);
     if (mode !== 'train') drawMateHint(g, k, ox, oy);
     if (miniMap && mode !== 'train' && (CW < W || CH < H)) drawMiniMap(g, k);
     if (gDir !== 2) {
@@ -4751,7 +4829,7 @@ function drawExitHint(g, k, ox, oy){
   const i = INF ? infExitFor(players[k]) : grid.indexOf(EXIT); if (i < 0) return;
   const ex = ((i % W) * T + T/2 - ox) * ZOOM, ey = (Math.floor(i / W) * T + T/2 - oy) * ZOOM, vw = VW*T, vh = VH*T;
   g.save(); g.font = '8px "Press Start 2P", monospace'; g.textAlign = 'center';
-  if (frame - exitSeen[k] < 200) {
+  if (!INF && frame - exitSeen[k] < 200) {
     const msg = '¡SALIDA ABIERTA!', w = g.measureText(msg).width + 12;
     g.fillStyle = 'rgba(0,0,0,.75)'; g.fillRect((vw - w)/2, 30, w, 16);
     g.fillStyle = (frame >> 3) % 2 ? '#ffd24a' : '#fff'; g.fillText(msg, vw/2, 42);
@@ -4807,7 +4885,7 @@ function drawMiniMap(g, k){
     MMG.putImageData(mmImg, 0, 0);
   }
   // the endless cave: only the caves that are there (the window's empty slots are left out)
-  const MWc = INF ? Math.max(1, INF.lay.filter(k => k !== INF_NONE).length) * INF_CW : W;
+  const MWc = W;
   const vw = VW*T, s = Math.min(1.5, vw * .26 / MWc), w = MWc * s, h = H * s, x0 = vw - w - 3, y0 = 3;
   g.save(); g.globalAlpha = .82; g.imageSmoothingEnabled = false;
   g.fillStyle = '#000'; g.fillRect(x0 - 1, y0 - 1, w + 2, h + 2);

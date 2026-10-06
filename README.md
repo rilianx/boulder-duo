@@ -87,15 +87,16 @@ Mientras el otro jugador no se ve, una **flechita de su color** en el borde de l
 
 ## Cueva infinita
 
-Con el botón **CUEVA INFINITA** del menú se juega un camino sin fin hacia la derecha: las cuevas **A a P de Boulder Dash 1** (con la M\*, sin los intermedios), una tras otra; después de la P se vuelve a la A en el nivel siguiente (2, 3, 4 y 5). No hay reloj. Se juega solo, en cooperativo o en versus (también con dos celulares).
+Con el botón **CUEVA INFINITA** del menú se juega un camino sin fin: las cuevas **A a P de Boulder Dash 1** (con la M\*, sin los intermedios), una tras otra; después de la P se vuelve a la A en el nivel siguiente (2, 3, 4 y 5). No hay reloj y los diamantes dan puntos. Se juega solo, en cooperativo o en versus (también con dos celulares).
 
-- **La salida de cada cueva es la puerta:** se abre con los diamantes que pide esa cueva (entre los dos en cooperativo, cada uno los suyos en versus) y al entrar se sale al comienzo del **pasillo** que sigue: un trozo de tierra de 5 de ancho entre acero, con algunas rocas y una o dos luciérnagas, que va de la altura de la salida de la cueva a la de la **entrada** de la siguiente, por donde se entra a ella.
-- **Mapas locales:** en memoria solo están la cueva de cada jugador y la siguiente (a lo más 4 trozos de 45 columnas), así que uno puede quedarse atrás: las cuevas entre los dos no se guardan. Una cueva donde ya no queda nadie se olvida; si el que viene atrás llega a ella, se arma de nuevo (su puerta queda abierta si ya se había abierto, en cooperativo). No se puede volver a una cueva olvidada: la entrada desde ella es de acero.
+- **No siempre hacia la derecha:** cada cueva sigue por el lado al que está más cerca su salida (a la derecha, hacia arriba o hacia abajo), y nunca dos veces seguidas hacia arriba o hacia abajo. En una vuelta se baja después de la B y de la O y se sube después de la H y de la M.
+- **Salidas y entradas siempre abiertas:** de la salida de cada cueva sale un túnel de tierra hasta su borde, y de la entrada de la siguiente otro, y entre las dos cuevas un **pasillo** de 3 de ancho a través de una franja de acero, con tierra, algunas rocas y espacio y a veces una luciérnaga. Las une de verdad: por ahí pasan los niños, las rocas (que caen por los pasillos que bajan) y los enemigos.
+- **Mapas locales:** en memoria solo están el trozo (una cueva con su franja de acero) de cada jugador y el siguiente, en una ventana de 3 × 2 trozos de 45 × 27 casillas, así que uno puede quedarse atrás: los trozos entre los dos no se guardan y sus pasillos se cierran con acero. Un trozo donde ya no queda nadie se olvida; si el que viene atrás llega a él, se arma de nuevo.
 - **La ameba crece solo mientras hay alguien en su cueva**, con su propio reloj, y cada muro mágico lleva el suyo.
-- La velocidad es la del nivel de la cueva del que va más atrás. El marcador muestra la cueva y cuántas se han cruzado; se pierde al acabarse las vidas (en versus, cuando uno se queda sin vidas gana el que llegó más lejos) y se guarda el **récord** de cuevas cruzadas.
+- La velocidad es la del nivel de la cueva del que va más atrás. Una flecha en el borde de la pantalla apunta a la salida de la cueva. El marcador muestra la cueva y cuántas se han cruzado; se pierde al acabarse las vidas (en versus, cuando uno se queda sin vidas gana el que llegó más lejos) y se guarda el **récord** de cuevas cruzadas.
 - Morir no reinicia el camino: el niño reaparece donde cayó (también con 1 jugador).
 
-![El pasillo de partida y las cuevas A, B y C](docs/infinita.png)
+![Una vuelta completa: el pasillo de partida y las cuevas A a P, y la A de la vuelta siguiente](docs/infinita.png)
 
 ## Extras
 
