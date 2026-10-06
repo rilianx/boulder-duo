@@ -66,6 +66,9 @@ button.b1{border-color:var(--p1)} button.b2{border-color:var(--p2)}
 .views.solo.netguest .p1v{display:none} .views.solo.netguest .p2v{display:flex}
 .cavegrid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px;width:100%}
 .cavegrid button{font-size:10px;padding:8px 2px;position:relative} .cavegrid button span{position:absolute;top:-6px;right:-3px;color:#ffd84a;font-size:12px;text-shadow:0 0 3px #000} .cavegrid button.on{border-color:var(--warn);color:var(--warn)}
+.cavegrid.big{grid-template-columns:repeat(4,minmax(0,1fr))}
+.seed{align-items:center} .seed label{font-family:var(--display);font-size:12px;letter-spacing:.05em}
+.seed input{font-family:var(--display);font-size:14px;width:9em;padding:10px 8px;background:var(--panel);color:var(--ink);border:2px solid var(--line)}
 @media (max-height:600px){ .card .long{display:none} .card{gap:10px} .card .row button{padding:9px 12px} } .sets button.on{border-color:var(--warn);color:var(--warn)}
 .legend{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .legend > div{background:var(--panel);border:2px solid var(--line);padding:10px 12px;min-width:0}
@@ -1802,8 +1805,7 @@ const BIG_POCKETS = {
 const BIG_KINDS = ['cofre', 'gruta', 'monton', 'veta', 'boveda', 'columna', 'gruta', 'veta'];
 function genBigCave(seed, opts = {}){
   const BW = MAXW, BH = MAXH, MID = BW / 2;
-  const names = Object.keys(BIG_PATTERNS);
-  const R = rng(seed * 7919 + 13), pattern = opts.pattern || names[(seed - 1) % names.length];
+  const R = rng(seed * 7919 + 13), pattern = opts.pattern || bigPattern(seed);
   const g = new Uint8Array(BW * BH).fill(DIRT);
   const at = (x, y) => y * BW + x, inside = (x, y) => x > 0 && y > 0 && x < BW - 1 && y < BH - 1;
   // each half filled apart with cave A's recipe
@@ -1889,9 +1891,21 @@ function genBigCave(seed, opts = {}){
   return { w: BW, h: BH, grid: g, starts, exit, pattern, pockets: placed, gems, moved, added, seed };
 }
 // the big random caves as a cave set of their own: 16 maps, five levels of speed like the others
-const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200];
-CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, (_, i) =>
-  ({ props: { Name: 'Aleatoria ' + (i + 1) + '. Muros en ' + BIG_PATTERN_NAMES[Object.keys(BIG_PATTERNS)[i % 4]].toLowerCase(), Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
+/* The seed: the 16 caves of the set are the maps of seeds bigSeed .. bigSeed + 15 (1 to 16 unless one writes
+   another in ELEGIR CUEVA). Two phones playing together use the host's. */
+const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200], BIG_SEED_MAX = 999999;
+CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
+  ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
+let bigSeed = 1;
+const bigPattern = seed => Object.keys(BIG_PATTERNS)[(seed - 1) % 4];
+function setBigSeed(v, save){
+  bigSeed = Math.max(1, Math.min(BIG_SEED_MAX, Math.floor(+v) || 1));
+  CAVE_SETS.rnd.caves.forEach((c, i) => { c.props.Name = 'Aleatoria ' + (bigSeed + i) + '. Muros en ' + BIG_PATTERN_NAMES[bigPattern(bigSeed + i)].toLowerCase(); });
+  if (save) try { localStorage.setItem('boulder-duo-bigseed', String(bigSeed)); } catch (e) {}
+}
+try { setBigSeed(localStorage.getItem('boulder-duo-bigseed') || 1); } catch (e) { setBigSeed(1); }
+// what a cave is called for its star and what the PC learnt there: a random one by its seed, so a new seed is a new cave
+const caveKey = i => caveSet === 'rnd' ? 'rnd:s' + (bigSeed + i) : caveSet + ':' + i;
 let caveSet = 'bd2';
 try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v]) caveSet = v; } catch (e) {}
 const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n - 1) % cs.length], lvl: Math.min(4, Math.floor((n - 1) / cs.length)) }; };
@@ -2471,7 +2485,7 @@ function bdEl(tok){
    to). Stars are kept between games, per cave set, and shown in the cave picker. */
 let starIdx = -1, starsGot = {};
 try { starsGot = JSON.parse(localStorage.getItem('boulder-duo-stars') || '{}') || {}; } catch (e) {}
-const starKey = n => caveSet + ':' + ((n - 1) % CAVE_SETS[caveSet].caves.length);
+const starKey = n => caveKey((n - 1) % CAVE_SETS[caveSet].caves.length);
 /* Where the star goes. In a cave with enemies, one of them — the farthest from the entrance — is the "boss": it
    wears a little gold crown and drops the star when it is blown up (by a rock, or by touching someone). In a cave
    without enemies the star is put somewhere hard to get: far away, under a rock (taking it lets the rock fall) and
@@ -2573,7 +2587,7 @@ function genCave(n){
 
 // a big random cave (the map is already W x H = 80 x 44, see initLevel)
 function genBig(n, lvl, P){
-  const c = genBigCave((n - 1) % BIG_N + 1);
+  const c = genBigCave(bigSeed + (n - 1) % BIG_N);
   grid = c.grid; fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
   resetCaveRules(n);
@@ -3155,8 +3169,10 @@ function caveMenu(){
   initLevel(n0); state = 'menu';
   showOverlay(`<div class="card">
     <h2>ELEGIR CUEVA</h2>
-    <div class="cavegrid">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}${starsGot[caveSet + ':' + i] ? ' got' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}${starsGot[caveSet + ':' + i] ? '<span>★</span>' : ''}</button>`).join('')}</div>
-    <p>Estrellas: ${cs.filter((c, i) => starsGot[caveSet + ':' + i]).length} de ${cs.length}</p>
+    <div class="cavegrid${caveSet === 'rnd' ? ' big' : ''}">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}${starsGot[caveKey(i)] ? ' got' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}${starsGot[caveKey(i)] ? '<span>★</span>' : ''}</button>`).join('')}</div>
+    <p>Estrellas: ${cs.filter((c, i) => starsGot[caveKey(i)]).length} de ${cs.length}</p>
+    ${caveSet === 'rnd' ? `<div class="row seed"><label for="bseed">SEMILLA</label><input id="bseed" type="number" inputmode="numeric" min="1" max="${BIG_SEED_MAX}" value="${bigSeed}"><button id="bseedok">USAR</button><button id="bseedrnd">AL AZAR</button></div>
+    <p>Las 16 cuevas son las semillas ${bigSeed} a ${bigSeed + BIG_N - 1}: la misma semilla da siempre el mismo mapa.</p>` : ''}
     <div class="row sets lvls">${[0,1,2,3,4].map(l => `<button data-l="${l}" class="${l === lvl ? 'on' : ''}">NIVEL ${l + 1}</button>`).join('')}</div>
     <p>${caveLabel(n0)}${caveTitle(n0) ? ' · ' + caveTitle(n0) : ''} · ${need} diamantes · ${timeLeft} s</p>
     <div class="row"><button id="bpdone" class="b1">LISTO</button></div>
@@ -3164,6 +3180,13 @@ function caveMenu(){
   ov.querySelectorAll('.cavegrid button').forEach(b => b.onclick = () => { setStartN(+b.dataset.i + 1 + lvl * cs.length); caveMenu(); });
   ov.querySelectorAll('.lvls button').forEach(b => b.onclick = () => { setStartN(idx + 1 + +b.dataset.l * cs.length); caveMenu(); });
   $('bpdone').onclick = menu; onEnter = menu;
+  if (caveSet === 'rnd') {
+    // a new seed: the first of its 16 caves, at the same level
+    const useSeed = v => { setBigSeed(v, true); setStartN(1 + lvl * cs.length); caveMenu(); };
+    $('bseedok').onclick = () => useSeed($('bseed').value);
+    $('bseedrnd').onclick = () => useSeed(1 + Math.floor(Math.random() * BIG_SEED_MAX));
+    onEnter = () => document.activeElement === $('bseed') ? useSeed($('bseed').value) : menu();
+  }
   const sel = ov.querySelector('.cavegrid .on'); if (sel) sel.focus({ preventScroll: true });
 }
 
@@ -3581,7 +3604,7 @@ function astarAct(p){
 const HL = { Q: new Map(), runs: {}, best: {}, cur: null, saveAt: 0 };
 try { const o = JSON.parse(localStorage.getItem('boulder-duo-hl') || 'null'); if (o) { HL.Q = new Map(o.q); HL.runs = o.runs || {}; HL.best = o.best || {}; } } catch (e) {}
 function hlSave(){ try { localStorage.setItem('boulder-duo-hl', JSON.stringify({ q: [...HL.Q], runs: HL.runs, best: HL.best })); } catch (e) {} }
-const hlCave = () => caveSet + ':' + ((level - 1) % CAVE_SETS[caveSet].caves.length) + ':' + caveOf(level).lvl;
+const hlCave = () => caveKey((level - 1) % CAVE_SETS[caveSet].caves.length) + ':' + caveOf(level).lvl;
 const hlTrain = () => mode === 'train' && aiKind === 'astar';
 function hlCandidates(p, C, M){
   const g = grid, N = W * H, out = [];
@@ -4417,6 +4440,10 @@ const KEYMAP = {
 };
 window.addEventListener('keydown', e => {
   audioOn();
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') {   // typing a seed: only Enter means something
+    if ((e.code === 'Enter' || e.code === 'NumpadEnter') && onEnter) { e.preventDefault(); onEnter(); }
+    return;
+  }
   const m = KEYMAP[e.code];
   if (m) {
     e.preventDefault();
@@ -4723,7 +4750,7 @@ function netGot(o){
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
-    caveSet = o.set; friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
+    caveSet = o.set; if (o.bs) setBigSeed(o.bs); friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
     startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; netNewCave(); return;
   }
   if (o.t === 'lv') {
@@ -4820,7 +4847,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
+  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, bs: bigSeed, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
