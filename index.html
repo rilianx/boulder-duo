@@ -1802,6 +1802,54 @@ const BIG_POCKETS = {
   columna: { w: 1, h: 5, make(set) { for (let y = 0; y < 4; y++) set(0, y, ROCK); set(0, 4, GEM); } },
 };
 const BIG_KINDS = ['cofre', 'gruta', 'monton', 'veta', 'boveda', 'columna', 'gruta', 'veta'];
+/* What every big cave does at the end: every diamond reachable from a kid's start (a lost one moves to a reachable
+   spot of its half), the exit reachable by both, and both halves with as many diamonds. */
+function bigFinish(g, starts, exit, R, keepClear, opts = {}){
+  const BW = MAXW, BH = MAXH, MID = BW / 2;
+  const at = (x, y) => y * BW + x;
+  // where each kid can walk to (dirt, space, diamonds, past a firefly; a rock only if it can be pushed aside into space)
+  const pushable = (j, d) => g[j] === ROCK && (d === 1 || d === -1) && g[j + d] === E;
+  const reach = (sx, sy) => {
+    const seen = new Uint8Array(BW * BH), q = [at(sx, sy)]; seen[q[0]] = 1;
+    for (let h = 0; h < q.length; h++) for (const d of [1, -1, BW, -BW]) {
+      const j = q[h] + d, t = g[j];
+      if (!seen[j] && (t === E || t === DIRT || t === GEM || t === EXIT || t === FIRE || pushable(j, d))) { seen[j] = 1; q.push(j); }
+    }
+    return seen;
+  };
+  const half = i => (i % BW) < MID ? 0 : 1;
+  let moved = 0;
+  for (let round = 0; round < 4; round++) {
+    const rs = starts.map(([x, y]) => reach(x, y));
+    const ok = i => rs[0][i] || rs[1][i];
+    // the exit must be reachable by both: open a way up from it if not
+    if (!rs[0][at(exit[0], exit[1])] || !rs[1][at(exit[0], exit[1])]) {
+      if (opts.openUp && !round) { opts.openUp(); continue; }   // first, the layout's own way (the building opens its doors)
+      for (let y = exit[1] - 1; y > 0; y--) { const i = at(exit[0], y); if (g[i] === WALL || g[i] === ROCK) g[i] = DIRT; }
+      continue;
+    }
+    // a diamond nobody can walk to goes to a reachable dirt spot of its half
+    const lost = []; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && !ok(i)) lost.push(i);
+    if (!lost.length) break;
+    for (const i of lost) {
+      g[i] = DIRT;
+      for (let tries = 0; tries < 400; tries++) {
+        const j = at(1 + Math.floor(R() * (MID - 2)) + (half(i) ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
+        if (g[j] === DIRT && ok(j) && !keepClear.has(j)) { g[j] = GEM; moved++; break; }
+      }
+    }
+  }
+  // fair: the poorer half gets diamonds until both have as many
+  const count = s => { let n = 0; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && half(i) === s) n++; return n; };
+  const rs = starts.map(([x, y]) => reach(x, y));
+  let added = 0;
+  for (let guard = 0; guard < 400 && count(0) !== count(1); guard++) {
+    const s = count(0) < count(1) ? 0 : 1, j = at(1 + Math.floor(R() * (MID - 2)) + (s ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
+    if (g[j] === DIRT && rs[s][j] && !keepClear.has(j)) { g[j] = GEM; added++; }
+  }
+  const gems = count(0) + count(1);
+  return { gems, moved, added };
+}
 function genBigCave(seed, opts = {}){
   const BW = MAXW, BH = MAXH, MID = BW / 2;
   const R = rng(seed * 7919 + 13), pattern = opts.pattern || bigPattern(seed);
@@ -1848,46 +1896,121 @@ function genBigCave(seed, opts = {}){
   // steel all round
   for (let x = 0; x < BW; x++) { g[at(x, 0)] = STEEL; g[at(x, BH - 1)] = STEEL; }
   for (let y = 0; y < BH; y++) { g[at(0, y)] = STEEL; g[at(BW - 1, y)] = STEEL; }
-  // where each kid can walk to (dirt, space and diamonds; nothing moves)
-  const reach = (sx, sy) => {
-    const seen = new Uint8Array(BW * BH), q = [at(sx, sy)]; seen[q[0]] = 1;
-    for (let h = 0; h < q.length; h++) for (const d of [1, -1, BW, -BW]) {
-      const j = q[h] + d, t = g[j];
-      if (!seen[j] && (t === E || t === DIRT || t === GEM || t === EXIT)) { seen[j] = 1; q.push(j); }
-    }
-    return seen;
+  const f = bigFinish(g, starts, exit, R, keepClear);
+  return { w: BW, h: BH, grid: g, starts, exit, pattern, pockets: placed, ...f, seed };
+}
+/* Big random caves of type B, "el edificio": Boulder Dash 1's cave B (Rooms) four times over. A building of six
+   floors of little brick rooms the size of cave B's, ten to a floor, with cave B's fill (mostly dirt, a fifth
+   boulders, a few diamonds and fireflies) and its colours.
+   - Each floor is crossed by a corridor of empty space, like cave B's rows 3, 9 and 16, which opens a door in each
+     wall it meets; a few doors stay shut.
+   - Stairs: in each half an empty shaft goes down from each floor's corridor to the next, on one side and then on
+     the other, so the way down zigzags. In the middle, the lift: a shaft of dirt from the roof to the hall, with a
+     door on every floor.
+   - J1 starts on the roof at the left, J2 at the right; the exit is the street door, in the hall at the bottom.
+   - Some rooms are special, the same kinds in both halves (one the mirror of the other): a vault (diamonds behind
+     boulders, push them to get in), a store room (full of boulders, a diamond at the back), a guard (a firefly
+     shut in with diamonds; drop a boulder on it), an empty room (diamonds on the floor).
+   - Building styles, one after the other: offices (all rooms alike), flats (each floor its own widths), tower
+     (narrow rooms near the middle) and pyramid (floors shorter going up, earth around it).
+   The walls are the same in both halves; the fill is not, and the diamonds are evened up as in type A. */
+const BIG_STYLES = ['oficinas', 'departamentos', 'torre', 'piramide'];
+const BIG_STYLE_NAMES = { oficinas: 'OFICINAS', departamentos: 'DEPARTAMENTOS', torre: 'TORRE', piramide: 'PIRÁMIDE' };
+const BIG_ROOM_KINDS = ['normal', 'normal', 'normal', 'normal', 'normal', 'normal', 'boveda', 'boveda', 'bodega', 'guardia', 'vacia'];
+function genBigB(seed, opts = {}){
+  const BW = MAXW, BH = MAXH, MID = BW / 2;
+  const R = rng(seed * 6007 + 29), style = opts.style || BIG_STYLES[(seed - 1) % 4];
+  const g = new Uint8Array(BW * BH).fill(DIRT);
+  const at = (x, y) => y * BW + x, inside = (x, y) => x > 0 && y > 0 && x < BW - 1 && y < BH - 1;
+  const both = (u, y, t) => { for (const x of [u, BW - 1 - u]) if (inside(x, y)) g[at(x, y)] = t; };
+  // cave B's fill: out of 256, under 2 a firefly (here 1: the building is big), under 9 a diamond, under 50 a
+  // boulder, under 60 space
+  for (let y = 1; y < BH - 1; y++) for (let x = 1; x < BW - 1; x++) {
+    const r = R() * 256;
+    g[at(x, y)] = r < 1 ? FIRE : r < 9 ? GEM : r < 50 ? ROCK : r < 60 ? E : DIRT;
+  }
+  // six floors: walls at these rows, a corridor a little below each ceiling; the hall (floor 5) is the tallest
+  const FLOOR = [7, 14, 21, 28, 35], CORR = [3, 10, 17, 24, 31, 38], SHAFT = MID - 1, SHAFT_WALL = MID - 2;
+  const top = f => f ? FLOOR[f - 1] + 1 : 1, bot = f => f < 5 ? FLOOR[f] - 1 : BH - 2;
+  const uMin = f => style === 'piramide' ? 1 + (5 - f) * 4 : 1;      // where the building starts on floor f (half coords)
+  const wallsOf = f => {
+    if (style === 'torre') return [12, 21, 28, 33];
+    if (style === 'departamentos') { const w = []; for (let u = 1 + 4 + Math.floor(R() * 6); u <= SHAFT_WALL - 4; u += 4 + Math.floor(R() * 6)) w.push(u); return w; }
+    return [8, 16, 24, 31].filter(u => u > uMin(f) + 3);
   };
-  const half = i => (i % BW) < MID ? 0 : 1;
-  let moved = 0;
-  for (let round = 0; round < 3; round++) {
-    const rs = starts.map(([x, y]) => reach(x, y));
-    const ok = i => rs[0][i] || rs[1][i];
-    // the exit must be reachable by both: open a way up from it if not
-    if (!rs[0][at(exit[0], exit[1])] || !rs[1][at(exit[0], exit[1])]) {
-      for (let y = exit[1] - 1; y > 0; y--) { const i = at(exit[0], y); if (g[i] === WALL || g[i] === ROCK) g[i] = DIRT; }
-      continue;
-    }
-    // a diamond nobody can walk to goes to a reachable dirt spot of its half
-    const lost = []; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && !ok(i)) lost.push(i);
-    if (!lost.length) break;
-    for (const i of lost) {
-      g[i] = DIRT;
-      for (let tries = 0; tries < 400; tries++) {
-        const j = at(1 + Math.floor(R() * (MID - 2)) + (half(i) ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
-        if (g[j] === DIRT && ok(j) && !keepClear.has(j)) { g[j] = GEM; moved++; break; }
+  const doors = [];   // corridor doors, to open them all if the way down got shut
+  const rooms = [];
+  for (let f = 0; f < 6; f++) {
+    const u0 = uMin(f), ws = f === 5 ? wallsOf(f).filter(u => u < 24) : wallsOf(f);   // the hall: wide in the middle
+    // the floor above this one (its ceiling) and the outer wall
+    if (f) for (let u = u0 - (style === 'piramide' ? 1 : 0); u <= SHAFT; u++) both(u, FLOOR[f - 1], WALL);
+    if (u0 > 1) for (let y = top(f) - (f ? 1 : 0); y <= bot(f); y++) both(u0 - 1, y, WALL);
+    for (const u of ws) for (let y = top(f); y <= bot(f); y++) both(u, y, WALL);
+    if (f < 5) for (let y = top(f); y <= bot(f); y++) both(SHAFT_WALL, y, WALL);
+    // the corridor, through every room of the floor; most doors open
+    for (let u = u0; u < SHAFT_WALL; u++) if (!ws.includes(u)) both(u, CORR[f], E);
+    for (const u of [...ws, ...(f < 5 ? [SHAFT_WALL] : [])]) { doors.push([u, CORR[f]]); if (u === SHAFT_WALL || R() < .8) both(u, CORR[f], E); }
+    if (u0 > 1 && f === 0) both(u0 - 1, CORR[f], E);   // the pyramid's roof room opens to the earth around it
+    const edges = [u0 - 1, ...ws, f < 5 ? SHAFT_WALL : MID];
+    for (let k = 0; k + 1 < edges.length; k++) rooms.push({ f, a: edges[k], b: edges[k + 1], y0: top(f), y1: bot(f) });
+  }
+  // the lift: dirt from the roof to the hall, through every floor
+  for (let y = 1; y < BH - 1; y++) both(SHAFT, y, DIRT);
+  // stairs: from each corridor down to the next one, on alternate sides (inside the floor below too)
+  for (let f = 0; f < 5; f++) {
+    let u = (f % 2 ? 26 : 4) + Math.floor(R() * 3);
+    u = Math.max(u, uMin(f) + 1);
+    for (let y = CORR[f]; y <= CORR[f + 1]; y++) both(u, y, E);
+  }
+  // the special rooms: a kind each, the same in the mirrored room, filled apart
+  const starts = [[3, 2], [BW - 4, 2]], exit = [R() < .5 ? MID - 1 : MID, BH - 2];
+  const kinds = [];
+  for (const rm of rooms) {
+    const w = rm.b - rm.a - 1;
+    if (rm.f === 5 && rm.b >= 24) { kinds.push('hall'); continue; }
+    if ((rm.f === 0 && rm.a < 8) || w < 3) { kinds.push('normal'); continue; }
+    const k = BIG_ROOM_KINDS[Math.floor(R() * BIG_ROOM_KINDS.length)];
+    kinds.push(k);
+    for (const side of [0, 1]) {
+      const X = u => side ? BW - 1 - u : u, cy = CORR[rm.f], put = (u, y, t) => { if (inside(X(u), y)) g[at(X(u), y)] = t; };
+      const inRoom = (fn) => { for (let y = rm.y0; y <= rm.y1; y++) for (let u = rm.a + 1; u < rm.b; u++) fn(u, y); };
+      if (k === 'boveda') {
+        // diamonds under a lid of boulders, below the corridor, with one way in at an end: take one and the lid
+        // above it comes down
+        const gap = R() < .5 ? rm.a + 1 : rm.b - 1;
+        inRoom((u, y) => { if (y === cy + 1) put(u, y, u === gap ? DIRT : ROCK); else if (y === rm.y1) put(u, y, GEM); else if (y > cy + 1) put(u, y, DIRT); });
+      } else if (k === 'bodega') {
+        // boulders resting on the floor, a diamond at the back
+        inRoom((u, y) => { if (y > cy) put(u, y, ROCK); });
+        put(R() < .5 ? rm.a + 1 : rm.b - 1, rm.y1, GEM);
+      } else if (k === 'guardia') {
+        // a firefly shut in with a few diamonds: its doors are dirt, which it cannot cross and the kids can dig
+        inRoom((u, y) => put(u, y, E));
+        put(rm.a + 1 + Math.floor(R() * w), cy, FIRE);
+        for (let u = rm.a + 1; u < rm.b; u += 2) put(u, rm.y1, GEM);
+        for (const u of [rm.a, rm.b]) if (g[at(X(u), cy)] === E) put(u, cy, DIRT);
+      } else if (k === 'vacia') {
+        inRoom((u, y) => put(u, y, E));
+        for (let u = rm.a + 1; u < rm.b; u++) if (R() < .5) put(u, rm.y1, GEM);
       }
     }
   }
-  // fair: the poorer half gets diamonds until both have as many
-  const count = s => { let n = 0; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && half(i) === s) n++; return n; };
-  const rs = starts.map(([x, y]) => reach(x, y));
-  let added = 0;
-  for (let guard = 0; guard < 400 && count(0) !== count(1); guard++) {
-    const s = count(0) < count(1) ? 0 : 1, j = at(1 + Math.floor(R() * (MID - 2)) + (s ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
-    if (g[j] === DIRT && rs[s][j] && !keepClear.has(j)) { g[j] = GEM; added++; }
+  // the roof where the kids start, and the hall around the exit: clear, nothing above them, no fireflies near
+  const keepClear = new Set();
+  starts.forEach(([x, y]) => {
+    for (let dy = -1; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (inside(x + dx, y + dy)) { g[at(x + dx, y + dy)] = DIRT; keepClear.add(at(x + dx, y + dy)); }
+    g[at(x, y)] = E;
+  });
+  for (let i = 0; i < BW * BH; i++) if (g[i] === FIRE) {
+    const x = i % BW, y = i / BW | 0;
+    if (starts.some(([sx, sy]) => Math.abs(sx - x) + Math.abs(sy - y) < 12) || y >= FLOOR[4]) g[i] = DIRT;
   }
-  const gems = count(0) + count(1);
-  return { w: BW, h: BH, grid: g, starts, exit, pattern, pockets: placed, gems, moved, added, seed };
+  g[at(exit[0], exit[1])] = EXIT; g[at(exit[0], exit[1] - 1)] = DIRT;
+  for (let x = 0; x < BW; x++) { g[at(x, 0)] = STEEL; g[at(x, BH - 1)] = STEEL; }
+  for (let y = 0; y < BH; y++) { g[at(0, y)] = STEEL; g[at(BW - 1, y)] = STEEL; }
+  const openUp = () => { for (const [u, y] of doors) both(u, y, E); };
+  const fin = bigFinish(g, starts, exit, R, keepClear, { openUp });
+  return { w: BW, h: BH, grid: g, starts, exit, style, rooms: rooms.map((r, i) => ({ ...r, kind: kinds[i] })), ...fin, seed };
 }
 // the big random caves as a cave set of their own: 16 maps, five levels of speed like the others
 /* The seed: one picks a single cave by its seed in ELEGIR CUEVA (or one at random); winning it goes on to the next
@@ -1895,24 +2018,39 @@ function genBigCave(seed, opts = {}){
 const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200], BIG_SEED_MAX = 999999;
 CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
   ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
-let bigSeed = 1;
+/* And the type, with the button next to the seed: A, the cave (like BD1's cave A), or B, the building (cave B). */
+let bigSeed = 1, bigType = 'A';
 const bigPattern = seed => Object.keys(BIG_PATTERNS)[(seed - 1) % 4];
+const bigStyle = seed => BIG_STYLES[(seed - 1) % 4];
+function bigNames(){
+  CAVE_SETS.rnd.caves.forEach((c, i) => {
+    const sd = bigSeed + i;
+    c.props.Name = bigType === 'B' ? 'Edificio ' + sd + '. ' + BIG_STYLE_NAMES[bigStyle(sd)][0] + BIG_STYLE_NAMES[bigStyle(sd)].slice(1).toLowerCase()
+                                   : 'Aleatoria ' + sd + '. Muros en ' + BIG_PATTERN_NAMES[bigPattern(sd)].toLowerCase();
+    c.props.Colors = CAVE_SETS.bd1.caves[bigType === 'B' ? 1 : 0].props.Colors;   // cave B's colours for the building
+  });
+}
 function setBigSeed(v, save){
-  bigSeed = Math.max(1, Math.min(BIG_SEED_MAX, Math.floor(+v) || 1));
-  CAVE_SETS.rnd.caves.forEach((c, i) => { c.props.Name = 'Aleatoria ' + (bigSeed + i) + '. Muros en ' + BIG_PATTERN_NAMES[bigPattern(bigSeed + i)].toLowerCase(); });
+  bigSeed = Math.max(1, Math.min(BIG_SEED_MAX, Math.floor(+v) || 1)); bigNames();
   if (save) try { localStorage.setItem('boulder-duo-bigseed', String(bigSeed)); } catch (e) {}
 }
+function setBigType(t, save){
+  bigType = t === 'B' ? 'B' : 'A'; bigNames();
+  if (save) try { localStorage.setItem('boulder-duo-bigtype', bigType); } catch (e) {}
+}
+try { bigType = localStorage.getItem('boulder-duo-bigtype') === 'B' ? 'B' : 'A'; } catch (e) {}
 try { setBigSeed(localStorage.getItem('boulder-duo-bigseed') || 1); } catch (e) { setBigSeed(1); }
-// what a cave is called for its star and what the PC learnt there: a random one by its seed, so a new seed is a new cave
-const caveKey = i => caveSet === 'rnd' ? 'rnd:s' + (bigSeed + i) : caveSet + ':' + i;
+// what a cave is called for its star and what the PC learnt there: a random one by its type and seed, so a new seed
+// is a new cave
+const caveKey = i => caveSet === 'rnd' ? 'rnd:' + (bigType === 'B' ? 'b' : 's') + (bigSeed + i) : caveSet + ':' + i;
 let caveSet = 'bd2';
 try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v]) caveSet = v; } catch (e) {}
 const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n - 1) % cs.length], lvl: Math.min(4, Math.floor((n - 1) / cs.length)) }; };
 function caveLabel(n){
   if (mode === 'train' && !hlTrain()) return 'NIVEL ' + n;
   const { cave, lvl } = caveOf(n), nm = cave.props.Name || '';
-  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^Aleatoria (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
-  return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : rm ? 'ALEATORIA ' + rm[1] : nm.toUpperCase()) + lv;
+  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(Aleatoria|Edificio) (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
+  return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : rm ? rm[1].toUpperCase() + ' ' + rm[2] : nm.toUpperCase()) + lv;
 }
 const caveTitle = n => { if (mode === 'train' && !hlTrain()) return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
 
@@ -2586,7 +2724,7 @@ function genCave(n){
 
 // a big random cave (the map is already W x H = 80 x 44, see initLevel)
 function genBig(n, lvl, P){
-  const c = genBigCave(bigSeed + (n - 1) % BIG_N);
+  const c = (bigType === 'B' ? genBigB : genBigCave)(bigSeed + (n - 1) % BIG_N);
   grid = c.grid; fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
   resetCaveRules(n);
@@ -3171,6 +3309,7 @@ function caveMenu(){
   showOverlay(`<div class="card">
     <h2>ELEGIR CUEVA</h2>
     ${caveSet === 'rnd' ? `<div class="row seed"><label for="bseed">SEMILLA</label><input id="bseed" type="number" inputmode="numeric" min="1" max="${BIG_SEED_MAX}" value="${bigSeed}"><button id="bseedok">USAR</button><button id="bseedrnd">AL AZAR</button></div>
+    <div class="row"><button id="btype" class="on">TIPO: ${bigType === 'B' ? 'EDIFICIO (B)' : 'CUEVA (A)'}</button></div>
     <p>La misma semilla da siempre el mismo mapa${starsGot[caveKey(0)] ? ' (★ ya tienes su estrella)' : ''}. Al ganarla se sigue con la siguiente.</p>` : `<div class="cavegrid">${cs.map((c, i) => `<button data-i="${i}" class="${i === idx ? 'on' : ''}${starsGot[caveKey(i)] ? ' got' : ''}" title="${c.props.Name}">${caveShort(c.props.Name)}${starsGot[caveKey(i)] ? '<span>★</span>' : ''}</button>`).join('')}</div>
     <p>Estrellas: ${cs.filter((c, i) => starsGot[caveKey(i)]).length} de ${cs.length}</p>`}
     <div class="row sets lvls">${[0,1,2,3,4].map(l => `<button data-l="${l}" class="${l === lvl ? 'on' : ''}">NIVEL ${l + 1}</button>`).join('')}</div>
@@ -3184,6 +3323,7 @@ function caveMenu(){
     const useSeed = v => { setBigSeed(v, true); setStartN(1 + lvl * cs.length); caveMenu(); };
     $('bseedok').onclick = () => useSeed($('bseed').value);
     $('bseedrnd').onclick = () => useSeed(1 + Math.floor(Math.random() * BIG_SEED_MAX));
+    $('btype').onclick = () => { setBigType(bigType === 'B' ? 'A' : 'B', true); caveMenu(); };
     onEnter = () => document.activeElement === $('bseed') ? useSeed($('bseed').value) : menu();
   }
   const sel = ov.querySelector('.cavegrid .on'); if (sel) sel.focus({ preventScroll: true });
@@ -4749,7 +4889,7 @@ function netGot(o){
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
-    caveSet = o.set; if (o.bs) setBigSeed(o.bs); friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
+    caveSet = o.set; if (o.bt) setBigType(o.bt); if (o.bs) setBigSeed(o.bs); friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
     startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; netNewCave(); return;
   }
   if (o.t === 'lv') {
@@ -4846,7 +4986,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, bs: bigSeed, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
+  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, bs: bigSeed, bt: bigType, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }

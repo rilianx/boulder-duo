@@ -69,6 +69,18 @@ Con el botón **CUEVAS ALEATORIAS GIGANTES** del menú se juega en cuevas de **8
 - **Para salir** hay que juntar el **38 %** de los diamantes (entre los dos, o solo). En versus cada uno necesita el 60 % de eso, como en las demás cuevas.
 - **Más tiempo:** 360 s en el nivel 1, y luego 320, 280, 240 y 200. Solo, la mitad más.
 
+**Dos tipos**, con el botón **TIPO** junto a la semilla: **CUEVA (A)**, la de arriba, o **EDIFICIO (B)**, la cueva B de Boulder Dash 1 («Rooms») por cuatro, con sus colores:
+
+- Un edificio de **6 pisos con 10 piezas de ladrillo por piso**, del tamaño de las de la cueva B, y su relleno: casi todo tierra, una quinta parte rocas, algunos diamantes y unas pocas luciérnagas (ninguna cerca de la partida ni en el piso de abajo).
+- Cada piso lo cruza un **pasillo** vacío, como las filas 3, 9 y 16 de la cueva B, que abre una puerta en cada muro; algunas puertas quedan cerradas.
+- **Escaleras:** en cada mitad, un pozo vacío baja de un pasillo al siguiente, una vez a un lado y otra al otro, así que el camino hace zigzag. Al medio, el **ascensor**: un pozo de tierra de la azotea al vestíbulo, con puerta en cada piso.
+- J1 parte en la azotea a la izquierda y J2 a la derecha; la salida es la **puerta de calle**, en el vestíbulo de abajo al medio.
+- **Piezas especiales**, del mismo tipo en ambas mitades: **bóveda** (diamantes bajo una tapa de rocas, con una sola entrada en un extremo: al sacar uno, la tapa se viene abajo), **bodega** (llena de rocas, con un diamante al fondo), **guardia** (una luciérnaga encerrada con diamantes; sus puertas son de tierra, que ella no cruza) y **pieza vacía** (diamantes en el piso).
+- **Estilos**, uno tras otro según la semilla: **oficinas** (todas las piezas iguales), **departamentos** (cada piso con sus anchos), **torre** (piezas angostas cerca del medio) y **pirámide** (los pisos más cortos hacia arriba, con tierra alrededor).
+- Los muros son iguales en ambas mitades y el relleno no; los diamantes se emparejan y se revisa que se alcancen (contando las rocas que se pueden empujar de lado), como en el tipo A.
+
+![Edificios 1 a 4](docs/edificios.png)
+
 Mientras el otro jugador no se ve, una **flechita de su color** en el borde de la pantalla apunta hacia él (en todas las cuevas). Con el botón **MINIMAPA** del menú, cada tablero muestra en una esquina la cueva entera, los dos niños, la salida cuando se abre y el pedazo que se ve en pantalla (en la oscuridad muestra solo a los niños y la salida).
 
 ![Cuevas aleatorias 1 a 4](docs/aleatorias.png)
