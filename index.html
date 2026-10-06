@@ -1401,11 +1401,15 @@ const AIW = 17, AIH = 12;               // the PC's view always stays this size
 let zoomLevel = 1, ZOOM = 1, CW = VW, CH = VH;
 try { const z = +localStorage.getItem('boulder-duo-zoomv'); zoomLevel = z === 0 && localStorage.getItem('boulder-duo-zoomv') === '0' ? 0 : z >= .25 && z <= 2 ? z : localStorage.getItem('boulder-duo-zoom') === '1' ? 1.25 : 1; } catch (e) {}
 const zoomFit = () => Math.min(VW / W, VH / H);                 // the whole cave on screen
-const zoomMin = () => Math.min(1, zoomFit());
+/* How far out it goes: never more than about a normal cave's worth of cells on a board (drawing more is slow on a
+   phone). A normal cave can always be seen whole; a big one only down to the quarter step that keeps to that. */
+const ZOOM_CELLS = 1150;
+const wholeOK = () => W * H <= ZOOM_CELLS;
+const zoomMin = () => wholeOK() ? Math.min(1, zoomFit()) : Math.min(1, Math.ceil(Math.sqrt(VW * VH / ZOOM_CELLS) * 4) / 4);
 function setZoom(z, save, free){
   // quarter steps (crisp tiles); the last step out is exactly the whole cave. While pinching (free) it follows the
   // fingers exactly and settles on the nearest step when they let go. The view glides to it (updateCams).
-  zoomLevel = free ? clamp(z, zoomMin(), 2) : z <= zoomFit() + .125 ? 0 : clamp(Math.round(z * 4) / 4, zoomMin(), 2);
+  zoomLevel = free ? clamp(z, zoomMin(), 2) : z <= zoomFit() + .125 && wholeOK() ? 0 : clamp(Math.round(z * 4) / 4, zoomMin(), 2);
   if (save) try { localStorage.setItem('boulder-duo-zoomv', String(zoomLevel)); } catch (e) {}
 }
 /* Upright phone: the boards fill the screen. The view keeps tiles about 32 px wide (12 across on most phones)
@@ -3281,7 +3285,7 @@ function menu(){
   $('bai').onclick = () => { aiKind = aiKind === 'astar' ? 'q' : 'astar'; try { localStorage.setItem('boulder-duo-ai', aiKind); } catch (e) {} menu(); };
   $('binf').onclick = () => { infLives = !infLives; try { localStorage.setItem('boulder-duo-inflives', infLives ? '1' : '0'); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
-  $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5, 0].filter(z => z === 0 || z > zoomFit() + .125); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] ?? 1, true); menu(); };
+  $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5, 0].filter(z => z === 0 ? wholeOK() : z > zoomFit() + .125 && z >= zoomMin()); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] ?? 1, true); menu(); };
   $('bmmap').onclick = () => { miniMap = !miniMap; try { localStorage.setItem('boulder-duo-minimap', miniMap ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
