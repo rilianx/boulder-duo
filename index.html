@@ -2806,7 +2806,10 @@ function killPlayer(p){
   p.alive = false; if (!endless(p)) p.lives--; p.respawn = p.lives > 0 ? 20 : -1; p.walking = false;
 }
 
-let rockBlast = false, hlDied = false;
+/* With endless lives (cooperative), dying must not be a weapon: a kid caught by a firefly, a butterfly or a falling
+   rock blows up alone (one cell, blastOne), and the enemy is not hurt and goes on its way. Blasts set off by
+   something else (a rock dropped on a firefly) stay three by three. */
+let rockBlast = false, blastOne = false, hlDied = false;
 // friendly mode: a gem that falls on a kid's head is caught and counted
 function catchGem(p, i){
   const over = mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
@@ -2815,9 +2818,10 @@ function catchGem(p, i){
   grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1; fallT[i] = 0;
 }
 function explode(cx, cy, toGem, now){
+  const r = blastOne ? 0 : 1;
   if (!now && deferDeaths()) {
     const caught = [];
-    for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
+    for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
       const t = grid[(cy+dy)*W + cx+dx];
       if (t === P1 || t === P2){ const p = players[t-P1]; if (p.alive && p.immune <= 0 && !(friendly() && !rockBlast)) caught.push(p); }
     }
@@ -2825,14 +2829,14 @@ function explode(cx, cy, toGem, now){
     if (caught.length) {
       // the kid on the other phone gets longer: a step it took there before seeing this can still save it
       const n = Math.max(3, Math.ceil(450 / tickMs));
-      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, at: tickN + n, by: blastBy });
+      pendingBooms.push({ cx, cy, toGem, rock: rockBlast, one: blastOne, at: tickN + n, by: blastBy });
       holdKiller(pendingBooms[pendingBooms.length - 1]);   // what caught them waits too; nothing else does
       caught.forEach(p => { p.doomed = true; p.walking = false; p.held = []; p.ohnoAt = simT; p.ohnoUntil = simT + n * tickMs + 350; });
       sfx.ohno();
       return;
     }
   }
-  for (let dy=-1; dy<=1; dy++) for (let dx=-1; dx<=1; dx++){
+  for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
     if (t === STEEL || t === EXIT || t === NEST || t === STAR) continue;
     if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); }
@@ -3025,7 +3029,7 @@ function runPendingBooms(){
   const due = pendingBooms.filter(e => e.at <= tickN); if (!due.length) return;
   pendingBooms = pendingBooms.filter(e => e.at > tickN);
   holdCell.fill(0); pendingBooms.forEach(holdKiller);
-  due.forEach(e => { rockBlast = e.rock; explode(e.cx, e.cy, e.toGem, true); rockBlast = false; });
+  due.forEach(e => { rockBlast = e.rock; blastOne = !!e.one; explode(e.cx, e.cy, e.toGem, true); rockBlast = blastOne = false; });
   players.forEach(p => { if (!p.alive) p.doomed = false; });
 }
 function drawOhNo(g, ox, oy){
@@ -3063,7 +3067,7 @@ function fallObj(i, x, y){
     if (k < steps) {
       const nb = grid[cur + G], cx = (cur + G) % W, cy = (cur + G) / W | 0;
       if ((nb === P1 || nb === P2) && friendly() && grid[cur] === GEM) catchGem(players[nb - P1], cur);
-      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; blastBy = players[nb - P1]; explode(cx, cy, false); rockBlast = false; blastBy = null; }
+      else if ((nb === P1 || nb === P2) && players[nb - P1].immune <= 0) { rockBlast = true; blastBy = players[nb - P1]; blastOne = endless(blastBy); explode(cx, cy, false); rockBlast = blastOne = false; blastBy = null; }
       else if (nb === FIRE || nb === BUTT) explode(cx, cy, nb === BUTT);
     }
     return;
@@ -3085,7 +3089,7 @@ function fallObj(i, x, y){
   if (fall[i]) {
     if (bt === P1 || bt === P2) {
       if (friendly() && grid[i] === GEM) { catchGem(players[bt-P1], i); return; }
-      if (players[bt-P1].immune <= 0) { rockBlast = true; blastBy = players[bt-P1]; explode(bx, by, false); rockBlast = false; blastBy = null; return; }
+      if (players[bt-P1].immune <= 0) { rockBlast = true; blastBy = players[bt-P1]; blastOne = endless(blastBy); explode(bx, by, false); rockBlast = blastOne = false; blastBy = null; return; }
     } else if (bt === FIRE || bt === BUTT) { explode(bx, by, bt === BUTT); return; }
   }
   // real gravity: a rock that dropped six cells or more breaks what it hits (dirt, brick, another rock: one cell)
@@ -3108,7 +3112,12 @@ function fallObj(i, x, y){
 function enemy(i, x, y, t){
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { blastBy = players[n-P1]; explode(x, y, t === BUTT); blastBy = null; return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) {
+      const p = players[n-P1];
+      // endless lives: only the kid goes, and the enemy carries on
+      if (endless(p)) { if (!p.doomed) { blastBy = p; blastOne = true; explode((i + OFF[k]) % W, (i + OFF[k]) / W | 0, false); blastOne = false; blastBy = null; } continue; }
+      blastBy = p; explode(x, y, t === BUTT); blastBy = null; return;
+    }
     if (n === AMOEBA) { explode(x, y, t === BUTT); return; }
   }
   const d = dir[i];

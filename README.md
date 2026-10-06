@@ -147,7 +147,7 @@ Al empezar cada cueva, el juego la prueba unos segundos (100 ticks) con los niñ
 
 ## Vidas, reaparecer y reiniciar
 
-- **VIDAS ∞ (COOPERATIVO)** (botón del menú): en cooperativo (y con 1 jugador) las vidas no se acaban; el marcador muestra ∞.
+- **VIDAS ∞ (COOPERATIVO)** (botón del menú): en cooperativo (y con 1 jugador) las vidas no se acaban; el marcador muestra ∞. Para que morir no sirva de arma, con vidas infinitas el niño atrapado por una luciérnaga, una mariposa o una roca que le cae encima **explota solo él (una casilla)**: el enemigo no muere y sigue su camino, y la roca cae en el hueco. Las explosiones que provoca otra cosa (una roca soltada sobre una luciérnaga) siguen siendo de 3×3.
 - **Con 1 jugador**, al morir la cueva **empieza de nuevo** (como en el original), con una vida menos.
 - **De a dos o contra el PC**, quien muere (también el PC) **reaparece donde murió** (o en la casilla libre más cercana, si ahí quedó algo), y mientras espera su cámara se queda ahí mismo.
 - En cooperativo, si se acaban las vidas, la pantalla de fin trae **JUGAR DE NUEVO ESTA CUEVA** (con las vidas llenas).
