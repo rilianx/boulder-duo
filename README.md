@@ -85,6 +85,18 @@ Mientras el otro jugador no se ve, una **flechita de su color** en el borde de l
 
 ![Cuevas aleatorias 1 a 4](docs/aleatorias.png)
 
+## Cueva infinita
+
+Con el botón **CUEVA INFINITA** del menú se juega un camino sin fin hacia la derecha: las cuevas **A a P de Boulder Dash 1** (con la M\*, sin los intermedios), una tras otra; después de la P se vuelve a la A en el nivel siguiente (2, 3, 4 y 5). No hay reloj. Se juega solo, en cooperativo o en versus (también con dos celulares).
+
+- **La salida de cada cueva es la puerta:** se abre con los diamantes que pide esa cueva (entre los dos en cooperativo, cada uno los suyos en versus) y al entrar se sale al comienzo del **pasillo** que sigue: un trozo de tierra de 5 de ancho entre acero, con algunas rocas y una o dos luciérnagas, que va de la altura de la salida de la cueva a la de la **entrada** de la siguiente, por donde se entra a ella.
+- **Mapas locales:** en memoria solo están la cueva de cada jugador y la siguiente (a lo más 4 trozos de 45 columnas), así que uno puede quedarse atrás: las cuevas entre los dos no se guardan. Una cueva donde ya no queda nadie se olvida; si el que viene atrás llega a ella, se arma de nuevo (su puerta queda abierta si ya se había abierto, en cooperativo). No se puede volver a una cueva olvidada: la entrada desde ella es de acero.
+- **La ameba crece solo mientras hay alguien en su cueva**, con su propio reloj, y cada muro mágico lleva el suyo.
+- La velocidad es la del nivel de la cueva del que va más atrás. El marcador muestra la cueva y cuántas se han cruzado; se pierde al acabarse las vidas (en versus, cuando uno se queda sin vidas gana el que llegó más lejos) y se guarda el **récord** de cuevas cruzadas.
+- Morir no reinicia el camino: el niño reaparece donde cayó (también con 1 jugador).
+
+![El pasillo de partida y las cuevas A, B y C](docs/infinita.png)
+
 ## Extras
 
 - **PC: EXPERTO / APRENDIZ** (botón del menú). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`); en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende paso a paso.
