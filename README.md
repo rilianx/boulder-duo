@@ -56,6 +56,23 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
 
 ![Personajes y objetos](docs/sprites.png)
 
+## Cuevas aleatorias gigantes
+
+Con el botón **CUEVAS ALEATORIAS GIGANTES** del menú se juega en 16 cuevas de **80×44** (el doble de ancho y el doble de alto que una cueva normal), pensadas para dos jugadores pero también jugables solo, al estilo de la cueva A de Boulder Dash 1. Cada cueva sale de un generador y su número es la semilla: la Aleatoria 7 es siempre el mismo mapa, en cualquier celular, así que dos teléfonos por Bluetooth (o dos amigos) juegan la misma.
+
+- **Relleno:** la receta de la cueva A. Por casilla sale un número al azar de 0 a 255: bajo 9 es diamante, bajo 50 roca, bajo 60 espacio vacío y si no, tierra.
+- **Muros de ladrillo:** un patrón dibujado desde el borde exterior de cada mitad, la derecha espejo de la izquierda. Van uno tras otro: **zigzag** (el de la cueva A, muros largos que dejan pasar una vez por el medio y otra por el borde), **escalones** (repisas que bajan hacia el centro), **cámaras** (una cuadrícula de muros con puertas) y **embudo** (muros diagonales que se cierran hacia la salida).
+- **Bolsones**, los mismos tipos en cada mitad y en lugares al azar: **cofre** (diamantes encerrados por rocas, con una entrada de tierra), **gruta** (un hueco con diamantes en el piso y rocas en el techo), **montón** (una pirámide de rocas sobre diamantes), **veta** (una diagonal de diamantes), **bóveda** (un cuartito de ladrillo con una puerta) y **columna** (cuatro rocas sobre un diamante).
+- **J1 parte arriba a la izquierda y J2 arriba a la derecha**, en un claro de tierra sin nada encima. La salida está abajo, al medio.
+- **Todos los diamantes se pueden alcanzar** caminando por tierra y espacio desde la partida (si uno no, se cambia de lugar dentro de su mitad), y la salida también.
+- **Mitades parejas:** cada mitad se llena por su lado y a la más pobre se le agregan diamantes hasta tener los mismos.
+- **Para salir** hay que juntar el **38 %** de los diamantes (entre los dos, o solo). En versus cada uno necesita el 60 % de eso, como en las demás cuevas.
+- **Más tiempo:** 360 s en el nivel 1, y luego 320, 280, 240 y 200. Solo, la mitad más.
+
+Mientras el otro jugador no se ve, una **flechita de su color** en el borde de la pantalla apunta hacia él (en todas las cuevas). Con el botón **MINIMAPA** del menú, cada tablero muestra en una esquina la cueva entera, los dos niños, la salida cuando se abre y el pedazo que se ve en pantalla (en la oscuridad muestra solo a los niños y la salida).
+
+![Cuevas aleatorias 1 a 4](docs/aleatorias.png)
+
 ## Extras
 
 - **PC: EXPERTO / APRENDIZ** (botón del menú). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`); en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende paso a paso.
@@ -75,7 +92,7 @@ Si los dos niños se quedan quietos uno al lado del otro, juegan piedra, papel o
   ![Jefe con corona](docs/jefe.png) ![Estrella](docs/estrella.png)
 - **Diamantes que vuelan** al contador al recogerlos, y anillos dorados cuando se abre la salida.
 - **Cueva viva:** hongos que brillan en el suelo, raíces colgando del techo y gotas que caen y salpican (solo dibujo).
-- **ZOOM**: en el celular, **pellizca con dos dedos** sobre el tablero para acercar o alejar (mientras pellizcas no se mueve el niño); en el computador, la **rueda del mouse** sobre el tablero o las teclas **+** y **−**; y el botón **ZOOM** del menú pasa por ×1, ×1,25, ×1,5, ×2, ×0,75, ×0,5 y **CUEVA ENTERA**. Va de a cuartos para que las casillas calcen sin líneas, hasta el doble de cerca, y alejándose del todo se ve **la cueva completa** (centrada, dibujada suave). Queda guardado. Más cerca se ve menos de la cueva (más difícil). (El PC sigue viendo lo mismo de siempre.)
+- **ZOOM**: en el celular, **pellizca con dos dedos** sobre el tablero para acercar o alejar (mientras pellizcas no se mueve el niño); en el computador, la **rueda del mouse** sobre el tablero o las teclas **+** y **−**; y el botón **ZOOM** del menú pasa por ×1, ×1,25, ×1,5, ×2, ×0,75, ×0,5 y **CUEVA ENTERA**. El zoom es **suave**: la vista se desliza hasta el zoom pedido manteniendo su centro, y al pellizcar sigue a los dedos sin saltos. Al terminar se acomoda de a cuartos para que las casillas calcen sin líneas, hasta el doble de cerca, y alejándose del todo se ve **la cueva completa** (centrada, dibujada suave). Queda guardado. Más cerca se ve menos de la cueva (más difícil). (El PC sigue viendo lo mismo de siempre.)
 - **Gravedad cambiada** (opción oculta): en el computador, la tecla **G**; en el celular, **mantener presionado el botón de pausa** un momento (vibra). Cada vez la gravedad pasa a izquierda → arriba → derecha → sin gravedad → abajo (la normal). Las rocas y gemas caen y ruedan hacia ese lado, y se empujan de lado respecto a esa gravedad (con la gravedad a la izquierda se empujan hacia arriba o abajo); **sin gravedad nada cae y las rocas se empujan en cualquier dirección**. Un letrero muestra la dirección, y mientras no sea la normal queda una flechita en la esquina. El entrenamiento del PC siempre usa la gravedad normal.
 - **OSCURIDAD** (botón del menú): la cueva queda a oscuras y solo se ve lo que alumbra la linterna de los niños, las luciérnagas, los diamantes, los hongos, la salida abierta y las explosiones.
 

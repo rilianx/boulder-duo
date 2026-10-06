@@ -1381,7 +1381,10 @@ Line=12 8 12 10 STEELWALL
 <script>
 (() => {
 'use strict';
-const W = 40, H = 22, T = 16, TICK = 120;
+/* The cave is W x H cells: 40 x 22 like the originals, or 80 x 44 for the big random caves (setSize). Every array
+   indexed by cell is made for the biggest (MAXN) so it never has to be made again. */
+let W = 40, H = 22;
+const T = 16, TICK = 120, MAXW = 80, MAXH = 44, MAXN = MAXW * MAXH;
 /* Length of a tick in the original caves, by difficulty level: level 1 is the slowest. The random levels of the
    training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
 const CAVE_TICK = [170, 145, 120, 105, 92];
@@ -1397,9 +1400,10 @@ let zoomLevel = 1, ZOOM = 1, CW = VW, CH = VH;
 try { const z = +localStorage.getItem('boulder-duo-zoomv'); zoomLevel = z === 0 && localStorage.getItem('boulder-duo-zoomv') === '0' ? 0 : z >= .25 && z <= 2 ? z : localStorage.getItem('boulder-duo-zoom') === '1' ? 1.25 : 1; } catch (e) {}
 const zoomFit = () => Math.min(VW / W, VH / H);                 // the whole cave on screen
 const zoomMin = () => Math.min(1, zoomFit());
-function setZoom(z, save){
-  // quarter steps (crisp tiles); the last step out is exactly the whole cave
-  zoomLevel = z <= zoomFit() + .125 ? 0 : clamp(Math.round(z * 4) / 4, zoomMin(), 2); applyZoom();
+function setZoom(z, save, free){
+  // quarter steps (crisp tiles); the last step out is exactly the whole cave. While pinching (free) it follows the
+  // fingers exactly and settles on the nearest step when they let go. The view glides to it (updateCams).
+  zoomLevel = free ? clamp(z, zoomMin(), 2) : z <= zoomFit() + .125 ? 0 : clamp(Math.round(z * 4) / 4, zoomMin(), 2);
   if (save) try { localStorage.setItem('boulder-duo-zoomv', String(zoomLevel)); } catch (e) {}
 }
 /* Upright phone: the boards fill the screen. The view keeps tiles about 32 px wide (12 across on most phones)
@@ -1427,17 +1431,28 @@ function fitBoards(){
     const cols = clamp(Math.round(cw / 32), 10, 17), tile = cw / cols, gap = n > 1 ? 6 : 0;
     const avail = (innerHeight - top - 6 - gap - n * (bar + 6)) / n;
     // a tall screen that would show more rows than the cave has (22): bigger tiles instead, so it still fills it
-    if (avail / tile > 22) return setShape(Math.floor(cw / (avail / 22) * 16) / 16, 22);
-    return setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, 22));
+    if (avail / tile > H) return setShape(Math.floor(cw / (avail / H) * 16) / 16, H);
+    return setShape(cols, clamp(Math.floor(avail / tile * 16) / 16, 8, H));
   }
   // sideways: the boards side by side, as tall as the screen, about 32 px tiles
   const avail = innerHeight - top - 6 - (bar + 6);
   if (avail < 60) return;
-  const rows = clamp(Math.round(avail / 32), 7, 22), tile = avail / rows;
-  setShape(clamp(Math.floor(cw / tile * 16) / 16, 8, 40), rows);
+  const rows = clamp(Math.round(avail / 32), 7, H), tile = avail / rows;
+  setShape(clamp(Math.floor(cw / tile * 16) / 16, 8, W), rows);
 }
 addEventListener('resize', () => requestAnimationFrame(fitBoards));
-function applyZoom(){ ZOOM = mode === 'train' ? 1 : zoomLevel === 0 ? zoomMin() : Math.max(zoomMin(), zoomLevel); CW = VW / ZOOM; CH = VH / ZOOM; }   // zoomLevel 0: the whole cave
+const zoomGoal = () => mode === 'train' ? 1 : zoomLevel === 0 ? zoomMin() : Math.max(zoomMin(), zoomLevel);   // zoomLevel 0: the whole cave
+function applyZoom(){ ZOOM = zoomGoal(); CW = VW / ZOOM; CH = VH / ZOOM; }
+/* Zooming is smooth: each frame the view goes a quarter of the way to the zoom asked for (in proportion, so in and
+   out feel alike), keeping its middle where it was. On the way the tiles are drawn scaled (see renderView); they
+   are crisp again once it arrives on a quarter step. */
+function glideZoom(){
+  const z = zoomGoal(); if (ZOOM === z) return;
+  const mid = cams.map(c => [c.x + CW / 2, c.y + CH / 2]);
+  ZOOM *= Math.pow(z / ZOOM, .25); if (Math.abs(z / ZOOM - 1) < .004) ZOOM = z;
+  CW = VW / ZOOM; CH = VH / ZOOM;
+  cams.forEach((c, k) => { c.x = camClamp(mid[k][0] - CW / 2, CW, W); c.y = camClamp(mid[k][1] - CH / 2, CH, H); });
+}
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
@@ -1465,6 +1480,14 @@ function scanOrder(){
   return SCAN[g] = Int32Array.from(o);
 }
 const DXY = [[0,-1],[1,0],[0,1],[-1,0]];
+// a cave of another size: the neighbour offsets, the scan order and the views follow
+function setSize(w, h){
+  if (w === W && h === H) return;
+  W = w; H = h; OFF[0] = -W; OFF[2] = W;
+  for (const k in SCAN) delete SCAN[k];
+  applyGravity();
+  fitBoards();
+}
 
 const CVS = [0,1].map(k => document.getElementById('cv' + k));
 /* The views draw at 4 device pixels per tile pixel (SS): the C64 tiles stay blocky, while the kids and the
@@ -1631,7 +1654,7 @@ function dirtFillet(v, c){
 const CAVE_DIRT = () => (TL.pal || DEFAULT_PAL)[0];
 const isOpenCell = t => t === E || t === P1 || t === P2 || t === FIRE || t === BUTT || t === BOOM;
 const openMask = i => (isOpenCell(grid[i - W]) ? 1 : 0) | (isOpenCell(grid[i + 1]) ? 2 : 0) | (isOpenCell(grid[i + W]) ? 4 : 0) | (isOpenCell(grid[i - 1]) ? 8 : 0);
-const DVAR = Array.from({ length: W*H }, (_, i) => Math.floor(hash(i * 13 + 7) * 4));
+const DVAR = Array.from({ length: MAXN }, (_, i) => Math.floor(hash(i * 13 + 7) * 4));
 
 function makeTiles(pal){
   const [dm, dd, ds, br, bh, mo, st] = pal;
@@ -1700,14 +1723,183 @@ function parseBDCFF(text){
   return game;
 }
 const CAVE_SETS = { bd1: parseBDCFF($('bdcff-bd1').textContent), bd2: parseBDCFF($('bdcff-bd2').textContent) };
+/* Big random caves for two players (80 x 44, four times a normal cave), in the spirit of Boulder Dash 1's cave A.
+   Cave n is always the same map (its number is the seed), so two phones, or two friends, get the same one.
+   - Fill: the cave A recipe (per cell a random byte: under 9 a diamond, under 50 a boulder, under 60 empty space,
+     else dirt), inside a steel border.
+   - Walls: a brick pattern drawn in each half from its outer edge, the right half the mirror of the left, so both
+     players meet the same layout (BIG_PATTERNS, one after the other: cave 1 zigzag, 2 stairs, 3 rooms, 4 funnel...).
+   - Pockets: little set pieces of different kinds (a rock chest, a hollow grotto, a heap of boulders, a vein of
+     diamonds, a brick vault, a rock column), the same kinds in each half at random places.
+   - Fair but not identical: the halves are filled apart, then the poorer one gets diamonds until both have the same.
+   - J1 starts at the top left, J2 at the top right; the exit is at the bottom in the middle.
+   - Every diamond can be reached: from a kid's start, walking through dirt and space (rocks and walls block, as if
+     nothing moved). A diamond that cannot is moved to a reachable spot of its half, and the exit always can be.
+   To win: 38% of the diamonds (alone or together; in versus each its share as in any cave). */
+const BIG_PATTERNS = {
+  // cave A's own: long walls that leave the way open alternately by the middle and by the edge, so the way down
+  // snakes from side to side (here two bands of it, one above the other)
+  zigzag(put) {
+    for (const y of [8, 15, 29, 36]) {
+      const middleGap = y === 8 || y === 29;
+      for (let u = 1; u <= 39; u++) if (middleGap ? u <= 30 : u >= 9) put(u, y, WALL);
+    }
+  },
+  // stairs: short ledges going down and in, towards the exit in the middle
+  escalones(put) {
+    for (let k = 0; k < 8; k++) {
+      const y = 5 + k * 5, u0 = 2 + (k % 2 ? 14 : 4) + k * 2;
+      for (let u = u0; u < Math.min(39, u0 + 9); u++) put(u, y, WALL);
+    }
+  },
+  // rooms: a grid of brick walls with doorways
+  camaras(put) {
+    for (const y of [11, 22, 33]) for (let u = 1; u <= 39; u++) if ((u + y) % 13 > 2) put(u, y, WALL);
+    for (const u of [13, 26]) for (let y = 1; y <= 42; y++) if ((y + u) % 11 > 2 && y % 11) put(u, y, WALL);
+  },
+  // funnel: slanted walls closing in towards the bottom middle, with gaps here and there
+  embudo(put) {
+    for (let k = 0; k < 3; k++) for (let s = 0; s < 26; s++) {
+      const u = 2 + s + k * 4, y = 6 + k * 11 + Math.floor(s / 2);
+      if (u <= 37 && y <= 41 && s % 9 !== 4) put(u, y, WALL);
+    }
+  },
+};
+const BIG_PATTERN_NAMES = { zigzag: 'ZIGZAG', escalones: 'ESCALONES', camaras: 'CÁMARAS', embudo: 'EMBUDO' };
+// pockets: little set pieces, placed at (x, y) = top left; each says how much room it needs
+const BIG_POCKETS = {
+  // a chest of diamonds walled in by boulders, with one way in through dirt
+  cofre: { w: 5, h: 5, make(set, R) {
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) set(x, y, x === 0 || y === 0 || x === 4 || y === 4 ? ROCK : GEM);
+    const side = Math.floor(R() * 3);   // a door left, right or below (never above: the lid stays on)
+    if (side === 0) set(0, 2, DIRT); else if (side === 1) set(4, 2, DIRT); else set(2, 4, DIRT);
+  } },
+  // a hollow grotto: empty inside, diamonds on its floor and boulders hanging from its roof
+  gruta: { w: 7, h: 4, make(set, R) {
+    for (let y = 1; y < 3; y++) for (let x = 1; x < 6; x++) set(x, y, E);
+    for (let x = 1; x < 6; x++) if (R() < .5) set(x, 2, GEM);
+    for (let x = 1; x < 6; x++) if (R() < .45) set(x, 0, ROCK);
+  } },
+  // a heap of boulders with diamonds underneath: dig them out and the heap comes down
+  monton: { w: 7, h: 5, make(set) {
+    [[3], [2, 3, 4], [1, 2, 3, 4, 5]].forEach((xs, y) => xs.forEach(x => set(x, y + 1, ROCK)));
+    for (const x of [1, 3, 5]) set(x, 4, GEM);
+  } },
+  // a vein of diamonds running slantwise through the dirt
+  veta: { w: 7, h: 7, make(set, R) {
+    const d = R() < .5 ? 1 : -1;
+    for (let k = 0; k < 6; k++) set(d > 0 ? k : 6 - k, k, GEM);
+  } },
+  // a little brick vault with a doorway
+  boveda: { w: 6, h: 5, make(set, R) {
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 6; x++) set(x, y, x === 0 || y === 0 || x === 5 || y === 4 ? WALL : E);
+    for (let x = 1; x < 5; x++) set(x, 3, GEM);
+    set(R() < .5 ? 0 : 5, 2, DIRT);
+  } },
+  // a column of boulders standing on a diamond
+  columna: { w: 1, h: 5, make(set) { for (let y = 0; y < 4; y++) set(0, y, ROCK); set(0, 4, GEM); } },
+};
+const BIG_KINDS = ['cofre', 'gruta', 'monton', 'veta', 'boveda', 'columna', 'gruta', 'veta'];
+function genBigCave(seed, opts = {}){
+  const BW = MAXW, BH = MAXH, MID = BW / 2;
+  const names = Object.keys(BIG_PATTERNS);
+  const R = rng(seed * 7919 + 13), pattern = opts.pattern || names[(seed - 1) % names.length];
+  const g = new Uint8Array(BW * BH).fill(DIRT);
+  const at = (x, y) => y * BW + x, inside = (x, y) => x > 0 && y > 0 && x < BW - 1 && y < BH - 1;
+  // each half filled apart with cave A's recipe
+  for (let y = 1; y < BH - 1; y++) for (let x = 1; x < BW - 1; x++) {
+    const r = R() * 256;
+    g[at(x, y)] = r < 9 ? GEM : r < 50 ? ROCK : r < 60 ? E : DIRT;
+  }
+  // the bricks, the same pattern from both outer edges
+  BIG_PATTERNS[pattern]((u, y, t) => { for (const x of [u, BW - 1 - u]) if (inside(x, y)) g[at(x, y)] = t; });
+  // the starts and the exit, with room around
+  const starts = [[3, 2], [BW - 4, 2]], exit = [R() < .5 ? MID - 1 : MID, BH - 2];
+  const keepClear = new Set();
+  starts.forEach(([x, y]) => {
+    for (let dy = -1; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (inside(x + dx, y + dy)) { g[at(x + dx, y + dy)] = DIRT; keepClear.add(at(x + dx, y + dy)); }
+    g[at(x, y)] = E;
+  });
+  // pockets: the same kinds in each half, each at its own random place, clear of the walls, the starts and each other
+  const taken = new Uint8Array(BW * BH);
+  const free = (x0, y0, w, h) => {
+    for (let y = y0 - 1; y <= y0 + h; y++) for (let x = x0 - 1; x <= x0 + w; x++) {
+      if (!inside(x, y) || taken[at(x, y)] || g[at(x, y)] === WALL) return false;
+      if (starts.some(([sx, sy]) => Math.abs(sx - x) < 5 && Math.abs(sy - y) < 5)) return false;
+      if (Math.abs(exit[0] - x) < 4 && Math.abs(exit[1] - y) < 4) return false;
+    }
+    return true;
+  };
+  const kinds = BIG_KINDS.slice().sort(() => R() - .5).slice(0, opts.pockets || 7), placed = [];
+  for (const side of [0, 1]) for (const k of kinds) {
+    const P = BIG_POCKETS[k];
+    for (let tries = 0; tries < 200; tries++) {
+      const x0 = (side ? MID + 1 : 1) + Math.floor(R() * (MID - 2 - P.w)), y0 = 1 + Math.floor(R() * (BH - 2 - P.h));
+      if (!free(x0, y0, P.w, P.h)) continue;
+      for (let y = y0 - 1; y <= y0 + P.h; y++) for (let x = x0 - 1; x <= x0 + P.w; x++) taken[at(x, y)] = 1;
+      for (let y = y0; y < y0 + P.h; y++) for (let x = x0; x < x0 + P.w; x++) g[at(x, y)] = DIRT;
+      P.make((x, y, t) => { g[at(x0 + x, y0 + y)] = t; }, R);
+      placed.push({ kind: k, side, x: x0, y: y0 });
+      break;
+    }
+  }
+  g[at(exit[0], exit[1])] = EXIT; g[at(exit[0], exit[1] - 1)] = DIRT;
+  // steel all round
+  for (let x = 0; x < BW; x++) { g[at(x, 0)] = STEEL; g[at(x, BH - 1)] = STEEL; }
+  for (let y = 0; y < BH; y++) { g[at(0, y)] = STEEL; g[at(BW - 1, y)] = STEEL; }
+  // where each kid can walk to (dirt, space and diamonds; nothing moves)
+  const reach = (sx, sy) => {
+    const seen = new Uint8Array(BW * BH), q = [at(sx, sy)]; seen[q[0]] = 1;
+    for (let h = 0; h < q.length; h++) for (const d of [1, -1, BW, -BW]) {
+      const j = q[h] + d, t = g[j];
+      if (!seen[j] && (t === E || t === DIRT || t === GEM || t === EXIT)) { seen[j] = 1; q.push(j); }
+    }
+    return seen;
+  };
+  const half = i => (i % BW) < MID ? 0 : 1;
+  let moved = 0;
+  for (let round = 0; round < 3; round++) {
+    const rs = starts.map(([x, y]) => reach(x, y));
+    const ok = i => rs[0][i] || rs[1][i];
+    // the exit must be reachable by both: open a way up from it if not
+    if (!rs[0][at(exit[0], exit[1])] || !rs[1][at(exit[0], exit[1])]) {
+      for (let y = exit[1] - 1; y > 0; y--) { const i = at(exit[0], y); if (g[i] === WALL || g[i] === ROCK) g[i] = DIRT; }
+      continue;
+    }
+    // a diamond nobody can walk to goes to a reachable dirt spot of its half
+    const lost = []; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && !ok(i)) lost.push(i);
+    if (!lost.length) break;
+    for (const i of lost) {
+      g[i] = DIRT;
+      for (let tries = 0; tries < 400; tries++) {
+        const j = at(1 + Math.floor(R() * (MID - 2)) + (half(i) ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
+        if (g[j] === DIRT && ok(j) && !keepClear.has(j)) { g[j] = GEM; moved++; break; }
+      }
+    }
+  }
+  // fair: the poorer half gets diamonds until both have as many
+  const count = s => { let n = 0; for (let i = 0; i < BW * BH; i++) if (g[i] === GEM && half(i) === s) n++; return n; };
+  const rs = starts.map(([x, y]) => reach(x, y));
+  let added = 0;
+  for (let guard = 0; guard < 400 && count(0) !== count(1); guard++) {
+    const s = count(0) < count(1) ? 0 : 1, j = at(1 + Math.floor(R() * (MID - 2)) + (s ? MID : 0), 1 + Math.floor(R() * (BH - 2)));
+    if (g[j] === DIRT && rs[s][j] && !keepClear.has(j)) { g[j] = GEM; added++; }
+  }
+  const gems = count(0) + count(1);
+  return { w: BW, h: BH, grid: g, starts, exit, pattern, pockets: placed, gems, moved, added, seed };
+}
+// the big random caves as a cave set of their own: 16 maps, five levels of speed like the others
+const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200];
+CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, (_, i) =>
+  ({ props: { Name: 'Aleatoria ' + (i + 1) + '. Muros en ' + BIG_PATTERN_NAMES[Object.keys(BIG_PATTERNS)[i % 4]].toLowerCase(), Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
 let caveSet = 'bd2';
 try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v]) caveSet = v; } catch (e) {}
 const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n - 1) % cs.length], lvl: Math.min(4, Math.floor((n - 1) / cs.length)) }; };
 function caveLabel(n){
   if (mode === 'train' && !hlTrain()) return 'NIVEL ' + n;
   const { cave, lvl } = caveOf(n), nm = cave.props.Name || '';
-  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
-  return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : nm.toUpperCase()) + lv;
+  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^Aleatoria (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
+  return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : rm ? 'ALEATORIA ' + rm[1] : nm.toUpperCase()) + lv;
 }
 const caveTitle = n => { if (mode === 'train' && !hlTrain()) return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
 
@@ -2038,7 +2230,7 @@ let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
    a clock of their own and acts as soon as they press, between ticks (see loop). simT is the game time now; nowT is
    the moment of whatever is being simulated, so a move knows when it began and the drawing can glide it. */
 let simT = 0, worldT = 0, nowT = 0;
-let src = new Int32Array(W*H).fill(-1), srcAt = new Float64Array(W*H), dugAt = new Float64Array(W*H).fill(-1e9);
+let src = new Int32Array(MAXN).fill(-1), srcAt = new Float64Array(MAXN), dugAt = new Float64Array(MAXN).fill(-1e9);
 /* Falling starts slow and speeds up (ease-in on the first cell); a rock turns as it rolls and squashes and
    kicks up dust when it lands. */
 /* Living cave (drawing only): glowing mushrooms on some dirt floors, roots hanging from some dirt ceilings, and
@@ -2085,6 +2277,9 @@ function drawAmbient(g, ox, oy, x0, y0){
 /* Dark caves (option): only what a light shows can be seen — the kids' lanterns, fireflies, the glow of gems,
    mushrooms, the open exit, stars and explosions. */
 let darkCaves = false;
+// option: a little map of the whole cave in a corner of each view
+let miniMap = false;
+try { miniMap = localStorage.getItem('boulder-duo-minimap') === '1'; } catch (e) {}
 try { darkCaves = localStorage.getItem('boulder-duo-dark') === '1'; } catch (e) {}
 const DARK = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = VW * T * SS; c.height = VH * T * SS; return c; });
 function drawDark(g, k, ox, oy, x0, y0){
@@ -2163,12 +2358,12 @@ function drawThing(g, s, i, px, py, k, big){
   }
 }
 const glideK = i => src[i] >= 0 ? Math.max(0, 1 - (simT - srcAt[i]) / tickMs) : 0;   // 1 just moved … 0 arrived
-let vari = new Uint8Array(W*H);
-let fallN = new Uint8Array(W*H), rot = new Float32Array(W*H), landAt = new Float64Array(W*H).fill(-1e9);   // drawing only
-let fallT = new Uint8Array(W*H);
-let boss = new Uint8Array(W*H), starPending = -1, starIsGem = false;   // a star dropped by a butterfly also counts as the gem it took the place of   // the enemy that carries the star, and where it will appear
+let vari = new Uint8Array(MAXN);
+let fallN = new Uint8Array(MAXN), rot = new Float32Array(MAXN), landAt = new Float64Array(MAXN).fill(-1e9);   // drawing only
+let fallT = new Uint8Array(MAXN);
+let boss = new Uint8Array(MAXN), starPending = -1, starIsGem = false;   // a star dropped by a butterfly also counts as the gem it took the place of   // the enemy that carries the star, and where it will appear
 let exitOpenAt = -1e9, buttCount = 0, buttBase = 0, nestPuff = [], starFlash = null;
-let untouched = new Uint8Array(W*H);   // rocks that have not moved yet this cave (critters live under them)
+let untouched = new Uint8Array(MAXN);   // rocks that have not moved yet this cave (critters live under them)
 let dust = [], shakeAt = -1e9, hardHits = 0;   // hard landings: dust clouds and a short shake (drawing only)   // real gravity: ticks a thing has been falling
 /* Real gravity (optional, original caves only): what falls speeds up, one cell in its first tick, then two, then three. */
 let realGravity = false;
@@ -2308,6 +2503,7 @@ function placeStar(inbox, cw, ch){
 }
 function genCave(n){
   const { cave, lvl } = caveOf(n), P = cave.props;
+  if (P.Big) return genBig(n, lvl, P);
   const num = (k, def) => { const v = (P[k] || '').split(/\s+/).filter(Boolean).map(Number); return v.length ? v[Math.min(lvl, v.length - 1)] : def; };
   grid = new Uint8Array(W*H); fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
@@ -2375,14 +2571,30 @@ function genCave(n){
   return [inbox, second];
 }
 
+// a big random cave (the map is already W x H = 80 x 44, see initLevel)
+function genBig(n, lvl, P){
+  const c = genBigCave((n - 1) % BIG_N + 1);
+  grid = c.grid; fall = new Uint8Array(W*H); dir = new Uint8Array(W*H);
+  aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
+  resetCaveRules(n);
+  TL = tilesFor(palFromColors(P.Colors.split(/\s+/)));
+  need = Math.round(c.gems * .38); needEach = Math.max(1, Math.ceil(need * .6));
+  timeLeft = Math.round(BIG_TIME[lvl] * (solo ? 1.5 : 1) / 10) * 10;   // alone, half as long again
+  tickMs = CAVE_TICK[lvl];
+  placeStar(c.starts[0], W, H);
+  return c.starts.map(s => s.slice());
+}
+
 function initLevel(n){
   if (HL.cur && HL.cur.cave !== hlCave()) HL.cur = null;
   if (HL.cur) hlEnd('t');
   level = n; dust = []; pendingBooms = []; holdCell.fill(0); critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
+  const gen = (mode === 'train' && !hlTrain()) || simHook, big = !gen && !!caveOf(n).cave.props.Big;
+  setSize(big ? MAXW : 40, big ? MAXH : 22);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
-  const gen = (mode === 'train' && !hlTrain()) || simHook;
   startUnsafe = false;
-  const spawns = gen ? genLevel(n) : safeSpawns(genCave(n));
+  // the big caves start in a patch of dirt cleared on purpose, with nothing above: safe as made
+  const spawns = gen ? genLevel(n) : big ? genCave(n) : safeSpawns(genCave(n));
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
     p.gems = 0; p.exited = false; p.doomed = false; p.dieX = undefined; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.aiR = 0; p.tr = [];
@@ -2647,7 +2859,7 @@ function stepPlayer(p){
    a few ticks (half a second at least) while the kid says it, and only then the explosion goes off. The rest of the
    cave goes on. Only when playing in real time: training, turbo and the PC learning a cave explode at once, so the
    rules stay the same as the Python copy. */
-let pendingBooms = [], holdCell = new Uint8Array(W*H), blastBy = null;   // blastBy: the kid whose touch set it off
+let pendingBooms = [], holdCell = new Uint8Array(MAXN), blastBy = null;   // blastBy: the kid whose touch set it off
 const deferDeaths = () => mode !== 'train' && speed === 1 && !turbo && !simHook && !hlTrain();
 // the one that caught them: the firefly or butterfly at the centre of the blast, and the rock or gem resting on it
 function holdKiller(e){
@@ -2895,6 +3107,7 @@ function menu(){
       ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
       <button id="bzoom" class="${zoomLevel !== 1 ? 'on' : ''}">ZOOM: ${zoomLevel === 0 ? 'CUEVA ENTERA' : '×' + String(zoomLevel).replace('.', ',')}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
+      <button id="bmmap" class="${miniMap ? 'on' : ''}">MINIMAPA: ${miniMap ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
       <button id="binf" class="${infLives ? 'on' : ''}">VIDAS ∞ (COOPERATIVO): ${infLives ? 'SÍ' : 'NO'}</button>
@@ -2902,6 +3115,7 @@ function menu(){
     <div class="row sets">
       <button id="bset1" class="${caveSet === 'bd1' ? 'on' : ''}">CUEVAS DE BOULDER DASH 1</button>
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
+      <button id="bset3" class="${caveSet === 'rnd' ? 'on' : ''}">CUEVAS ALEATORIAS GIGANTES</button>
     </div>
     <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega.${touchPref ? '' : ' Entrenar PC: el PC juega solo y puedes acelerar el tiempo.'}</p>
   </div>`);
@@ -2917,9 +3131,10 @@ function menu(){
   $('binf').onclick = () => { infLives = !infLives; try { localStorage.setItem('boulder-duo-inflives', infLives ? '1' : '0'); } catch (e) {} menu(); };
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
   $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5, 0].filter(z => z === 0 || z > zoomFit() + .125); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] ?? 1, true); menu(); };
+  $('bmmap').onclick = () => { miniMap = !miniMap; try { localStorage.setItem('boulder-duo-minimap', miniMap ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
-  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2');
+  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd');
   onEnter = () => startGame('coop');
 }
 
@@ -2934,7 +3149,7 @@ function startN(){
   return 1;
 }
 function setStartN(n){ startMem[caveSet] = n; try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
-function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : nm.slice(0, 5); }
+function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^Aleatoria (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
 function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
   initLevel(n0); state = 'menu';
@@ -3199,7 +3414,7 @@ function aiWindow(p){
   const x0 = clamp(p.x - (AIW >> 1), 0, W - AIW), y0 = clamp(p.y - (AIH >> 1), 0, H - AIH);
   return [x0, y0, x0 + AIW - 1, y0 + AIH - 1];
 }
-const bfsSeen = new Int32Array(W*H), bfsFirst = new Int8Array(W*H), bfsDist = new Int16Array(W*H), bfsQ = new Int32Array(W*H);
+const bfsSeen = new Int32Array(MAXN), bfsFirst = new Int8Array(MAXN), bfsDist = new Int16Array(MAXN), bfsQ = new Int32Array(MAXN);
 let bfsStamp = 0;
 function bfs(p, safeOnly, wantExit, win){
   const [x0, y0, x1, y1] = win, start = p.y*W + p.x; bfsStamp++;
@@ -3804,7 +4019,7 @@ function snapCams(){
   });
 }
 function updateCams(){
-  applyZoom();
+  glideZoom();
   cams.forEach((c, k) => {
     const f = camFocus(k); if (!f) return;
     // dead zone in the middle of the view, like the original scroller
@@ -4057,6 +4272,8 @@ function renderView(k){
       g.fillStyle = k ? '#ff8a4c' : '#5fb4ff'; g.fillText(msg, VW*T/2, 20);
     }
     if (open && !p.exited && !p.ai) drawExitHint(g, k, ox, oy);
+    if (mode !== 'train') drawMateHint(g, k, ox, oy);
+    if (miniMap && mode !== 'train' && (CW < W || CH < H)) drawMiniMap(g, k);
     if (gDir !== 2) {
       // the gravity is not the normal one: its name for a moment, then a small arrow in the corner
       const msg = G_NAME[gDir], fl = frame - gFlashAt < 120;
@@ -4095,6 +4312,62 @@ function drawExitHint(g, k, ox, oy){
     g.fillStyle = (frame >> 3) % 2 ? '#ffd24a' : '#fff'; g.strokeStyle = '#000'; g.lineWidth = 2;
     g.beginPath(); g.moveTo(10, 0); g.lineTo(-6, -8); g.lineTo(-2, 0); g.lineTo(-6, 8); g.closePath(); g.stroke(); g.fill();
   }
+  g.restore();
+}
+/* The other kid, while out of sight: a small arrow of its colour on the edge of the view, pointing to it. */
+function drawMateHint(g, k, ox, oy){
+  const q = players[1 - k];
+  if (!q || !q.alive || q.exited) return;
+  const [gx, gy] = glidePos(q), vw = VW*T, vh = VH*T;
+  const ex = (gx * T + T/2 - ox) * ZOOM, ey = (gy * T + T/2 - oy) * ZOOM;
+  if (ex > -T/4 && ey > -T/4 && ex < vw + T/4 && ey < vh + T/4) return;
+  const cx = vw/2, cy = vh/2, dx = ex - cx, dy = ey - cy;
+  const t = Math.min((vw/2 - 12) / Math.abs(dx || 1e-6), (vh/2 - 12) / Math.abs(dy || 1e-6));
+  const ax = cx + dx*t, ay = cy + dy*t, col = q.id ? '#ff8a4c' : '#5fb4ff';
+  g.save(); g.translate(ax, ay);
+  g.save(); g.rotate(Math.atan2(dy, dx));
+  g.fillStyle = col; g.strokeStyle = '#000'; g.lineWidth = 1.6;
+  g.beginPath(); g.moveTo(8, 0); g.lineTo(-4, -6); g.lineTo(-1, 0); g.lineTo(-4, 6); g.closePath(); g.stroke(); g.fill();
+  g.restore();
+  // its name just inside the arrow
+  const tag = q.ai ? 'PC' : 'J' + (q.id + 1), len = Math.hypot(dx, dy) || 1;
+  g.font = '5px "Press Start 2P", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 1.6; g.strokeStyle = '#000'; g.fillStyle = col;
+  g.strokeText(tag, -dx / len * 11, -dy / len * 9); g.fillText(tag, -dx / len * 11, -dy / len * 9);
+  g.restore();
+}
+/* The minimap: the whole cave, one pixel a cell (redrawn a few times a second), with both kids, the exit once it
+   is open and the part this view shows. In the dark caves it shows only the kids and the exit. */
+const MM = document.createElement('canvas'), MMG = MM.getContext('2d');
+let mmAt = -99, mmImg = null;
+const MM_COL = { [E]: [0, 0, 0], [DIRT]: [122, 74, 34], [WALL]: [140, 140, 140], [STEEL]: [70, 70, 80], [ROCK]: [200, 196, 184],
+  [GEM]: [80, 224, 255], [FIRE]: [255, 122, 42], [BUTT]: [192, 112, 255], [AMOEBA]: [60, 160, 60], [SLIME]: [60, 160, 60], [MAGIC]: [170, 170, 190] };
+function drawMiniMap(g, k){
+  if (frame - mmAt >= 6 || MM.width !== W || MM.height !== H) {
+    mmAt = frame;
+    if (MM.width !== W || MM.height !== H) { MM.width = W; MM.height = H; mmImg = null; }
+    if (!mmImg) mmImg = MMG.createImageData(W, H);
+    const d = mmImg.data;
+    for (let i = 0; i < W*H; i++) {
+      const c = darkCaves ? (grid[i] === STEEL ? MM_COL[STEEL] : MM_COL[E]) : MM_COL[grid[i]] || (grid[i] === EXIT ? MM_COL[STEEL] : MM_COL[E]);
+      d[i*4] = c[0]; d[i*4 + 1] = c[1]; d[i*4 + 2] = c[2]; d[i*4 + 3] = 255;
+    }
+    MMG.putImageData(mmImg, 0, 0);
+  }
+  const vw = VW*T, s = Math.min(1.5, vw * .26 / W), w = W * s, h = H * s, x0 = vw - w - 3, y0 = 3;
+  g.save(); g.globalAlpha = .82; g.imageSmoothingEnabled = false;
+  g.fillStyle = '#000'; g.fillRect(x0 - 1, y0 - 1, w + 2, h + 2);
+  g.drawImage(MM, x0, y0, w, h); g.globalAlpha = 1;
+  const c = cams[k];
+  g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = .6;
+  g.strokeRect(x0 + clamp(c.x, 0, W) * s, y0 + clamp(c.y, 0, H) * s, Math.min(CW, W) * s, Math.min(CH, H) * s);
+  if (exitVisiblyOpen() && (frame >> 3) % 2) { const i = grid.indexOf(EXIT); if (i >= 0) { g.fillStyle = '#ffd24a'; g.fillRect(x0 + (i % W) * s - .5, y0 + (i / W | 0) * s - .5, s + 1, s + 1); } }
+  players.forEach(q => {
+    if (!q.alive || q.exited) return;
+    const [gx, gy] = glidePos(q), r = Math.max(1.2, s);
+    g.fillStyle = '#000'; g.fillRect(x0 + gx * s - r/2 - .5, y0 + gy * s - r/2 - .5, r + 1, r + 1);
+    g.fillStyle = q.id ? '#ff8a4c' : '#5fb4ff'; g.fillRect(x0 + gx * s - r/2, y0 + gy * s - r/2, r, r);
+  });
   g.restore();
 }
 let shownState = '';
@@ -4225,7 +4498,7 @@ document.addEventListener('pointerdown', e => {
 document.addEventListener('pointermove', e => {
   const sw = swipes.get(e.pointerId); if (!sw) return;
   sw.cx = e.clientX; sw.cy = e.clientY;
-  if (sw.pinch) { if (pinch && (pinch.a === sw || pinch.b === sw)) setZoom(pinch.z0 * pinchDist() / pinch.d0); return; }
+  if (sw.pinch) { if (pinch && (pinch.a === sw || pinch.b === sw)) setZoom(pinch.z0 * pinchDist() / pinch.d0, false, true); return; }
   const dx = e.clientX - sw.ax, dy = e.clientY - sw.ay, dist = Math.hypot(dx, dy);
   if (dist < 14) return;
   const s = swipeFlipped(sw.k) ? -1 : 1;
