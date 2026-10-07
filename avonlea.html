@@ -53,13 +53,13 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 <button id="aibtn" class="paper" title="Diálogos con IA">✒</button>
 <div id="ai" hidden><div class="paper sheet">
   <h3>Diálogos con IA</h3>
-  <div>Con esto activado, Matthew, Marilla, Diana y la Sra. Barry conversan con Claude: se acuerdan de lo que ha pasado y de lo que les contaste.</div>
+  <div>Con esto activado, Matthew, Marilla, Diana y la Sra. Barry conversan con una IA: se acuerdan de lo que ha pasado y de lo que les contaste.</div>
   <label><input type="checkbox" id="aion"> Usar IA en las conversaciones</label>
-  <label for="aikey">Clave de la API de Anthropic</label>
-  <input type="password" id="aikey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
-  <div class="note">La clave se guarda solo en este navegador y se envía directamente a api.anthropic.com. No compartas este archivo con la clave puesta.</div>
   <label for="aimodel">Modelo</label>
-  <select id="aimodel"><option value="claude-opus-5-5">Claude Opus 5.5 (el mejor)</option><option value="claude-sonnet-5-5">Claude Sonnet 5.5 (más rápido)</option><option value="claude-haiku-4-5">Claude Haiku 4.5 (el más rápido y barato)</option></select>
+  <select id="aimodel"><option value="gpt-5.4-mini">GPT-5.4 mini (OpenAI)</option><option value="claude-opus-5-5">Claude Opus 5.5 (Anthropic)</option><option value="claude-sonnet-5-5">Claude Sonnet 5.5 (Anthropic, más rápido)</option><option value="claude-haiku-4-5">Claude Haiku 4.5 (Anthropic, el más barato)</option></select>
+  <label for="aikey" id="aikeylab">Tu clave de la API</label>
+  <input type="password" id="aikey" autocomplete="off" spellcheck="false">
+  <div class="note" id="ainote"></div>
   <div class="row"><button id="aitest">Probar</button><button id="aimem">Ver recuerdos</button><button id="aiforget">Borrar recuerdos</button><button id="aiclose">Cerrar</button></div>
   <pre id="aiout" hidden></pre>
 </div></div>
@@ -691,6 +691,7 @@ const seasonCount = () => Math.floor(dayT / 2) + game.seasonShift;
 const GIFTS = { tarta: ['tarta de bayas', '¡Una tarta! Huele de maravilla.'], compota: ['compota de manzana', '¡Qué rica compota! Gracias.'], te: ['taza de té', 'Un té calentito, justo lo que me hacía falta.'], ramo: ['ramo de flores', '¡Qué flores tan lindas! Las pondré en agua.'] };
 function talk(who){
   const p = PEOPLE[who];
+  if (AI.on && !aiKey()) askKey();
   if (aiReady()) { face(who); conv = null; aiTalk(who, 'Ana se acerca a conversar con ' + NAMES[who] + '.'); return; }
   if (!p.sit) { p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2; }
   if (!ana.sit) ana.dir = p.x < ana.x ? 3 : 1;
@@ -720,10 +721,14 @@ function walkOption(who){
    and what this character remembers from earlier conversations. Claude answers as the character, offers Ana two or
    three things to say, and may note one new memory. Gifts and walks are still decided by the game itself, so
    nothing the AI writes can break it; if the AI is off or fails, the written lines are used. */
-const AI = { on: false, key: '', model: 'claude-opus-5-5' };
-try { Object.assign(AI, JSON.parse(localStorage.getItem('avonlea-ai') || '{}')); } catch (e) {}
+// (each provider has its own key, typed in by the player and kept in this browser)
+const AI = { on: false, model: 'gpt-5.4-mini', keys: { openai: '', anthropic: '' } };
+try { const st = JSON.parse(localStorage.getItem('avonlea-ai') || '{}'); if (st.key) { AI.keys.anthropic = st.key; delete st.key; } Object.assign(AI, st); AI.keys = Object.assign({ openai: '', anthropic: '' }, st.keys || AI.keys); } catch (e) {}
 const saveAI = () => { try { localStorage.setItem('avonlea-ai', JSON.stringify(AI)); } catch (e) {} };
-const aiReady = () => AI.on && !!AI.key;
+const provider = (m = AI.model) => m.startsWith('gpt') ? 'openai' : 'anthropic';
+const PROV = { openai: { name: 'OpenAI', hint: 'sk-...' }, anthropic: { name: 'Anthropic', hint: 'sk-ant-...' } };
+const aiKey = () => AI.keys[provider()] || '';
+const aiReady = () => AI.on && !!aiKey();
 let conv = null;   // the conversation going on: { who, id, msgs, turns }
 // what happened, as the game saw it (kept in the save; the AI reads the latest ones)
 function logEv(text){
@@ -788,30 +793,50 @@ function stateText(who){
   return L.join('\n');
 }
 // one request to Claude: the fixed prompt first (cached), then this conversation
-async function aiCall(messages, retry = true){
-  const body = { model: AI.model, max_tokens: 4000, system: [{ type: 'text', text: AI_SYSTEM, cache_control: { type: 'ephemeral' } }], messages, output_config: { format: { type: 'json_schema', schema: AI_SCHEMA } } };
-  const headers = { 'content-type': 'application/json', 'x-api-key': AI.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
-  // (low effort: quick answers for a chat; on the Opus and Sonnet models, a declined answer is retried on another model)
-  if (AI.model !== 'claude-haiku-4-5') { body.output_config.effort = 'low'; if (retry) { body.fallbacks = 'default'; headers['anthropic-beta'] = 'server-side-fallback-2026-07-01'; } }
+async function post(url, headers, body){
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
   let res;
-  try { res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
+  try { res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
   catch (e) { throw new Error(e.name === 'AbortError' ? 'tardó demasiado' : 'sin conexión'); }
   finally { clearTimeout(timer); }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 400 && retry && /fallback/i.test(data.error?.message || '')) return aiCall(messages, false);
-    throw new Error({ 401: 'la clave no es válida', 403: 'la clave no tiene permiso', 429: 'demasiadas conversaciones seguidas, espera un poco', 529: 'el servicio está saturado' }[res.status] || ('error ' + res.status + (data.error?.message ? ': ' + data.error.message : '')));
-  }
-  if (data.stop_reason === 'refusal') throw new Error('no quiso responder eso');
-  const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  return { res, data: await res.json().catch(() => ({})) };
+}
+const httpError = (res, data) => new Error({ 401: 'la clave no es válida', 403: 'la clave no tiene permiso', 429: 'demasiadas conversaciones seguidas (o sin saldo), espera un poco', 529: 'el servicio está saturado' }[res.status] || ('error ' + res.status + (data.error?.message ? ': ' + data.error.message : '')));
+function parseOut(txt){
   let out; try { out = JSON.parse(txt); } catch (e) { throw new Error('respuesta incompleta'); }
   if (typeof out.text !== 'string' || !out.text.trim()) throw new Error('respuesta vacía');
+  return { text: out.text.trim(), replies: (Array.isArray(out.replies) ? out.replies : []).filter(r => typeof r === 'string' && r.trim()).slice(0, 3), memory: typeof out.memory === 'string' ? out.memory.trim() : '' };
+}
+const aiCall = messages => provider() === 'openai' ? openaiCall(messages) : claudeCall(messages);
+// OpenAI (Chat Completions): the fixed prompt goes first so it is cached automatically; the answer must fit the schema
+async function openaiCall(messages, strict = true){
+  const body = { model: AI.model, max_completion_tokens: 4000, messages: [{ role: 'system', content: AI_SYSTEM + (strict ? '' : '\n\nResponde solo con un objeto JSON con las claves "text", "replies" (lista) y "memory".') }, ...messages] };
+  if (strict) { body.response_format = { type: 'json_schema', json_schema: { name: 'respuesta', strict: true, schema: AI_SCHEMA } }; body.reasoning_effort = 'low'; }
+  else body.response_format = { type: 'json_object' };
+  const { res, data } = await post('https://api.openai.com/v1/chat/completions', { 'content-type': 'application/json', authorization: 'Bearer ' + aiKey() }, body);
+  // (if the model does not take the schema or the effort setting, ask again more simply)
+  if (!res.ok) { if (res.status === 400 && strict) return openaiCall(messages, false); throw httpError(res, data); }
+  const msg = data.choices?.[0]?.message || {};
+  if (msg.refusal) throw new Error('no quiso responder eso');
   console.debug('[avonlea IA]', data.model, data.usage);
-  return { content: data.content, text: out.text.trim(), replies: (Array.isArray(out.replies) ? out.replies : []).filter(r => typeof r === 'string' && r.trim()).slice(0, 3), memory: typeof out.memory === 'string' ? out.memory.trim() : '' };
+  return { content: msg.content || '', ...parseOut(msg.content || '') };
+}
+async function claudeCall(messages, retry = true){
+  const body = { model: AI.model, max_tokens: 4000, system: [{ type: 'text', text: AI_SYSTEM, cache_control: { type: 'ephemeral' } }], messages, output_config: { format: { type: 'json_schema', schema: AI_SCHEMA } } };
+  const headers = { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  // (low effort: quick answers for a chat; on the Opus and Sonnet models, a declined answer is retried on another model)
+  if (AI.model !== 'claude-haiku-4-5') { body.output_config.effort = 'low'; if (retry) { body.fallbacks = 'default'; headers['anthropic-beta'] = 'server-side-fallback-2026-07-01'; } }
+  const { res, data } = await post('https://api.anthropic.com/v1/messages', headers, body);
+  if (!res.ok) {
+    if (res.status === 400 && retry && /fallback/i.test(data.error?.message || '')) return claudeCall(messages, false);
+    throw httpError(res, data);
+  }
+  if (data.stop_reason === 'refusal') throw new Error('no quiso responder eso');
+  console.debug('[avonlea IA]', data.model, data.usage);
+  return { content: data.content, ...parseOut((data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')) };
 }
 function aiTalk(who, userText){
-  if (!conv || conv.who !== who) conv = { who, id: Math.random(), msgs: [], turns: 0 };
+  if (!conv || conv.who !== who || conv.model !== AI.model) conv = { who, id: Math.random(), msgs: [], turns: 0, model: AI.model };
   const c = conv;
   c.msgs.push({ role: 'user', content: c.msgs.length ? userText : stateText(who) + '\n\nAHORA PASA: ' + userText });
   c.turns++;
@@ -831,6 +856,10 @@ function aiTalk(who, userText){
     conv = null; notice('✒ La IA no respondió (' + err.message + '). Uso las frases de siempre.');
     if (game.talk?.who === who) { close(); talkFixed(who); }
   });
+}
+function askKey(){
+  const P = PROV[provider()], k = (prompt(`Para conversar con IA (${AI.model}), pega tu clave de la API de ${P.name} (${P.hint}). Se guarda solo en este navegador.`) || '').trim();
+  if (k) { AI.keys[provider()] = k; saveAI(); } else { AI.on = false; saveAI(); }
 }
 function talkFixed(who){ const on = AI.on; AI.on = false; try { talk(who); } finally { AI.on = on; } }
 function give(who, k){
@@ -922,15 +951,22 @@ $('mapcv').addEventListener('click', () => toggleMap(false));
 // the AI settings: on/off, the key (kept in this browser only), the model; and a look at what they remember
 function aiPanel(on){
   $('ai').hidden = !on; if (!on) return;
-  close(); $('aion').checked = AI.on; $('aikey').value = AI.key; $('aimodel').value = AI.model; $('aiout').hidden = true;
+  close(); $('aion').checked = AI.on; $('aimodel').value = AI.model; $('aiout').hidden = true; aiKeyField();
 }
-const aiSync = () => { AI.on = $('aion').checked; AI.key = $('aikey').value.trim(); AI.model = $('aimodel').value; saveAI(); };
-for (const id of ['aion', 'aikey', 'aimodel']) $(id).addEventListener('change', aiSync);
+// the key field shows the key of the chosen model's provider
+function aiKeyField(){
+  const pv = provider($('aimodel').value), P = PROV[pv];
+  $('aikey').value = AI.keys[pv] || ''; $('aikey').placeholder = P.hint; $('aikeylab').textContent = 'Tu clave de la API de ' + P.name;
+  $('ainote').textContent = `La clave la pones tú: se guarda solo en este navegador y se envía directamente a ${pv === 'openai' ? 'api.openai.com' : 'api.anthropic.com'}. No compartas el archivo ni el navegador con la clave puesta.`;
+}
+const aiSync = () => { AI.on = $('aion').checked; AI.model = $('aimodel').value; AI.keys[provider()] = $('aikey').value.trim(); saveAI(); };
+$('aimodel').addEventListener('change', () => { AI.model = $('aimodel').value; saveAI(); aiKeyField(); });
+for (const id of ['aion', 'aikey']) $(id).addEventListener('change', aiSync);
 $('aibtn').addEventListener('pointerdown', e => { e.stopPropagation(); audio(); if (!game.talk) aiPanel(true); });
 $('aiclose').addEventListener('click', () => { aiSync(); aiPanel(false); });
 $('aitest').addEventListener('click', async () => {
   aiSync(); const o = $('aiout'); o.hidden = false;
-  if (!AI.key) { o.textContent = 'Falta la clave.'; return; }
+  if (!aiKey()) { o.textContent = 'Falta tu clave de la API de ' + PROV[provider()].name + '.'; return; }
   o.textContent = 'Preguntándole a Diana…';
   try { const r = await aiCall([{ role: 'user', content: stateText('diana') + '\n\nAHORA PASA: Ana saluda a Diana (esto es solo una prueba de la voz).' }]); o.textContent = 'Diana: ' + r.text + '\n\nAna podría decir:\n' + r.replies.map(q => '· ' + q).join('\n'); }
   catch (e) { o.textContent = 'No funcionó: ' + e.message; }
