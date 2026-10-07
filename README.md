@@ -98,6 +98,17 @@ Con el botón **CUEVA INFINITA** del menú se juega un camino sin fin: las cueva
 
 ![Una vuelta completa: el pasillo de partida y las cuevas A a P, y la A de la vuelta siguiente](docs/infinita.png)
 
+## Infinita aleatoria
+
+Con el botón **INFINITA ALEATORIA** del menú se juega otra cueva sin fin, que se va armando a medida que avanzan: de **media altura** (10 filas entre acero) y siempre **hacia la derecha**, en **tramos de 50 columnas**. No hay reloj y los diamantes dan puntos; se juega solo, en cooperativo o en versus (también con dos celulares).
+
+- **Cada tramo es un concepto** de una cueva de Boulder Dash 1, en orden, y entre dos de ellos viene uno que **los mezcla**: A, A+B, B, B+C, C… P, P+A, y después otra vuelta, un nivel más rápida. Una mezcla tiene los muros de la segunda y el relleno y las cosas (enemigos, ameba, muros mágicos) de las dos.
+- Los conceptos: **A** dos muros largos de ladrillo; **B** salas de ladrillo con pasillos y luciérnagas; **C** un laberinto; **D** mariposas en huecos con una roca colgando encima; **E** diamantes en cajas de ladrillo con una luciérnaga dando vueltas; **F** guaridas de luciérnagas con diamantes; **G** ameba; **H** un muro mágico con rocas encima; **I** muchos diamantes y rocas; **J** vías con luciérnagas; **K** rocas por todas partes; **L** muros de lado a lado con un hueco; **M** una fila de mariposas y una semilla de ameba; **N** zigzags; **O** embudos; **P** cajitas de muro mágico con una roca encima.
+- Los tramos se unen de verdad (es una sola cueva larga) y se revisa que cada uno se pueda cruzar de izquierda a derecha por la fila 5; si sus muros lo cierran, se cava un paso.
+- Los mismos **mapas locales** que la cueva infinita: en memoria solo están el tramo de cada jugador, el anterior y el siguiente (6 tramos a lo más), y se guarda el **récord** de tramos cruzados.
+
+![Los primeros tramos: partida, A, A+B, B, B+C, C, C+D, D, D+E, E, E+F](docs/infinita-aleatoria.png)
+
 ## Extras
 
 - **PC: EXPERTO / APRENDIZ** (botón del menú). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`); en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende paso a paso.

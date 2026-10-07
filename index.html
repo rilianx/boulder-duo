@@ -2020,6 +2020,7 @@ function genBigB(seed, opts = {}){
 /* The seed: one picks a single cave by its seed in ELEGIR CUEVA (or one at random); winning it goes on to the next
    seed, and after 16 the speed level goes up, like the other sets. Two phones playing together use the host's. */
 const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200], BIG_SEED_MAX = 999999;
+CAVE_SETS.str = { name: 'Infinita aleatoria', caves: [{ props: { Name: 'Infinita aleatoria', Colors: 'Orange Gray1 White', Endless: 'strip' }, objects: [] }] };
 CAVE_SETS.inf = { name: 'Infinita', caves: [{ props: { Name: 'Infinita', Colors: 'Orange Gray1 White', Endless: true }, objects: [] }] };
 CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
   ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
@@ -2721,7 +2722,7 @@ function caveLayout(cave, lvl){
 function genCave(n){
   const { cave, lvl } = caveOf(n), P = cave.props;
   if (P.Big) return genBig(n, lvl, P);
-  if (P.Endless) return genEndless();
+  if (P.Endless) return genEndless();   // (the shape, caves or strip, was set by initLevel)
   const L = caveLayout(cave, lvl), { inbox, second, cw, ch, num } = L;
   grid = L.g; dir = L.d; fall = new Uint8Array(W*H);
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
@@ -2766,7 +2767,16 @@ function genBig(n, lvl, P){
      in its cave. There is no clock and nothing to unlock: diamonds are points.
    Everything comes from the chunk number, so two phones build the same chunks, and the window moves inside the tick
    (and is part of the saved state), so they move it at the same moment. */
-const INF_TW = 45, INF_TH = 27, INF_WC = 4, INF_WR = 2, INF_SLOTS = INF_WC * INF_WR, INF_W = INF_TW * INF_WC, INF_H = INF_TH * INF_WR, INF_NONE = -99;
+/* The window's shape: the endless caves use 4 x 2 tiles of 45 x 27 (a cave and its steel band); the endless strip
+   6 tiles of 50 x 12 in a row, and one column of steel at its right end (see infSetGeom). */
+let INF_TW = 45, INF_TH = 27, INF_WC = 4, INF_WR = 2, INF_SLOTS = 8, INF_W = 180, INF_H = 54, infKind = 'cave';
+const INF_NONE = -99;
+function infSetGeom(kind){
+  infKind = kind;
+  if (kind === 'strip') { INF_TW = 50; INF_TH = 12; INF_WC = 6; INF_WR = 1; INF_W = INF_TW * INF_WC + 1; }
+  else { INF_TW = 45; INF_TH = 27; INF_WC = 4; INF_WR = 2; INF_W = INF_TW * INF_WC; }
+  INF_SLOTS = INF_WC * INF_WR; INF_H = INF_TH * INF_WR;
+}
 const INF_CAVES = CAVE_SETS.bd1.caves.filter(c => c.props.Intermission !== 'true'), INF_N = INF_CAVES.length;
 const INF_IO = INF_CAVES.map(c => { const L = caveLayout(c, 0); return { inbox: L.inbox, outbox: L.outbox || [38, 20] }; });
 const INF_STEP = [[1, 0], [0, -1], [0, 1]];   // 0 right, 1 up, 2 down
@@ -2779,10 +2789,11 @@ const INF_DIR = (() => { let prev = 0; return INF_IO.map(({ outbox }) => {
 }); })();
 const infCi = k => ((k % INF_N) + INF_N) % INF_N;
 const infLvl = k => Math.max(0, Math.min(4, Math.floor(k / INF_N)));
-const infDir = k => k < 0 ? 0 : INF_DIR[infCi(k)];
+const infDir = k => k < 0 || infKind === 'strip' ? 0 : INF_DIR[infCi(k)];
 // where each chunk is in the world, in tiles (cave A at 0,0; the starting room just left of it)
 const INF_PRE = [[0, 0]]; INF_DIR.forEach((d, i) => INF_PRE.push([INF_PRE[i][0] + INF_STEP[d][0], INF_PRE[i][1] + INF_STEP[d][1]]));
 function infPos(k){
+  if (infKind === 'strip') return [k, 0];
   if (k < 0) return [-1, 0];
   const lap = Math.floor(k / INF_N), r = k % INF_N, L = INF_PRE[INF_N];
   return [lap * L[0] + INF_PRE[r][0], lap * L[1] + INF_PRE[r][1]];
@@ -2799,22 +2810,24 @@ function infEntryDoor(k){
 }
 let INF = null;   // the state: { lay: chunk in each tile of the window, rec: per loaded chunk, best: farthest cave per kid }
 let infViewP = null, infTL = [], infDV = new Uint8Array(MAXN), DV = DVAR;
-const infHere = new Uint8Array(INF_SLOTS), infAmN = new Int32Array(INF_SLOTS), infAmCan = new Uint8Array(INF_SLOTS);
+const infHere = new Uint8Array(8), infAmN = new Int32Array(8), infAmCan = new Uint8Array(8);   // per tile (8 at most)
 const infSlotXY = (x, y) => (x / INF_TW | 0) + INF_WC * (y / INF_TH | 0);
 const infSlotOf = i => infSlotXY(i % W, i / W | 0);
 const infOrg = s => [(s % INF_WC) * INF_TW, (s / INF_WC | 0) * INF_TH];
-const infInCave = (x, y) => x % INF_TW < 40 && y % INF_TH < 22;
+const infInCave = (x, y) => infKind === 'strip' || (x % INF_TW < 40 && y % INF_TH < 22);
 // the chunk a kid at (x, y) belongs to: the tile's, except in the steel band under a cave that was gone up into
 // (that passage is the one before's)
 function infBaseAt(x, y){
   const k = INF.lay[infSlotXY(x, y)]; if (k === undefined || k === INF_NONE) return null;
+  if (infKind === 'strip') return k;
   return y % INF_TH >= 22 && x % INF_TW < 40 && infDir(k - 1) === 1 ? k - 1 : k;
 }
 // the cave a kid is in, or is heading to in a passage
 const infCaveAt = (x, y) => { const b = infBaseAt(x, y); return b === null ? null : infInCave(x, y) ? INF.lay[infSlotXY(x, y)] : b + 1; };
 function infRecFor(k){
-  const c = INF_CAVES[infCi(Math.max(0, k))], lvl = infLvl(k), P = c.props;
-  const num = (key, def) => { const v = (P[key] || '').split(/\s+/).filter(Boolean).map(Number); return v.length ? v[Math.min(lvl, v.length - 1)] : def; };
+  const lvl = infKind === 'strip' ? stripLvl(k) : infLvl(k), cs = infKind === 'strip' ? stripCaves(k) : [INF_CAVES[infCi(Math.max(0, k))]];
+  // the strip: a stretch that mixes two caves takes the amoeba and magic wall times of whichever has them
+  const num = (key, def) => { for (const c of cs) { const v = (c.props[key] || '').split(/\s+/).filter(Boolean).map(Number); if (v.length) return v[Math.min(lvl, v.length - 1)]; } return def; };
   return INF.rec[k] = { am: { slow: Math.round(num('AmoebaTime', 0) * 1000 / CAVE_TICK[lvl]), ticks: 0 }, mg: { time: num('MagicWallTime', 0), state: 0, left: 0 } };
 }
 const infMagicAt = i => { const r = INF.rec[INF.lay[infSlotOf(i)]]; return r ? r.mg : { state: 2 }; };
@@ -2828,6 +2841,7 @@ function infClearSlot(s){
 // build chunk k as new in tile s: its cave with the tunnels to its doors (the doors themselves stay steel until
 // a passage is there), and steel around
 function infBuild(k, s){
+  if (infKind === 'strip') return stripBuild(k, s);
   infClearSlot(s);
   const [bx, by] = infOrg(s), [gx, gy] = infPos(k), at = (x, y) => (by + y)*W + bx + x;
   // the look of each cell (world coordinates, kept positive for hash)
@@ -2892,6 +2906,7 @@ function infHosted(lay, k){
 // after the window changed: passages that came along are kept, new ones built, the rest of every steel band is
 // steel; doors open where a passage is
 function infLinks(old, moved){
+  if (infKind === 'strip') return stripJoints();
   const keep = new Map();
   INF.lay.forEach(k => { if (k === INF_NONE || !infHosted(INF.lay, k)) return; if (old && infHosted(old, k) && !moved.has(k) && !moved.has(k + 1)) keep.set(k, 1); });
   const kept = new Set(); keep.forEach((v, k) => { for (const i of infPassageCells(k).cells.keys()) kept.add(i); });
@@ -2904,6 +2919,7 @@ function infLinks(old, moved){
   infDoors();
 }
 function infDoors(){
+  if (infKind === 'strip') return stripJoints();
   INF.lay.forEach((k, s) => {
     if (k === INF_NONE) return;
     const [bx, by] = infOrg(s), set = ([x, y], open) => {
@@ -2917,11 +2933,11 @@ function infDoors(){
 }
 // what follows from the window (not saved): each tile's colours, the dirt look, the pace
 function infRefresh(){
-  infTL = INF.lay.map(k => tilesFor(palFromColors((INF_CAVES[infCi(Math.max(0, k))].props.Colors || 'Orange Gray1 White').split(/\s+/))));
+  infTL = INF.lay.map(k => tilesFor(palFromColors(((infKind === 'strip' ? stripCaves(k)[0] : INF_CAVES[infCi(Math.max(0, k))]).props.Colors || 'Orange Gray1 White').split(/\s+/))));
   DV = infDV;
   const ks = players.filter(p => p.alive || p.respawn > 0).map(p => p.alive ? infBaseAt(p.x, p.y) : infBaseAt(p.dieX ?? p.x, p.dieY ?? p.y)).filter(k => k !== null && Number.isFinite(k));
   const rear = ks.length ? Math.min(...ks) : 0;
-  tickMs = CAVE_TICK[infLvl(Math.max(0, rear))];
+  tickMs = CAVE_TICK[infKind === 'strip' ? stripLvl(rear) : infLvl(Math.max(0, rear))];
   const s0 = INF.lay.indexOf(rear); TL = infTL[s0 >= 0 ? s0 : 0];
 }
 // the drawing follows the window when it moves (or when an older state comes back): cameras and drawn kids
@@ -3018,6 +3034,13 @@ function genEndless(){
   aux = new Uint8Array(W*H); moved = new Uint8Array(W*H); dirtVar = new Uint8Array(W*H);
   resetCaveRules(1); starIdx = -1; boss.fill(0); starPending = -1; starIsGem = false;
   INF = { lay: Array(INF_SLOTS).fill(INF_NONE), rec: {}, best: [0, 0] };
+  if (infKind === 'strip') {
+    grid.fill(STEEL);   // (and so the column at the right end stays steel)
+    INF.lay[0] = -1; INF.lay[1] = 0; INF.lay[2] = 1;
+    INF.lay.forEach((k, s) => { if (k === INF_NONE) infClearSlot(s); else infBuild(k, s); });
+    stripJoints(); infRefresh(); timeLeft = 999;
+    return [[3, 5], [4, 5]];
+  }
   INF.lay[0] = -1; INF.lay[1] = 0;
   INF.lay.forEach((k, s) => { if (k === INF_NONE) infClearSlot(s); else infBuild(k, s); });
   infLinks(null, new Set()); infRefresh();
@@ -3037,25 +3060,177 @@ function infTickStart(){
 }
 // the way on from where a kid is: the exit door of its cave (or of the cave its passage leads to)
 function infExitFor(p){
+  if (infKind === 'strip') return -1;   // the strip has no exits: just go on to the right
   const k = infCaveAt(p.x, p.y), s = k === null ? -1 : INF.lay.indexOf(k); if (s < 0) return -1;
   const [bx, by] = infOrg(s), [x, y] = infExitDoor(k); return (by + y) * W + bx + x;
 }
 // where a kid is: the cave's letter, its level and how many caves it has crossed
 function infLabel(p){
+  if (infKind === 'strip') { const k = Math.max(0, infCaveAt(p.x, p.y) ?? 0); return 'TRAMO ' + stripName(k) + (stripLvl(k) ? '·' + (stripLvl(k) + 1) : '') + ' · ' + k; }
   const k = Math.max(0, infCaveAt(p.x, p.y) ?? 0), lv = infLvl(k);
   return 'CUEVA ' + caveShort(INF_CAVES[infCi(k)].props.Name) + (lv ? '·' + (lv + 1) : '') + ' · ' + k;
 }
+/* ---------- the endless strip ----------
+   Another endless cave, made up as it goes: half a cave high (10 rows between steel) and on and on to the right,
+   in stretches of 50 columns. Each stretch takes after one of Boulder Dash 1's caves A to P, in order, and between
+   two of them comes one that mixes them: A, A+B, B, B+C, C, ... P, P+A, and then again a level faster. A mix has
+   the walls and rooms of the second and the fill and the things (enemies, amoeba...) of both. The stretches join
+   for real (the strip is one long cave), and each is checked to be crossable from left to right at row 5 (if
+   its walls shut it, a way is dug through them). The same window and local maps as the endless caves: each kid's
+   stretch, the one before and the one after. */
+const STRIP_CAVES = INF_CAVES.filter(c => !/^Cave M\*/.test(c.props.Name)), STRIP_N = STRIP_CAVES.length;
+const stripLvl = k => Math.max(0, Math.min(4, Math.floor(Math.max(0, k) / (2 * STRIP_N))));
+const stripIdx = k => { const c = Math.floor(Math.max(0, k) / 2) % STRIP_N; return k % 2 && k > 0 ? [c, (c + 1) % STRIP_N] : [c]; };
+const stripCaves = k => stripIdx(k).map(c => STRIP_CAVES[c]);
+const stripName = k => stripIdx(k).map(c => caveShort(STRIP_CAVES[c].props.Name)).join('+');
+/* What each cave is like, in a strip 50 wide and 10 high (rows 1 to 10): its fill (out of 256: butterflies,
+   fireflies, diamonds, boulders, space; the rest dirt), its walls and its things. */
+const STRIP_CONCEPTS = [
+  // A, intro: two long brick walls, the way snakes between them
+  { fill: [0, 0, 9, 50, 10], walls(put) { for (let x = 0; x < 38; x++) put(x, 4, WALL); for (let x = 12; x < 50; x++) put(x, 7, WALL); } },
+  // B, rooms: little brick rooms, corridors of space through them, a few fireflies
+  { fill: [0, 2, 9, 50, 10], walls(put) {
+    for (const x of [7, 15, 23, 31, 39, 47]) for (let y = 1; y <= 10; y++) put(x, y, WALL);
+    for (let x = 0; x < 50; x++) { put(x, 6, WALL); put(x, 3, E); put(x, 8, E); }
+    for (let y = 1; y <= 10; y++) put(19, y, E);
+  } },
+  // C, maze: a brick labyrinth
+  { fill: [0, 0, 10, 40, 5], walls(put, get, R) {
+    const cw = 25, ch = 5, seen = new Uint8Array(cw * ch), open = new Set(), st = [[0, 2]]; seen[2 * cw] = 1;
+    while (st.length) {
+      const [cx, cy] = st[st.length - 1], nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy]).filter(([x, y]) => x >= 0 && y >= 0 && x < cw && y < ch && !seen[y * cw + x]);
+      if (!nb.length) { st.pop(); continue; }
+      const [nx, ny] = nb[Math.floor(R() * nb.length)]; seen[ny * cw + nx] = 1; open.add((cx + nx) + ',' + (cy + ny + 1));   // the wall between two cells st.push([nx, ny]);
+    }
+    for (let y = 1; y <= 9; y++) for (let x = 0; x < 49; x++) {
+      const cell = x % 2 === 0 && y % 2 === 1;
+      if (!cell && !open.has(x + ',' + y)) put(x, y, WALL);
+    }
+  } },
+  // D, butterflies: butterflies in little hollows down below, with a boulder hanging over each
+  { fill: [0, 0, 6, 40, 5], things(put, get, R) {
+    for (let n = 0; n < 5; n++) { const x = 3 + Math.floor(R() * 44), y = 8 + Math.floor(R() * 2); put(x, y, BUTT); put(x + 1, y, E); put(x, y - 1, DIRT); put(x, y - 2, DIRT); put(x, y - 3, ROCK); }
+  } },
+  // E, guards: diamonds in brick boxes, a firefly going round each
+  { fill: [0, 0, 4, 40, 20], things(put, get, R) {
+    for (const cx of [9, 25, 41]) {
+      for (let y = 2; y <= 8; y++) for (let x = cx - 3; x <= cx + 3; x++) put(x, y, Math.max(Math.abs(x - cx), Math.abs(y - 5)) === 3 ? E : DIRT);
+      for (let y = 3; y <= 7; y++) for (let x = cx - 2; x <= cx + 2; x++) put(x, y, Math.max(Math.abs(x - cx), Math.abs(y - 5)) === 2 ? WALL : E);
+      put(cx, 5, GEM); put(cx, 3, DIRT); put(cx - 3, 2, FIRE);
+    }
+  } },
+  // F, firefly dens: brick chambers with fireflies and diamonds, a door of dirt
+  { fill: [0, 0, 6, 40, 10], things(put, get, R) {
+    for (const x0 of [4, 21, 38]) {
+      for (let y = 5; y <= 9; y++) for (let x = x0; x <= x0 + 7; x++) put(x, y, y === 5 || y === 9 || x === x0 || x === x0 + 7 ? WALL : E);
+      put(x0 + 2, 7, FIRE); put(x0 + 5, 6, FIRE); put(x0 + 3, 8, GEM); put(x0 + 4, 8, GEM); put(x0 + 6, 8, GEM);
+      put(R() < .5 ? x0 : x0 + 7, 7, DIRT);
+    }
+  } },
+  // G, amoeba: a blob of amoeba in a hollow (it grows while somebody is in its stretch)
+  { fill: [0, 0, 8, 40, 0], things(put, get, R) {
+    const x = 10 + Math.floor(R() * 30);
+    for (let y = 7; y <= 10; y++) for (let dx = -2; dx <= 3; dx++) put(x + dx, y, E);
+    put(x, 9, AMOEBA); put(x + 1, 9, AMOEBA); put(x, 10, AMOEBA); put(x + 1, 10, AMOEBA);
+  } },
+  // H, enchanted wall: a magic wall with boulders over it and space under it
+  { fill: [0, 0, 5, 60, 5], walls(put, get, R) {
+    for (let x = 5; x < 45; x++) { put(x, 6, MAGIC); put(x, 7, E); put(x, 8, E); }
+    for (let y = 1; y <= 5; y++) for (let x = 5; x < 45; x++) if (R() < .3) put(x, y, ROCK);
+  } },
+  // I, greed: diamonds and boulders all over
+  { fill: [0, 0, 40, 90, 5] },
+  // J, tracks: two tracks of space with fireflies running along them
+  { fill: [0, 0, 6, 40, 5], walls(put) { for (let x = 0; x < 50; x++) { put(x, 3, E); put(x, 8, E); if (x % 10 < 8) { put(x, 2, WALL); put(x, 9, WALL); } } },
+    things(put, get, R) { for (const y of [3, 8]) for (let n = 0; n < 2; n++) put(5 + Math.floor(R() * 40), y, FIRE); } },
+  // K, crowd: boulders everywhere, diamonds between them
+  { fill: [0, 0, 20, 120, 0] },
+  // L, walls: brick walls across the strip, each with a gap somewhere
+  { fill: [0, 0, 8, 50, 5], walls(put, get, R) {
+    for (let x = 5; x < 50; x += 6) { const g = 1 + Math.floor(R() * 8); for (let y = 1; y <= 10; y++) put(x, y, y === g || y === g + 1 ? DIRT : WALL); }
+  } },
+  // M, apocalypse: a row of butterflies up top, and a seed of amoeba down below
+  { fill: [0, 0, 6, 40, 5], things(put, get, R) {
+    const a = 5 + Math.floor(R() * 25);
+    for (let x = a; x < a + 13; x++) { put(x, 2, x % 3 ? E : BUTT); put(x, 1, DIRT); put(x, 3, DIRT); }
+    put(5 + Math.floor(R() * 40), 10, AMOEBA);
+  } },
+  // N, zigzag: brick zigzags, with gaps
+  { fill: [0, 0, 8, 50, 5], walls(put) {
+    for (let x = 0; x < 50; x++) { if (x % 12 === 6) continue; const t = x % 16; put(x, 2 + (t < 8 ? t : 15 - t), WALL); }
+  } },
+  // O, funnel: slanted walls closing in at the bottom, an opening there
+  { fill: [0, 0, 8, 60, 5], walls(put) {
+    for (const cx of [12, 37]) for (let d = 0; d < 9; d++) { put(cx - 9 + d, 1 + d, WALL); put(cx + 9 - d, 1 + d, WALL); }
+  } },
+  // P, enchanted boxes: little boxes of magic wall with a boulder over each
+  { fill: [0, 0, 6, 40, 5], things(put) {
+    for (const cx of [6, 18, 30, 42]) { for (let y = 6; y <= 8; y++) for (let x = cx - 1; x <= cx + 1; x++) put(x, y, x === cx && y === 7 ? E : MAGIC); put(cx, 5, DIRT); put(cx, 4, ROCK); put(cx, 9, E); put(cx, 10, E); }
+  } },
+];
+function stripBuild(k, s){
+  infClearSlot(s);
+  const bx = s * INF_TW, at = (x, y) => y*W + bx + x, R = rng((k + 7) * 15485863 + 3);
+  // the look of each cell (world coordinates, kept positive for hash)
+  infTileEach(s, (i, x, y) => { const wx = (k + 1000) * INF_TW + x; vari[i] = Math.floor(hash(wx * 7919 + y * 31 + 5) * 240); infDV[i] = Math.floor(hash(wx * 13 + y * 977 + 7) * 4); });
+  const put = (x, y, t) => { if (x < 0 || x >= INF_TW || y < 1 || y > INF_TH - 2) return; const i = at(x, y); grid[i] = t; dir[i] = t === FIRE || t === BUTT ? Math.floor(R() * 4) : 0; };
+  const get = (x, y) => grid[at(x, y)];
+  if (k < 0) {
+    // the start: quiet earth with a few boulders and diamonds, and the world's left wall
+    for (let y = 1; y <= 10; y++) for (let x = 1; x < INF_TW; x++) { const r = R(); put(x, y, r < .03 ? GEM : r < .1 ? ROCK : DIRT); }
+    for (let y = 3; y <= 7; y++) for (let x = 1; x <= 7; x++) put(x, y, DIRT);
+    put(3, 5, E); put(4, 5, E);
+  } else {
+    const ids = stripIdx(k), X = STRIP_CONCEPTS[ids[0]], Y = STRIP_CONCEPTS[ids[ids.length - 1]];
+    // the first one's fill, the second one's walls, and the things of both
+    const [fb, ff, fg, fr, fs] = X.fill;
+    for (let y = 1; y <= 10; y++) for (let x = 0; x < INF_TW; x++) {
+      const r = R() * 256;
+      put(x, y, r < fb ? BUTT : r < fb + ff ? FIRE : r < fb + ff + fg ? GEM : r < fb + ff + fg + fr ? ROCK : r < fb + ff + fg + fr + fs ? E : DIRT);
+    }
+    if (Y.walls) Y.walls(put, get, R);
+    if (X.things) X.things(put, get, R);
+    if (Y !== X && Y.things) Y.things(put, get, R);
+  }
+  // crossable: from the left at row 5 to the right at row 5 (dirt there on both sides, so stretches always join)
+  for (const x of [0, 1, INF_TW - 2, INF_TW - 1]) if (k >= 0 || x > 0) put(x, 5, DIRT);
+  const pass = t => t === E || t === DIRT || t === GEM || t === ROCK || t === FIRE || t === BUTT;
+  const through = () => {
+    const seen = new Uint8Array(INF_TW * 12), q = [5 * INF_TW + (k < 0 ? 1 : 0)]; seen[q[0]] = 1;
+    for (let h = 0; h < q.length; h++) { const c = q[h], x = c % INF_TW, y = c / INF_TW | 0; if (x === INF_TW - 1) return true;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, j = ny * INF_TW + nx;
+        if (nx >= 0 && nx < INF_TW && ny >= 1 && ny <= 10 && !seen[j] && pass(get(nx, ny))) { seen[j] = 1; q.push(j); } } }
+    return false;
+  };
+  if (!through()) for (let x = 0; x < INF_TW; x++) { const t = get(x, 5); if (!pass(t)) put(x, 5, DIRT); }
+  infTileEach(s, i => { if (grid[i] === ROCK) untouched[i] = 1; });
+  infRecFor(k);
+}
+// the joins between stretches: open where the stretch before is the slot just before, else steel
+function stripJoints(){
+  INF.lay.forEach((k, s) => {
+    if (k === INF_NONE) return;
+    const open = s > 0 && INF.lay[s - 1] === k - 1, bx = s * INF_TW;
+    for (let y = 1; y < INF_TH - 1; y++) {
+      const i = y*W + bx;
+      if (open) { if (grid[i] === STEEL) grid[i] = DIRT; }
+      else if (grid[i] !== P1 && grid[i] !== P2) { grid[i] = STEEL; fall[i] = 0; }
+    }
+  });
+}
 // the run is over: how far they got, and the best so far
-let infBestEver = 0;
-try { infBestEver = +localStorage.getItem('boulder-duo-inf-best') || 0; } catch (e) {}
+const infBest = { cave: 0, strip: 0 };
+try { infBest.cave = +localStorage.getItem('boulder-duo-inf-best') || 0; infBest.strip = +localStorage.getItem('boulder-duo-strip-best') || 0; } catch (e) {}
 function infOver(msg){
   state = 'between';
-  const far = Math.max(...INF.best), names = k => k < 0 ? '—' : caveShort(INF_CAVES[infCi(k)].props.Name) + (infLvl(k) ? ' · ' + (infLvl(k) + 1) : '');
-  const rec = far > infBestEver; if (rec) { infBestEver = far; try { localStorage.setItem('boulder-duo-inf-best', String(far)); } catch (e) {} }
+  const strip = infKind === 'strip', what = strip ? 'tramos' : 'cuevas';
+  const far = Math.max(...INF.best), names = k => k < 0 ? '—' : strip ? stripName(k) + (stripLvl(k) ? ' · ' + (stripLvl(k) + 1) : '') : caveShort(INF_CAVES[infCi(k)].props.Name) + (infLvl(k) ? ' · ' + (infLvl(k) + 1) : '');
+  const rec = far > infBest[infKind]; if (rec) { infBest[infKind] = far; try { localStorage.setItem(strip ? 'boulder-duo-strip-best' : 'boulder-duo-inf-best', String(far)); } catch (e) {} }
+  const infBestEver = infBest[infKind];
   let head = 'FIN DEL CAMINO';
   if (mode === 'versus') { const [a, b] = INF.best; head = a === b ? 'EMPATE' : '¡GANA EL JUGADOR ' + (a > b ? 1 : 2) + '!'; }
   showOverlay(`<div class="card"><h2>${head}</h2><p>${msg}</p>
-    <p>${mode === 'versus' ? 'J1 cruzó ' + INF.best[0] + ' cuevas (hasta la ' + names(INF.best[0]) + ') · J2 ' + INF.best[1] + ' (hasta la ' + names(INF.best[1]) + ')' : 'Cuevas cruzadas: ' + far + ' (hasta la ' + names(far) + ')'}.
+    <p>${mode === 'versus' ? 'J1 cruzó ' + INF.best[0] + ' ' + what + ' (hasta ' + names(INF.best[0]) + ') · J2 ' + INF.best[1] + ' (hasta ' + names(INF.best[1]) + ')' : (strip ? 'Tramos cruzados: ' : 'Cuevas cruzadas: ') + far + ' (hasta ' + names(far) + ')'}.
     ${rec ? '¡Nuevo récord!' : 'Récord: ' + infBestEver + '.'}</p>
     <div class="row"><button id="bagain" class="b1">OTRA VEZ</button><button id="bmenu">VOLVER AL MENÚ</button></div></div>`);
   $('bmenu').onclick = menu;
@@ -3069,6 +3244,7 @@ function initLevel(n){
   level = n; dust = []; pendingBooms = []; holdCell.fill(0); critters = []; nestPuff = []; starFlash = null; starIdx = -1; exitOpenAt = -1e9; src.fill(-1); dugAt.fill(-1e9); worldT = simT; fallN.fill(0); rot.fill(0); landAt.fill(-1e9); fallT.fill(0);
   const gen = (mode === 'train' && !hlTrain()) || simHook, big = !gen && !!caveOf(n).cave.props.Big, endlessCave = !gen && !!caveOf(n).cave.props.Endless;
   INF = null; DV = DVAR;
+  if (endlessCave) infSetGeom(caveOf(n).cave.props.Endless === 'strip' ? 'strip' : 'cave');
   setSize(endlessCave ? INF_W : big ? MAXW : 40, endlessCave ? INF_H : big ? MAXH : 22);
   for (let i=0; i<W*H; i++) vari[i] = Math.floor(hash(i * 7919 + n * 31) * 240);
   startUnsafe = false;
@@ -3611,8 +3787,8 @@ function menu(){
       <button id="bvs" class="b2">VERSUS</button>
     </div>
     <div class="row">
-      ${caveSet === 'inf' ? '' : '<button id="bpc" class="b2">CONTRA PC</button>'}
-      ${touchPref || caveSet === 'inf' ? '' : '<button id="btrain">ENTRENAR PC</button>'}
+      ${caveSet === 'inf' || caveSet === 'str' ? '' : '<button id="bpc" class="b2">CONTRA PC</button>'}
+      ${touchPref || caveSet === 'inf' || caveSet === 'str' ? '' : '<button id="btrain">ENTRENAR PC</button>'}
     </div>
     ${BT ? '<div class="row"><button id="bbt" class="b1">DOS CELULARES (BLUETOOTH)</button></div>' : ''}
     <div class="row">
@@ -3632,6 +3808,7 @@ function menu(){
       <button id="bset2" class="${caveSet === 'bd2' ? 'on' : ''}">CUEVAS DE BOULDER DASH 2</button>
       <button id="bset3" class="${caveSet === 'rnd' ? 'on' : ''}">CUEVAS ALEATORIAS GIGANTES</button>
       <button id="bset4" class="${caveSet === 'inf' ? 'on' : ''}">CUEVA INFINITA</button>
+      <button id="bset5" class="${caveSet === 'str' ? 'on' : ''}">INFINITA ALEATORIA</button>
     </div>
     <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega.${touchPref ? '' : ' Entrenar PC: el PC juega solo y puedes acelerar el tiempo.'}</p>
   </div>`);
@@ -3650,7 +3827,7 @@ function menu(){
   $('bmmap').onclick = () => { miniMap = !miniMap; try { localStorage.setItem('boulder-duo-minimap', miniMap ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
-  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf');
+  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str');
   onEnter = () => startGame('coop');
 }
 
@@ -3670,13 +3847,22 @@ function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
   // random caves: just the one of the seed, at the chosen level (the ones after it follow when it is won)
   if (caveSet === 'rnd' && idx) { setStartN(1 + lvl * cs.length); return caveMenu(); }
+  if (caveSet === 'str') {
+    if (n0 !== 1) setStartN(1);
+    initLevel(1); state = 'menu';
+    showOverlay(`<div class="card"><h2>INFINITA ALEATORIA</h2>
+      <p>Una cueva de media altura que sigue sin fin hacia la derecha, armándose a medida que avanzan, en tramos de 50 columnas. Cada tramo se parece a una cueva de Boulder Dash 1, en orden, y entre dos de ellas viene uno que las mezcla: A, A+B, B, B+C, C… y después otra vuelta más rápida. No hay reloj; los diamantes dan puntos.</p>
+      <p>Récord: ${infBest.strip} tramos cruzados.</p>
+      <div class="row"><button id="bpdone" class="b1">LISTO</button></div></div>`);
+    $('bpdone').onclick = menu; onEnter = menu; return;
+  }
   if (caveSet === 'inf') {
     // the endless cave: nothing to choose, it always starts at cave A
     if (n0 !== 1) setStartN(1);
     initLevel(1); state = 'menu';
     showOverlay(`<div class="card"><h2>CUEVA INFINITA</h2>
       <p>Las cuevas A a P de Boulder Dash 1, una tras otra sin fin (a la derecha, hacia arriba o hacia abajo), cada vuelta en el nivel siguiente. La salida de cada cueva está siempre abierta y un pasillo la une con la entrada de la siguiente: por ahí pasan los niños, las rocas y los enemigos. No hay reloj; los diamantes dan puntos.</p>
-      <p>Récord: ${infBestEver} cuevas cruzadas.</p>
+      <p>Récord: ${infBest.cave} cuevas cruzadas.</p>
       <div class="row"><button id="bpdone" class="b1">LISTO</button></div></div>`);
     $('bpdone').onclick = menu; onEnter = menu; return;
   }
