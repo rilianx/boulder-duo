@@ -109,16 +109,16 @@ Con el botón **INFINITA ALEATORIA** del menú se juega otra cueva sin fin, que 
 
 ![Los primeros tramos: partida, A, A+B, B, B+C, C, C+D, D, D+E, E, E+F](docs/infinita-aleatoria.png)
 
-## Paseo por el prado (prototipo)
+## Un día en Avonlea (prototipo)
 
-Otra idea, en un archivo aparte, **`paseo.html`**: un juego tranquilo de mundo abierto, sin misiones, para pasear y pasar el rato. Por ahora solo los personajes y el ambiente, para ver si vale la pena. Vista desde arriba y de frente (falso 3D): todo se dibuja en el orden de sus pies, así que la niña pasa por detrás de los árboles y de la casa.
+Otra idea, en un archivo aparte, **`avonlea.html`**: un juego tranquilo de mundo abierto, sin misiones, inspirado en *Ana de las Tejas Verdes* (L. M. Montgomery, 1908, de dominio público), con dibujos propios. Ana vive en **Tejas Verdes** con **Matthew** y **Marilla**, y pasa los días como quiere.
 
-- **La protagonista:** una niña pelirroja con trenzas, pecas, sombrero de paja con cinta roja y vestido verde. Camina en todas direcciones, parpadea, y si la dejas quieta mira a su alrededor y se sienta en el pasto. La acompaña su perrito, que la sigue, olfatea y se sienta a su lado.
-- **El ambiente:** un prado con camino de tierra, una casita con humo en la chimenea, cerca y buzón, árboles y arbustos con bayas, un estanque con nenúfares, juncos y un pez que salta, flores y pasto que se mecen con la brisa (y se apartan a su paso), mariposas, pájaros que pasan y sombras de nubes.
-- **El día:** dura 6 minutos: mañana, tarde dorada, noche (con las ventanas encendidas y luciérnagas) y amanecer.
-- **Controles:** flechas o WASD; en el celular, arrastrar el dedo.
+- **Qué se puede hacer:** acariciar a **Toby**, el perro; tomar la regadera en la bomba y **regar la huerta** (cada cantero regado crece un poco y al final florece, y las flores se cortan para hacer ramos); recoger **bayas** de los arbustos y **manzanas** del huerto de Diana; **cocinar** en la cocina de Tejas Verdes (tarta de bayas, compota de manzana o té); **conversar y regalar** a Matthew, Marilla y Diana, que le van tomando cariño (♥); invitar a **Diana**, en **La Cuesta del Huerto** al otro lado del arroyo, a **pasear juntas**; sentarse en la banca del **Lago de las Aguas Brillantes**. También están el **Camino Blanco de las Delicias**, con cerezos en flor, y el **Bosque Encantado**.
+- **Estilo dibujo a mano:** líneas de lápiz que tiemblan un poco y "hierven" (se redibujan unas veces por segundo, como en la animación dibujada), colores de acuarela que no calzan del todo con la línea, sombreado con rayitas y textura de papel encima.
+- **Falso 3D:** vista desde arriba y de frente; todo se dibuja en el orden de sus pies, así que se pasa por detrás de los árboles y las casas. El pasto se aparta al pasar, hay mariposas, pájaros, sombras de nubes, y el día dura 8 minutos (de noche, ventanas encendidas y luciérnagas).
+- **Controles:** flechas o WASD para pasear, Espacio para hacer cosas (y 1, 2, 3 para elegir en las conversaciones); en el celular, arrastrar el dedo y tocar ✋. Lo que tiene, lo que creció y el cariño de cada uno quedan guardados en el navegador.
 
-![Paseo por el prado](docs/paseo.png)
+![Un día en Avonlea](docs/avonlea.png)
 
 ## Boulder Dúo 3D (prueba de concepto)
 
