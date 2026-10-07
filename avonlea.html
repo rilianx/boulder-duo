@@ -18,6 +18,7 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 #talk .opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 #talk button{font:15px Georgia,serif;background:#fffaf0;color:#3b2a1c;border:1.5px solid #6b4a30;border-radius:8px 11px 7px 10px;padding:6px 11px;cursor:pointer}
 #talk button:focus{outline:2px solid #d9a441}
+#talk.wait .line{color:#9a7a5a;font-style:italic}
 @media (max-width:640px){#hint{top:58px !important;max-width:calc(100% - 30px) !important}}
 #hint{position:fixed;left:50%;top:12px;transform:translateX(-50%);padding:5px 12px;font-size:14px;pointer-events:none;transition:opacity 1.5s;text-align:center;max-width:calc(100% - 200px)}
 #mapbtn{position:fixed;right:10px;top:46px;width:42px;height:36px;font-size:20px;line-height:30px;padding:0;cursor:pointer}
@@ -27,7 +28,17 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 #map .mt{font-size:18px;font-style:italic;margin-bottom:5px}
 #mapcv{display:block;margin:0 auto;border-radius:4px}
 #map .mb{display:flex;gap:8px;justify-content:center;margin-top:8px}
-#map button{font:15px Georgia,serif;background:#fffaf0;color:#3b2a1c;border:1.5px solid #6b4a30;border-radius:8px 11px 7px 10px;padding:5px 11px;cursor:pointer}
+#aibtn{position:fixed;right:10px;top:88px;width:42px;height:36px;font-size:19px;line-height:30px;padding:0;cursor:pointer}
+#ai{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(30,20,10,.45)}
+#ai[hidden]{display:none}
+#ai .sheet{padding:12px 16px;width:min(520px,calc(100% - 28px));max-height:calc(100% - 40px);overflow:auto;font-size:15px;line-height:1.45}
+#ai h3{margin:0 0 6px;font-style:italic;font-weight:normal;font-size:20px}
+#ai label{display:block;margin:8px 0 2px}
+#ai input[type=password],#ai select{font:15px Georgia,serif;width:100%;box-sizing:border-box;padding:5px 8px;border:1.5px solid #6b4a30;border-radius:7px;background:#fffaf0;color:#3b2a1c}
+#ai .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+#ai .note{font-size:13px;color:#6b4a30;margin-top:4px}
+#ai pre{white-space:pre-wrap;font:13px Georgia,serif;background:#fffaf0;border:1px solid #d9bf8f;border-radius:6px;padding:8px;max-height:40vh;overflow:auto}
+#ai button,#map button{font:15px Georgia,serif;background:#fffaf0;color:#3b2a1c;border:1.5px solid #6b4a30;border-radius:8px 11px 7px 10px;padding:5px 11px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -39,6 +50,19 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 <button id="act" class="paper" hidden>✋</button>
 <div id="talk" class="paper" hidden></div>
 <button id="mapbtn" class="paper" title="Mapa (M)">🗺</button>
+<button id="aibtn" class="paper" title="Diálogos con IA">✒</button>
+<div id="ai" hidden><div class="paper sheet">
+  <h3>Diálogos con IA</h3>
+  <div>Con esto activado, Matthew, Marilla, Diana y la Sra. Barry conversan con Claude: se acuerdan de lo que ha pasado y de lo que les contaste.</div>
+  <label><input type="checkbox" id="aion"> Usar IA en las conversaciones</label>
+  <label for="aikey">Clave de la API de Anthropic</label>
+  <input type="password" id="aikey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+  <div class="note">La clave se guarda solo en este navegador y se envía directamente a api.anthropic.com. No compartas este archivo con la clave puesta.</div>
+  <label for="aimodel">Modelo</label>
+  <select id="aimodel"><option value="claude-opus-5-5">Claude Opus 5.5 (el mejor)</option><option value="claude-sonnet-5-5">Claude Sonnet 5.5 (más rápido)</option><option value="claude-haiku-4-5">Claude Haiku 4.5 (el más rápido y barato)</option></select>
+  <div class="row"><button id="aitest">Probar</button><button id="aimem">Ver recuerdos</button><button id="aiforget">Borrar recuerdos</button><button id="aiclose">Cerrar</button></div>
+  <pre id="aiout" hidden></pre>
+</div></div>
 <div id="map" hidden><div class="paper sheet"><div class="mt" id="maptitle"></div><canvas id="mapcv"></canvas><div class="mb"><button id="mapnext">Siguiente estación (prueba)</button><button id="mapclose">Cerrar</button></div></div></div>
 <script>
 /* Un día en Avonlea: a first look at a calm game inspired by "Anne of Green Gables" (L. M. Montgomery, 1908). No
@@ -53,6 +77,8 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
      in autumn, snow and a frozen lake in winter (and everyone in scarves).
    - Indoors: the kitchen at Green Gables, and Diana's parlour at Orchard Slope, where they take tea by the fire.
    - A map of Avonlea (M), drawn on a sheet of paper, with where everyone is.
+   - Optionally (✒), the conversations are written by Claude, with the game's journal of what has happened and what
+     each one remembers; without it, or if it fails, the written lines are used.
    - What she has, what has grown and how fond everyone is of her are kept in the browser. */
 (() => {
 'use strict';
@@ -552,7 +578,7 @@ function drawTea(c){
 
 /* ---------- the game ---------- */
 // scene: 'out' (Avonlea), 'gg' (the kitchen at Green Gables) or 'os' (the parlour at Orchard Slope)
-const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, barry: 0, toby: 0 }, cooking: null, talk: null, said: {}, saidS: {}, seasonShift: 0, teaDay: -1, map: false };
+const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, barry: 0, toby: 0 }, cooking: null, talk: null, said: {}, saidS: {}, seasonShift: 0, teaDay: -1, map: false, journal: [], mem: {} };
 const mkPerson = (look, x, y) => ({ look, x, y, dir: 2, walk: 0, moving: false, blink: 0, idle: 0, sit: false, vx: 0, vy: 0, carry: null, pet: false, crouch: false, lookAround: 0 });
 const ana = mkPerson('ana', GG.x - 6, GG.y + 70);
 const matthew = Object.assign(mkPerson('matthew', BARN.x + 60, BARN.y + 50), { goals: [[BARN.x + 60, BARN.y + 50], [GG.x - 140, GG.y + 90], [BARN.x - 20, BARN.y + 70], [GG.x + 120, GG.y + 160]], goal: 0, wait: 3 });
@@ -596,18 +622,18 @@ function near(){
     if (here(toby.x, toby.y, 28)) out.push({ d: dist(P.x, P.y, toby.x, toby.y), label: 'Acariciar a Toby', act: pet });
     for (const [who, p] of [['matthew', matthew], ['diana', diana]]) if ((who !== 'diana' || diana.where === 'out') && here(p.x, p.y, 34)) out.push({ d: dist(P.x, P.y, p.x, p.y), label: 'Hablar con ' + NAMES[who], act: () => talk(who) });
     const ripe = S === 1 || S === 2;
-    for (const b of bushes) if (ripe && b.berries && here(b.x, b.y - 4, 30)) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Recoger bayas', act: () => { game.inv.bayas += b.berries; float('+' + b.berries + ' bayas', b.x, b.y - 30); b.berries = 0; b.regrow = 90; save(); } });
-    for (const t of trees) if (ripe && t.kind === 'apple' && t.apples && here(t.x, t.y, 34 * t.s)) out.push({ d: dist(P.x, P.y, t.x, t.y), label: 'Recoger manzanas', act: () => { game.inv.manzanas += t.apples; float('+' + t.apples + ' manzanas', t.x, t.y - 70); t.apples = 0; t.regrow = 120; save(); } });
+    for (const b of bushes) if (ripe && b.berries && here(b.x, b.y - 4, 30)) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Recoger bayas', act: () => { game.inv.bayas += b.berries; logEv('Ana recogió bayas.'); float('+' + b.berries + ' bayas', b.x, b.y - 30); b.berries = 0; b.regrow = 90; save(); } });
+    for (const t of trees) if (ripe && t.kind === 'apple' && t.apples && here(t.x, t.y, 34 * t.s)) out.push({ d: dist(P.x, P.y, t.x, t.y), label: 'Recoger manzanas', act: () => { game.inv.manzanas += t.apples; logEv('Ana recogió manzanas en el huerto de los Barry.'); float('+' + t.apples + ' manzanas', t.x, t.y - 70); t.apples = 0; t.regrow = 120; save(); } });
     if (here(PUMP.x, PUMP.y, 34)) out.push({ d: dist(P.x, P.y, PUMP.x, PUMP.y), label: game.hasCan ? 'Llenar la regadera' : 'Tomar la regadera', act: () => { game.hasCan = true; game.water = 6; ana.carry = 'can'; float('regadera llena', PUMP.x, PUMP.y - 36); sfx.water(); save(); } });
     for (const b of BEDS) if (here(b.x, b.y, 30)) {
       if (S === 3) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La huerta duerme bajo la nieve', act: () => {} });
-      else if (b.stage >= 3) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Cortar ' + FLOWER_KINDS[b.kind][1], act: () => { b.stage = 1; game.inv.ramo++; float('+1 ramo de ' + FLOWER_KINDS[b.kind][1], b.x, b.y - 26); save(); } });
-      else if (game.hasCan && game.water > 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Regar', act: () => { b.wet = 1; b.grow = 0; game.water--; drops(b.x, b.y); sfx.water(); save(); } });
+      else if (b.stage >= 3) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Cortar ' + FLOWER_KINDS[b.kind][1], act: () => { b.stage = 1; game.inv.ramo++; logEv('Ana cortó ' + FLOWER_KINDS[b.kind][1] + ' de la huerta e hizo un ramo.'); float('+1 ramo de ' + FLOWER_KINDS[b.kind][1], b.x, b.y - 26); save(); } });
+      else if (game.hasCan && game.water > 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Regar', act: () => { b.wet = 1; b.grow = 0; game.water--; logEv('Ana regó la huerta.'); drops(b.x, b.y); sfx.water(); save(); } });
       else if (game.hasCan && game.water <= 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La regadera está vacía (llénala en la bomba)', act: () => {} });
     }
     if (here(GG.x, GG.y + 6, 26)) out.push({ d: dist(P.x, P.y, GG.x, GG.y + 6) + 4, label: 'Entrar a casa', act: () => goIn('gg') });
     if (here(OS.x, OS.y + 6, 26)) out.push({ d: dist(P.x, P.y, OS.x, OS.y + 6) + 4, label: 'Entrar a ' + OS.name, act: () => goIn('os') });
-    if (here(BENCH.x, BENCH.y + 6, 26)) out.push({ d: dist(P.x, P.y, BENCH.x, BENCH.y + 6) + 4, label: ana.sit ? 'Levantarse' : 'Sentarse a mirar el lago', act: () => { ana.sit = !ana.sit; if (ana.sit) { ana.x = BENCH.x; ana.y = BENCH.y - 2; ana.dir = 2; } } });
+    if (here(BENCH.x, BENCH.y + 6, 26)) out.push({ d: dist(P.x, P.y, BENCH.x, BENCH.y + 6) + 4, label: ana.sit ? 'Levantarse' : 'Sentarse a mirar el lago', act: () => { ana.sit = !ana.sit; if (ana.sit) { logEv('Ana se sentó a mirar el Lago de las Aguas Brillantes.'); ana.x = BENCH.x; ana.y = BENCH.y - 2; ana.dir = 2; } } });
   } else {
     if (diana.where === game.scene && here(diana.x, diana.y, 34)) out.push({ d: dist(P.x, P.y, diana.x, diana.y), label: 'Hablar con Diana', act: () => talk('diana') });
     if (game.scene === 'gg') {
@@ -623,7 +649,7 @@ function near(){
   out.sort((a, b) => a.d - b.d);
   return out[0] || null;
 }
-function pet(){ ana.pet = true; ana.crouch = true; toby.petted = 2.2; toby.dir = toby.x < ana.x ? 1 : 3; ana.dir = toby.x > ana.x ? 1 : 3; game.fond.toby++; hearts(toby.x, toby.y - 24); sfx.happy(); save(); setTimeout(() => { ana.pet = false; ana.crouch = false; }, 1600); }
+function pet(){ logEv('Ana acarició a Toby.'); ana.pet = true; ana.crouch = true; toby.petted = 2.2; toby.dir = toby.x < ana.x ? 1 : 3; ana.dir = toby.x > ana.x ? 1 : 3; game.fond.toby++; hearts(toby.x, toby.y - 24); sfx.happy(); save(); setTimeout(() => { ana.pet = false; ana.crouch = false; }, 1600); }
 function goIn(room){ game.scene = room; ana.x = KDOOR.x; ana.y = KIT.h - 14; ana.dir = 0; ana.sit = false; toby.x = ana.x + 26; toby.y = ana.y; if (diana.follow) { diana.where = room; diana.sit = false; diana.x = ana.x - 26; diana.y = ana.y; } cam.x = KIT.w / 2; cam.y = KIT.h / 2; }
 function goOut(){
   const H = game.scene === 'os' ? OS : GG;
@@ -638,7 +664,7 @@ function teaTime(){
   if (diana.where !== 'os') { float('Un ratito de descanso', ana.x, ana.y - 60); return; }
   diana.sit = true; diana.moving = false; diana.x = SOFA.x + 20; diana.y = SOFA.y - 4; diana.dir = 2;
   const first = game.teaDay !== today();
-  if (first) { game.teaDay = today(); game.fond.diana = Math.min(5, game.fond.diana + 1); hearts(SOFA.x, SOFA.y - 60); sfx.happy(); save(); }
+  if (first) { logEv('Ana y Diana tomaron el té en la salita de los Barry.'); game.teaDay = today(); game.fond.diana = Math.min(5, game.fond.diana + 1); hearts(SOFA.x, SOFA.y - 60); sfx.happy(); save(); }
   const TEA_LINES = ['Mamá nos dejó té y galletas. ¡Y cordial de frambuesa!', '¿Más té, Ana? Me encanta tomar el té contigo, como dos señoras de verdad.', 'Cuando seamos mayores tomaremos el té así todas las tardes, ¿verdad?', 'Mira cómo nieva afuera... ¡y aquí tan calentitas!'];
   say('diana', first ? TEA_LINES[S === 3 ? 3 : today() % 3] : 'Ya tomamos el té hoy, Ana... ¡pero podemos quedarnos conversando!', [
     ['¿Seguro que es cordial de frambuesa?', () => say('diana', '¡Sí, sí! Esta vez lo revisé dos veces. Nada de vino de grosellas... ¡qué susto el de aquella vez!', [['Brindemos por nuestra amistad', () => { hearts(diana.x, diana.y - 50); sfx.happy(); close(); }]])],
@@ -665,6 +691,7 @@ const seasonCount = () => Math.floor(dayT / 2) + game.seasonShift;
 const GIFTS = { tarta: ['tarta de bayas', '¡Una tarta! Huele de maravilla.'], compota: ['compota de manzana', '¡Qué rica compota! Gracias.'], te: ['taza de té', 'Un té calentito, justo lo que me hacía falta.'], ramo: ['ramo de flores', '¡Qué flores tan lindas! Las pondré en agua.'] };
 function talk(who){
   const p = PEOPLE[who];
+  if (aiReady()) { face(who); conv = null; aiTalk(who, 'Ana se acerca a conversar con ' + NAMES[who] + '.'); return; }
   if (!p.sit) { p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2; }
   if (!ana.sit) ana.dir = p.x < ana.x ? 3 : 1;
   let text;
@@ -672,25 +699,158 @@ function talk(who){
   else text = LINES[who][game.said[who] = ((game.said[who] ?? -1) + 1) % LINES[who].length];
   const opts = [];
   for (const [k, [name]] of Object.entries(GIFTS)) if (game.inv[k] > 0) opts.push(['Regalar ' + name, () => give(who, k)]);
-  if (who === 'diana') opts.push(diana.follow ? ['Hasta mañana, Diana', () => { diana.follow = false; say(who, '¡Hasta mañana, Ana! Que sueñes bonito.', [['Adiós', close]]); }] : ['¿Paseamos juntas?', () => { diana.follow = true; game.fond.diana++; save(); say(who, '¡Sí! Vamos, Ana, a donde tú quieras.', [['¡Vamos!', close]]); }]);
-  opts.push(['Adiós', close]);
+  opts.push(...walkOption(who), ['Adiós', close]);
   say(who, text, opts);
 }
+function face(who){
+  const p = PEOPLE[who];
+  if (!p.sit) { p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2; }
+  if (!ana.sit) ana.dir = p.x < ana.x ? 3 : 1;
+}
+// walking with Diana (the same with or without AI: the game decides it, so it always works)
+function walkOption(who){
+  if (who !== 'diana') return [];
+  return [diana.follow ? ['Hasta mañana, Diana', () => { diana.follow = false; logEv('Ana y Diana terminaron su paseo.'); save(); say(who, '¡Hasta mañana, Ana! Que sueñes bonito.', [['Adiós', close]]); }]
+    : ['¿Paseamos juntas?', () => { diana.follow = true; game.fond.diana = Math.min(5, game.fond.diana + 1); logEv('Ana y Diana salieron a pasear juntas.'); save(); say(who, '¡Sí! Vamos, Ana, a donde tú quieras.', [['¡Vamos!', close]]); }]];
+}
+
+/* ---------- dialogue with AI (Claude) ----------
+   Each conversation sends Claude who the character is (a fixed, cached prompt), what is true right now (the day,
+   the place, what Ana carries, how fond each one is of her), what has happened lately (the journal the game keeps)
+   and what this character remembers from earlier conversations. Claude answers as the character, offers Ana two or
+   three things to say, and may note one new memory. Gifts and walks are still decided by the game itself, so
+   nothing the AI writes can break it; if the AI is off or fails, the written lines are used. */
+const AI = { on: false, key: '', model: 'claude-opus-5-5' };
+try { Object.assign(AI, JSON.parse(localStorage.getItem('avonlea-ai') || '{}')); } catch (e) {}
+const saveAI = () => { try { localStorage.setItem('avonlea-ai', JSON.stringify(AI)); } catch (e) {} };
+const aiReady = () => AI.on && !!AI.key;
+let conv = null;   // the conversation going on: { who, id, msgs, turns }
+// what happened, as the game saw it (kept in the save; the AI reads the latest ones)
+function logEv(text){
+  const j = game.journal, e = { d: today() + 1, s: S, t: text };
+  if (j.length && j[j.length - 1].t === text && j[j.length - 1].d === e.d) return;
+  j.push(e); if (j.length > 80) j.splice(0, j.length - 80);
+}
+function remember(who, text){ const m = game.mem[who] = game.mem[who] || []; if (m.some(x => x.endsWith(': ' + text))) return; m.push('día ' + (today() + 1) + ': ' + text); if (m.length > 16) m.splice(0, m.length - 16); save(); }
+const AI_SYSTEM = `Eres la voz de los personajes de "Un día en Avonlea", un juego tranquilo y sin misiones inspirado en "Ana de las Tejas Verdes" (L. M. Montgomery, 1908). La jugadora es Ana Shirley, y tú hablas como el personaje con quien ella conversa. Escribe siempre en español, con tuteo entre Ana y su familia y amigas.
+
+EL MUNDO
+Avonlea, en la Isla del Príncipe Eduardo, hacia 1880. Lugares: Tejas Verdes (la granja de los Cuthbert, casa blanca de tejados verdes, con su cocina, su huerta de seis canteros con rosas, girasoles y lilas, la bomba de agua y el granero), La Cuesta del Huerto (la casa de los Barry, con su salita, su chimenea y su huerto de manzanos), el arroyo con su puente de madera, el Camino Blanco de las Delicias (con cerezos), el Lago de las Aguas Brillantes (con una banca) y el Bosque Encantado (oscuro, de pinos, que Ana y Diana "encantaron" con su imaginación y ahora les da miedo).
+Las estaciones duran dos días: en primavera florecen los manzanos y cerezos; en verano y otoño hay bayas en los arbustos y manzanas en el huerto de los Barry; en otoño las hojas se ponen rojas y doradas; en invierno nieva, el lago se congela y la huerta duerme bajo la nieve.
+
+LO QUE ANA PUEDE HACER EN EL JUEGO (si sugieres algo, que sea de esto)
+Pasear; acariciar a Toby, el perro de Tejas Verdes (no habla); tomar la regadera en la bomba y regar la huerta, que crece hasta florecer, y cortar flores para hacer ramos; recoger bayas y manzanas (solo en verano y otoño); cocinar en la cocina de Tejas Verdes tarta de bayas, compota de manzana o té; regalar lo que tiene; tomar el té con Diana en la salita de los Barry; calentarse junto a la chimenea; pasear con Diana; sentarse en la banca del lago.
+
+LOS PERSONAJES
+- Ana Shirley: once años, huérfana, la adoptaron los Cuthbert. Pelirroja (detesta su pelo), pecosa, de imaginación desbordante, habla mucho y con palabras grandiosas ("alma gemela", "espíritu afín", "hay tanto lugar para la imaginación"), dramática, se mete en líos sin querer y es muy cariñosa.
+- Matthew Cuthbert: unos sesenta años, hermano de Marilla. Tímidísimo, de muy pocas palabras, le dan miedo casi todas las mujeres, pero adora a Ana y siempre se pone de su lado. Trabaja en la granja: las vacas, el heno, el granero. Muletillas: "Bueno, pues...", "Ya lo creo, ya lo creo". Frases cortas, titubeantes, tiernas.
+- Marilla Cuthbert: hermana de Matthew, severa, práctica y ordenada, con un humor seco que esconde; quiere mucho a Ana aunque le cuesta decirlo, y la reprende por soñar despierta o hablar demasiado. Lleva siempre su broche de amatista. Se ocupa de la casa y de la cocina.
+- Diana Barry: la amiga del alma de Ana, de pelo negro y rizado, dulce, alegre y un poco miedosa; admira la imaginación de Ana. Se juraron amistad eterna. Una vez Ana le sirvió por error vino de grosellas creyendo que era cordial de frambuesa, Diana se emborrachó y su madre les prohibió verse por un tiempo: ahora lo recuerdan entre risas y vergüenza.
+- Sra. Barry: la madre de Diana. Correcta, estricta y algo estirada; desconfió de Ana después de lo del vino, pero ahora la aprecia, con cierta cautela.
+Fuera de escena existen la escuela, la señorita Stacy, la Sra. Rachel Lynde (la vecina chismosa), Gilbert Blythe (que una vez le dijo "Zanahorias" a Ana) y la iglesia; se pueden nombrar en la conversación, pero no aparecen en el juego.
+
+CÓMO RESPONDER
+- Habla solo como el personaje que conversa con Ana, con su voz propia. Una a tres frases cortas: unas 40 palabras como máximo.
+- Ten en cuenta lo que es verdad ahora (la hora, la estación, el lugar, lo que Ana lleva, quién la acompaña) y nombra a veces, con naturalidad, algo de lo que pasó o de lo que el personaje recuerda; no lo enumeres todo y no repitas lo que ya dijiste en esta conversación.
+- No contradigas el estado: por ejemplo, no hay manzanas en primavera ni flores en invierno, y si Ana no lleva algo no lo tiene.
+- No inventes sucesos que el juego tendría que mostrar (nadie llega, nadie se va, no aparecen objetos); puedes contar cosas del pasado o de fuera de escena.
+- El cariño (de 0 a 5) cambia el tono: con poco cariño el personaje es más reservado, con mucho es más cálido y cercano.
+- Nunca hables de juegos, puntos, corazones, inteligencia artificial ni cosas modernas.
+- "replies": dos o tres cosas distintas que Ana podría decir a continuación, con la voz de Ana (por ejemplo una soñadora, una cariñosa o práctica, una curiosa), de 12 palabras como máximo cada una. No incluyas despedidas ni regalos: el juego los agrega solo.
+- "memory": si en este intercambio pasó o se dijo algo nuevo que el personaje recordaría días después (un secreto, una promesa, un regalo, un plan, algo que Ana contó), escríbelo en una frase corta en tercera persona, desde el personaje (por ejemplo "Ana le contó que quiere ser poetisa"). Si no hay nada nuevo, deja "".`;
+const AI_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'replies', 'memory'], properties: { text: { type: 'string' }, replies: { type: 'array', items: { type: 'string' } }, memory: { type: 'string' } } };
+function placeText(){
+  if (game.scene === 'gg') return 'en la cocina de Tejas Verdes';
+  if (game.scene === 'os') return 'en la salita de La Cuesta del Huerto, junto a la chimenea';
+  const spots = [['frente a Tejas Verdes', GG.x, GG.y + 60], ['frente a La Cuesta del Huerto', OS.x, OS.y + 60], ['en el huerto de manzanos de los Barry', OS.x, OS.y + 200], ['junto al granero', BARN.x, BARN.y + 40], ['en el puente del arroyo', BRIDGE.x, BRIDGE.y], ['en el Camino Blanco de las Delicias', GG.x + 400, BRIDGE.y], ['a orillas del Lago de las Aguas Brillantes', LAKE.x, LAKE.y - LAKE.ry], ['cerca del Bosque Encantado', 9 * T, 40 * T]];
+  let best = spots[0], bd = 1e9; for (const sp of spots) { const d = dist(ana.x, ana.y, sp[1], sp[2]); if (d < bd) { bd = d; best = sp; } }
+  return best[0] + (bd > 500 ? ' (algo lejos de ahí, en el campo)' : '');
+}
+function stateText(who){
+  const d = dayT % 1, hh = Math.floor((d * 24 + 6) % 24), mm = Math.floor(((d * 24 + 6) % 1) * 60);
+  const moment = hh < 6 ? 'de madrugada' : hh < 11 ? 'de mañana' : hh < 14 ? 'al mediodía' : hh < 17 ? 'de tarde' : hh < 20 ? 'al atardecer' : 'de noche';
+  const I = game.inv, NM = { bayas: ['baya', 'bayas'], manzanas: ['manzana', 'manzanas'], tarta: ['tarta de bayas', 'tartas de bayas'], compota: ['compota de manzana', 'compotas de manzana'], te: ['taza de té', 'tazas de té'], ramo: ['ramo de flores', 'ramos de flores'] };
+  const carry = Object.entries(I).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + NM[k][n > 1 ? 1 : 0]);
+  if (game.hasCan) carry.push('la regadera (' + (game.water ? 'con agua' : 'vacía') + ')');
+  const bloom = BEDS.filter(b => b.stage >= 3).length;
+  const L = [
+    `AHORA: día ${today() + 1} en Avonlea, ${SEASONS[S].toLowerCase()} (día ${today() % 2 + 1} de 2 de la estación), las ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}, ${moment}.`,
+    `Lugar: Ana está ${placeText()}${diana.follow && who !== 'diana' ? ', paseando con Diana' : ''}; Toby la acompaña.`,
+    `Ana lleva: ${carry.length ? carry.join(', ') : 'nada en las manos'}.`,
+    `La huerta: ${S === 3 ? 'duerme bajo la nieve' : bloom + ' de 6 canteros con flores'}.`,
+    `Cariño hacia Ana (0 a 5): Matthew ${game.fond.matthew}, Marilla ${game.fond.marilla}, Diana ${game.fond.diana}, Sra. Barry ${game.fond.barry}.`,
+    `Habla con Ana: ${NAMES[who]}.`,
+  ];
+  const ev = game.journal.slice(-24);
+  L.push('', 'LO QUE HA PASADO ÚLTIMAMENTE (lo más reciente al final):', ...(ev.length ? ev.map(e => `- día ${e.d} (${SEASONS[e.s].toLowerCase()}): ${e.t}`) : ['- (nada todavía: es el primer día)']));
+  const m = game.mem[who] || [];
+  L.push('', `LO QUE ${NAMES[who].toUpperCase()} RECUERDA DE OTRAS CONVERSACIONES:`, ...(m.length ? m.map(x => '- ' + x) : ['- (nada todavía)']));
+  return L.join('\n');
+}
+// one request to Claude: the fixed prompt first (cached), then this conversation
+async function aiCall(messages, retry = true){
+  const body = { model: AI.model, max_tokens: 4000, system: [{ type: 'text', text: AI_SYSTEM, cache_control: { type: 'ephemeral' } }], messages, output_config: { format: { type: 'json_schema', schema: AI_SCHEMA } } };
+  const headers = { 'content-type': 'application/json', 'x-api-key': AI.key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  // (low effort: quick answers for a chat; on the Opus and Sonnet models, a declined answer is retried on another model)
+  if (AI.model !== 'claude-haiku-4-5') { body.output_config.effort = 'low'; if (retry) { body.fallbacks = 'default'; headers['anthropic-beta'] = 'server-side-fallback-2026-07-01'; } }
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
+  let res;
+  try { res = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(body), signal: ctl.signal }); }
+  catch (e) { throw new Error(e.name === 'AbortError' ? 'tardó demasiado' : 'sin conexión'); }
+  finally { clearTimeout(timer); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    if (res.status === 400 && retry && /fallback/i.test(data.error?.message || '')) return aiCall(messages, false);
+    throw new Error({ 401: 'la clave no es válida', 403: 'la clave no tiene permiso', 429: 'demasiadas conversaciones seguidas, espera un poco', 529: 'el servicio está saturado' }[res.status] || ('error ' + res.status + (data.error?.message ? ': ' + data.error.message : '')));
+  }
+  if (data.stop_reason === 'refusal') throw new Error('no quiso responder eso');
+  const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  let out; try { out = JSON.parse(txt); } catch (e) { throw new Error('respuesta incompleta'); }
+  if (typeof out.text !== 'string' || !out.text.trim()) throw new Error('respuesta vacía');
+  console.debug('[avonlea IA]', data.model, data.usage);
+  return { content: data.content, text: out.text.trim(), replies: (Array.isArray(out.replies) ? out.replies : []).filter(r => typeof r === 'string' && r.trim()).slice(0, 3), memory: typeof out.memory === 'string' ? out.memory.trim() : '' };
+}
+function aiTalk(who, userText){
+  if (!conv || conv.who !== who) conv = { who, id: Math.random(), msgs: [], turns: 0 };
+  const c = conv;
+  c.msgs.push({ role: 'user', content: c.msgs.length ? userText : stateText(who) + '\n\nAHORA PASA: ' + userText });
+  c.turns++;
+  say(who, NAMES[who] + ' está pensando…', [['Adiós', close]], true);
+  aiCall(c.msgs).then(r => {
+    if (conv !== c || game.talk?.who !== who) return;
+    c.msgs.push({ role: 'assistant', content: r.content });
+    if (r.memory) remember(who, r.memory);
+    const opts = [];
+    // (after a few exchanges the conversation winds down)
+    if (c.turns < 6) for (const q of r.replies) opts.push(['«' + q + '»', () => { logEv('Ana conversó con ' + NAMES[who] + '.'); aiTalk(who, 'Ana dice: «' + q + '»'); }]);
+    for (const [k, [name]] of Object.entries(GIFTS)) if (game.inv[k] > 0) opts.push(['Regalar ' + name, () => give(who, k)]);
+    opts.push(...walkOption(who), ['Adiós', close]);
+    say(who, r.text, opts);
+  }).catch(err => {
+    if (conv !== c) return;
+    conv = null; notice('✒ La IA no respondió (' + err.message + '). Uso las frases de siempre.');
+    if (game.talk?.who === who) { close(); talkFixed(who); }
+  });
+}
+function talkFixed(who){ const on = AI.on; AI.on = false; try { talk(who); } finally { AI.on = on; } }
 function give(who, k){
   game.inv[k]--; game.fond[who] = Math.min(5, game.fond[who] + 1);
-  const p = PEOPLE[who]; hearts(p.x, p.y - 56); sfx.happy(); save();
+  const p = PEOPLE[who]; hearts(p.x, p.y - 56); sfx.happy();
+  logEv('Ana le regaló ' + GIFTS[k][0].replace(/^(\S+)/, 'una $1').replace('una ramo', 'un ramo') + ' a ' + NAMES[who] + '.'); save();
+  if (aiReady()) { aiTalk(who, '(Ana le regala a ' + NAMES[who] + ' ' + GIFTS[k][0].replace(/^(\S+)/, 'una $1').replace('una ramo', 'un ramo') + ', hecha o juntada por ella.)'); return; }
   const extra = who === 'matthew' ? ' Bueno, pues... gracias, Ana.' : who === 'marilla' ? ' Vaya, Ana. Muy bien hecho.' : who === 'barry' ? ' Qué amable eres, Ana.' : ' ¡Eres la mejor amiga del mundo!';
   say(who, GIFTS[k][1] + extra, [['De nada', close]]);
 }
-function say(who, text, opts){
+function say(who, text, opts, wait = false){
   game.talk = { who };
   const box = $('talk'), f = Math.min(5, game.fond[who] || 0), heartsTxt = who in game.fond ? '♥'.repeat(f) + '♡'.repeat(5 - f) : '';
-  box.innerHTML = `<div class="who">${NAMES[who] || who}<span>${heartsTxt}</span></div><div>${text}</div><div class="opts"></div>`;
+  box.innerHTML = `<div class="who">${NAMES[who] || who}<span>${heartsTxt}</span></div><div class="line"></div><div class="opts"></div>`;
+  box.querySelector('.line').textContent = text; box.classList.toggle('wait', wait);
   const row = box.querySelector('.opts');
   opts.forEach(([label, fn], k) => { const b = document.createElement('button'); b.textContent = (opts.length > 1 ? (k + 1) + '. ' : '') + label; b.onclick = e => { e.stopPropagation(); fn(); }; row.appendChild(b); });
   box.hidden = false; game.talkOpts = opts;
 }
-function close(){ $('talk').hidden = true; game.talk = null; game.talkOpts = null; }
+function close(){ $('talk').hidden = true; game.talk = null; game.talkOpts = null; conv = null; }
 function cookMenu(){
   const R = [['Tarta de bayas (3 bayas)', 'tarta', { bayas: 3 }], ['Compota de manzana (3 manzanas)', 'compota', { manzanas: 3 }], ['Té', 'te', {}]];
   const opts = R.filter(([, , need]) => Object.entries(need).every(([k, n]) => game.inv[k] >= n)).map(([label, k, need]) => [label, () => { close(); for (const [i, n] of Object.entries(need)) game.inv[i] -= n; game.cooking = { k, t: 2.6 }; ana.dir = 0; sfx.cook(); }]);
@@ -725,14 +885,16 @@ function note(f, d, vol = .03, type = 'sine', at = 0){ if (!AC) return; const o 
 const sfx = { happy: () => { note(660, .3); note(880, .35, .03, 'sine', .12); note(990, .4, .025, 'sine', .24); }, water: () => { for (let k = 0; k < 4; k++) note(1200 + k * 160, .08, .015, 'triangle', k * .05); }, cook: () => note(330, .5, .02, 'triangle'), done: () => { note(523, .25); note(659, .25, .03, 'sine', .1); note(784, .4, .03, 'sine', .2); } };
 
 /* ---------- keeping the day: in the browser ---------- */
-function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, saidS: game.saidS, seasonShift: game.seasonShift, teaDay: game.teaDay, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
-try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; game.saidS = s.saidS || {}; game.seasonShift = s.seasonShift || 0; game.teaDay = s.teaDay ?? -1; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
+function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, saidS: game.saidS, seasonShift: game.seasonShift, teaDay: game.teaDay, journal: game.journal, mem: game.mem, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
+try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; game.saidS = s.saidS || {}; game.seasonShift = s.seasonShift || 0; game.teaDay = s.teaDay ?? -1; game.journal = s.journal || []; game.mem = s.mem || {}; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
 addEventListener('pagehide', save); setInterval(save, 10000);
 
 /* ---------- input ---------- */
 const keys = new Set();
 let actNow = false;
 addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,select,textarea')) return;
+  if (!$('ai').hidden) { if (e.code === 'Escape') aiPanel(false); return; }
   audio(); hint();
   if (e.code === 'KeyM' && !game.talk) { toggleMap(); return; }
   if (game.map) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); toggleMap(false); } return; }
@@ -757,6 +919,28 @@ function notice(text){ const h = $('hint'); h.textContent = text; h.style.transi
 $('mapbtn').addEventListener('pointerdown', e => { e.stopPropagation(); audio(); if (!game.talk) toggleMap(); });
 $('mapclose').addEventListener('click', () => toggleMap(false));
 $('mapcv').addEventListener('click', () => toggleMap(false));
+// the AI settings: on/off, the key (kept in this browser only), the model; and a look at what they remember
+function aiPanel(on){
+  $('ai').hidden = !on; if (!on) return;
+  close(); $('aion').checked = AI.on; $('aikey').value = AI.key; $('aimodel').value = AI.model; $('aiout').hidden = true;
+}
+const aiSync = () => { AI.on = $('aion').checked; AI.key = $('aikey').value.trim(); AI.model = $('aimodel').value; saveAI(); };
+for (const id of ['aion', 'aikey', 'aimodel']) $(id).addEventListener('change', aiSync);
+$('aibtn').addEventListener('pointerdown', e => { e.stopPropagation(); audio(); if (!game.talk) aiPanel(true); });
+$('aiclose').addEventListener('click', () => { aiSync(); aiPanel(false); });
+$('aitest').addEventListener('click', async () => {
+  aiSync(); const o = $('aiout'); o.hidden = false;
+  if (!AI.key) { o.textContent = 'Falta la clave.'; return; }
+  o.textContent = 'Preguntándole a Diana…';
+  try { const r = await aiCall([{ role: 'user', content: stateText('diana') + '\n\nAHORA PASA: Ana saluda a Diana (esto es solo una prueba de la voz).' }]); o.textContent = 'Diana: ' + r.text + '\n\nAna podría decir:\n' + r.replies.map(q => '· ' + q).join('\n'); }
+  catch (e) { o.textContent = 'No funcionó: ' + e.message; }
+});
+$('aimem').addEventListener('click', () => {
+  const o = $('aiout'); o.hidden = false;
+  const mem = Object.entries(game.mem).map(([w, m]) => NAMES[w] + ' recuerda:\n' + m.map(x => '  · ' + x).join('\n')).join('\n\n');
+  o.textContent = (mem || 'Todavía nadie recuerda nada especial.') + '\n\nLo que ha pasado:\n' + (game.journal.slice(-30).map(e => '  · día ' + e.d + ': ' + e.t).join('\n') || '  (nada todavía)');
+});
+$('aiforget').addEventListener('click', () => { if (!confirm('¿Borrar todo lo que recuerdan y el diario de lo que ha pasado?')) return; game.mem = {}; game.journal = []; save(); $('aiout').hidden = false; $('aiout').textContent = 'Listo: es como si fuera el primer día.'; });
 $('mapnext').addEventListener('click', () => { game.seasonShift = (game.seasonShift + 1) % 4; save(); });
 
 /* ---------- the loop ---------- */
@@ -767,10 +951,10 @@ function update(dt){
   const { night } = light();
   // the season: two days each
   const ns = (seasonCount() % 4 + 4) % 4;
-  if (ns !== S) { S = ns; if (TT > 1) notice(SICON[S] + ' ' + ['¡Llegó la primavera! Los manzanos están en flor.', '¡Llegó el verano! Hay bayas y manzanas, y luciérnagas de noche.', '¡Llegó el otoño! Las hojas se ponen rojas y doradas.', '¡Llegó el invierno! El lago se heló y la huerta duerme bajo la nieve.'][S]); }
+  if (ns !== S) { S = ns; if (TT > 1) logEv('Llegó ' + ['la primavera', 'el verano', 'el otoño', 'el invierno'][S] + '.'); if (TT > 1) notice(SICON[S] + ' ' + ['¡Llegó la primavera! Los manzanos están en flor.', '¡Llegó el verano! Hay bayas y manzanas, y luciérnagas de noche.', '¡Llegó el otoño! Las hojas se ponen rojas y doradas.', '¡Llegó el invierno! El lago se heló y la huerta duerme bajo la nieve.'][S]); }
   // Ana: walks where she is told (not while talking or cooking); sits on the bench until she moves
   let mx = 0, my = 0;
-  if (!game.talk && !game.cooking && !game.map) {
+  if (!game.talk && !game.cooking && !game.map && $('ai').hidden) {
     if (keys.has('ArrowLeft') || keys.has('KeyA')) mx--; if (keys.has('ArrowRight') || keys.has('KeyD')) mx++;
     if (keys.has('ArrowUp') || keys.has('KeyW')) my--; if (keys.has('ArrowDown') || keys.has('KeyS')) my++;
     if (stick) { const dx = stick.x - stick.x0, dy = stick.y - stick.y0, l = Math.hypot(dx, dy); if (l > 10) { mx = dx / Math.max(l, 50); my = dy / Math.max(l, 50); } }
@@ -785,7 +969,7 @@ function update(dt){
   if (ana.idle > 9 && game.scene === 'out' && !game.talk) ana.sit = true;
   for (const p of [ana, matthew, diana, marilla, barry]) { p.blink -= dt; if (p.blink < -2.5 - Math.random() * 3) p.blink = .14; }
   // cooking: a moment at the stove, then it is ready
-  if (game.cooking && (game.cooking.t -= dt) <= 0) { const k = game.cooking.k; game.inv[k]++; game.cooking = null; float('¡' + { tarta: 'Tarta de bayas', compota: 'Compota de manzana', te: 'Té' }[k] + ' lista!', STOVE.x, STOVE.y - 70); sfx.done(); save(); }
+  if (game.cooking && (game.cooking.t -= dt) <= 0) { const k = game.cooking.k; game.inv[k]++; game.cooking = null; logEv('Ana cocinó ' + { tarta: 'una tarta de bayas', compota: 'compota de manzana', te: 'té' }[k] + ' en la cocina de Tejas Verdes.'); float('¡' + { tarta: 'Tarta de bayas', compota: 'Compota de manzana', te: 'Té' }[k] + ' lista!', STOVE.x, STOVE.y - 70); sfx.done(); save(); }
   // the others: Matthew about the farm, Diana about her garden (or with Ana), Marilla in the kitchen
   // (Diana goes home in the evening and stays in all winter; Mrs. Barry keeps the parlour)
   const wantHome = night > .35 || S === 3, busy = w => game.talk?.who === w;
@@ -822,7 +1006,7 @@ function update(dt){
   for (const b of bushes) if (!b.berries && (b.regrow -= dt) <= 0) b.berries = 3;
   for (const t of trees) if (t.kind === 'apple' && !t.apples && (t.regrow -= dt) <= 0) t.apples = 3;
   // what she can do here, and doing it
-  here = game.talk || game.cooking || game.map ? null : near();
+  here = game.talk || game.cooking || game.map || !$('ai').hidden ? null : near();
   if (actNow) { actNow = false; if (here) here.act(); }
   // life about
   for (const b of butterflies) { b.ph += dt * 9; const dx = b.tx - b.x, dy = b.ty - b.y, dd = Math.hypot(dx, dy); if (dd < 8) { b.tx = clamp(b.x + (Math.random() - .5) * 300, 0, WW); b.ty = clamp(b.y + (Math.random() - .5) * 300, 0, WH); } else { b.x += dx / dd * 22 * dt; b.y += dy / dd * 22 * dt; } }
@@ -1022,7 +1206,7 @@ function drawMap(){
   $('maptitle').textContent = 'Avonlea · ' + SEASONS[S] + ', día ' + (Math.floor(dayT) % 2 + 1) + ' · ' + SICON[S];
 }
 function loop(now){ const dt = clamp((now - last) / 1000, 0, .05); last = now; update(dt); render(); requestAnimationFrame(loop); }
-window.__avonlea = { game, ana, matthew, diana, marilla, barry, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, FIRE, SOFA, TEA, KDOOR, KIT, act: () => { actNow = true; }, setDay: v => { dayT = v; }, season: () => S, toggleMap, goIn, goOut, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
+window.__avonlea = { game, ana, matthew, diana, marilla, barry, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, FIRE, SOFA, TEA, KDOOR, KIT, act: () => { actNow = true; }, setDay: v => { dayT = v; }, season: () => S, toggleMap, goIn, goOut, AI, stateText, aiTalk, logEv, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
 requestAnimationFrame(loop);
 })();
 </script>
