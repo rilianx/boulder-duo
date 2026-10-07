@@ -4865,18 +4865,127 @@ function tiltBlit(main, src, sw, sh){
   }
   main.restore();
 }
+/* the things that stand up on the slab (VISTA 3D): rocks, gems, the kids, the fireflies and butterflies are not
+   laid flat with the cave but drawn upright where they stand, sized by how far up the slab they are, nearest last */
+const BILL = new Set([ROCK, GEM, P1, P2, FIRE, BUTT]);
+const KID3 = [{ dir: 'down', at: -1e9 }, { dir: 'down', at: -1e9 }];
+function drawBills(G, list, oy){
+  const DW = G.canvas.width, DH = G.canvas.height, a = TILT_FAR, L = Math.log(1 / a);
+  const items = list.map(o => {
+    const u = (o.py + T * .8) / (CH * T), s = a * Math.exp(Math.max(-.2, u) * L), w = DW * s;
+    return Object.assign(o, { X: (DW - w) / 2 + (o.px + T / 2) / (CW * T) * w, Y: (s - a) / (1 - a) * DH, ts: w / CW });
+  }).sort((p, q) => p.Y - q.Y);
+  G.save();
+  // their shadows on the slab first (lighter under what hovers)
+  for (const o of items) {
+    const fly = o.t === FIRE || o.t === BUTT;
+    G.fillStyle = fly ? 'rgba(0,0,0,.22)' : 'rgba(0,0,0,.42)';
+    G.beginPath(); G.ellipse(o.X + o.ts * .06, o.Y - o.ts * .02, o.ts * (fly ? .26 : o.t === GEM ? .3 : .4), o.ts * (fly ? .08 : .12), 0, 0, Math.PI * 2); G.fill();
+  }
+  for (const o of items) {
+    const { X, Y, ts } = o;
+    if (o.t === ROCK) {
+      // a rock rolls as it goes, sideways and down the slope; it squashes a little when it lands
+      const fx = src[o.i] >= 0 ? src[o.i] % W - o.i % W : 0, land = (simT - landAt[o.i]) / 240;
+      let sy = 1, hop = 0;
+      if (land >= 0 && land < 1 && o.k === 0) { if (land < .35) sy = 1 - .14 * Math.sin(Math.PI * land / .35); else hop = -ts * .07 * Math.sin(Math.PI * (land - .35) / .65); }
+      const ang = rot[o.i] + fx * Math.PI / 2 * o.k + (o.py + oy) / T * Math.PI / 2, sz = ts * 1.06;
+      G.save(); G.translate(X, Y + hop); G.scale(1, sy); G.translate(0, -sz * .47); G.rotate(ang); G.drawImage(o.s, -sz / 2, -sz / 2, sz, sz); G.restore();
+    } else if (o.t === GEM) {
+      const sz = ts * .9, bob = Math.sin(simT / 300 + o.i) * ts * .05;
+      G.drawImage(o.s, X - sz / 2, Y - sz - ts * .08 + bob, sz, sz);
+    } else if (o.t === FIRE) {
+      // a firefly: a glowing bug hovering over the floor, its square spinning inside the glow
+      const hy = Y - ts * (.62 + .06 * Math.sin(simT / 170 + o.i)), gl = G.createRadialGradient(X, hy, 0, X, hy, ts * .62);
+      gl.addColorStop(0, 'rgba(255,220,120,.55)'); gl.addColorStop(1, 'rgba(255,140,40,0)'); G.fillStyle = gl; G.fillRect(X - ts * .62, hy - ts * .62, ts * 1.24, ts * 1.24);
+      const sz = ts * .78; G.save(); G.translate(X, hy); G.rotate(simT / 260); G.drawImage(o.s, -sz / 2, -sz / 2, sz, sz); G.restore();
+    } else if (o.t === BUTT) {
+      // a butterfly flapping, a little above the floor
+      const hy = Y - ts * (.58 + .08 * Math.sin(simT / 210 + o.i)), f = .3 + .7 * Math.abs(Math.sin(simT / 85 + o.i)), sz = ts * .95;
+      G.save(); G.translate(X, hy); G.scale(f, 1); G.drawImage(o.s, -sz / 2, -sz / 2, sz, sz); G.restore();
+    } else drawKid3(G, o);
+  }
+  G.restore();
+}
+// a kid standing on the slab: the back going up, the face coming down, the profile going sideways; holding up the
+// rock (or gem) resting on top of them with back and arms; the idle games keep their own pictures, standing up
+function drawKid3(G, o){
+  const p = players[o.t - P1], kd = KID3[p.id], { X, Y, ts } = o;
+  if (o.k > 0 && src[o.i] >= 0) {
+    const fx = src[o.i] % W, fy = src[o.i] / W | 0, x = o.i % W, y = o.i / W | 0;
+    kd.dir = y < fy ? 'up' : y > fy ? 'down' : x > fx ? 'right' : 'left'; kd.at = simT;
+  } else if (simT - kd.at > 1600) kd.dir = 'down';
+  const moving = simT - kd.at < tickMs * 1.25, above = grid[o.i - W], hold = !moving && (above === ROCK || above === GEM);
+  const act = hold ? '' : idleAct(p);
+  if (!hold && (act || rpsNow)) { const sz = ts * 1.16; G.drawImage(o.s, X - sz / 2, Y - sz + ts * .04, sz, sz); return; }
+  const u = ts / 64, girl = p.id === 1, sw = moving ? Math.sin(simT / 85) : 0, side = kd.dir === 'left' || kd.dir === 'right', back = kd.dir === 'up';
+  const C = girl ? { hair: '#6b3519', top: '#ee7f3c', topD: '#c55e24', leg: '#f6cfa6', shoe: '#b5302a', band: '#e8443a' } : { hair: '#3a2416', top: '#4a90d9', topD: '#2f6bb0', leg: '#6b4a2e', shoe: '#2b1b12' };
+  const SK = '#f6cfa6', OL = '#21140d';
+  G.save(); G.translate(X, Y); G.scale(u * (kd.dir === 'left' ? -1 : 1), u);
+  G.lineJoin = 'round'; G.lineCap = 'round'; G.strokeStyle = OL; G.lineWidth = 2.4;
+  const shape = (f, fill) => { G.beginPath(); f(); G.fillStyle = fill; G.fill(); G.stroke(); };
+  const ellP = (x, y, rx, ry) => () => G.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+  const crouch = hold ? 7 : 0, by = -Math.abs(sw) * 1.5 + crouch;
+  // legs and shoes
+  if (side) {
+    for (const k of [-1, 1]) { const lx = k * sw * 7; shape(() => { G.moveTo(-3, -22 + by); G.lineTo(lx - 3, -4); G.lineTo(lx + 4, -4); G.lineTo(4, -22 + by); }, C.leg); shape(ellP(lx + 3, -3, 7, 3.6), C.shoe); }
+  } else if (hold) {
+    for (const k of [-1, 1]) { shape(() => { G.moveTo(k * 4, -18 + by); G.lineTo(k * 13, -10); G.lineTo(k * 9, -3); G.lineTo(k * 5, -3); G.lineTo(k * 6, -10); G.lineTo(k * 1, -18 + by); }, C.leg); shape(ellP(k * 8, -3, 6.5, 3.6), C.shoe); }
+  } else {
+    for (const k of [-1, 1]) { const lift = Math.max(0, k * sw) * 6; shape(() => G.rect(k * 6.5 - 3.6, -22 + by, 7.2, 19 - lift), C.leg); shape(ellP(k * 6.5, -3 - lift, 6, 3.6), C.shoe); }
+  }
+  // the shovel, on the back going up, in the hand otherwise
+  const shovel = (x0, y0, x1, y1) => { G.save(); G.lineWidth = 3.4; G.strokeStyle = OL; G.beginPath(); G.moveTo(x0, y0); G.lineTo(x1, y1); G.stroke(); G.lineWidth = 2; G.strokeStyle = '#a4743f'; G.stroke(); G.restore(); shape(ellP(x1, y1, 4.4, 6), '#b8bec6'); };
+  if (back) shovel(-13, -26 + by, 12, -72 + by);
+  // body: his shirt and trousers, her dress
+  if (girl) shape(() => { G.moveTo(side ? -9 : -12, -46 + by); G.lineTo(side ? 9 : 12, -46 + by); G.lineTo(side ? 13 : 18, -17 + by); G.lineTo(side ? -13 : -18, -17 + by); G.closePath(); }, C.top);
+  else { shape(() => G.rect(side ? -9 : -13, -27 + by, side ? 18 : 26, 9), C.leg); shape(() => { G.moveTo(side ? -9 : -14, -46 + by); G.lineTo(side ? 9 : 14, -46 + by); G.lineTo(side ? 9 : 14, -25 + by); G.lineTo(side ? -9 : -14, -25 + by); G.closePath(); }, C.top); }
+  // arms: swinging, or up holding the rock
+  const arm = (x0, y0, x1, y1) => { G.save(); G.lineWidth = 7.4; G.strokeStyle = OL; G.beginPath(); G.moveTo(x0, y0); G.lineTo(x1, y1); G.stroke(); G.lineWidth = 4.6; G.strokeStyle = C.top; G.stroke(); G.restore(); shape(ellP(x1, y1, 3.6, 3.6), SK); };
+  if (hold) { arm(-13, -43 + by, -17, -66 + by); arm(13, -43 + by, 17, -66 + by); }
+  else if (side) { arm(0, -42 + by, 9 - sw * 8, -27 + by); if (!back) shovel(9 - sw * 8, -28 + by, 22 - sw * 6, -8 + by); }
+  else { arm(-13, -43 + by, -17, -26 + by - sw * 3); arm(13, -43 + by, 17, -26 + by + sw * 3); }
+  // head: hair, then the face from the front or the side; just hair from behind
+  const hy = -62 + by;
+  if (girl && !side) shape(() => { G.moveTo(-16, hy); G.lineTo(-17, hy + 20); G.lineTo(17, hy + 20); G.lineTo(16, hy); G.closePath(); }, C.hair);
+  shape(ellP(0, hy, 16, 15.5), back ? C.hair : SK);
+  if (back) { G.strokeStyle = 'rgba(0,0,0,.25)'; G.lineWidth = 1.4; G.beginPath(); G.moveTo(-6, hy - 12); G.quadraticCurveTo(-2, hy, -5, hy + 12); G.moveTo(5, hy - 12); G.quadraticCurveTo(8, hy, 4, hy + 12); G.stroke(); G.strokeStyle = OL; G.lineWidth = 2.4; }
+  else if (side) {
+    shape(() => { G.moveTo(-16, hy + 6); G.quadraticCurveTo(-18, hy - 16, 2, hy - 15.5); G.quadraticCurveTo(14, hy - 15, 15, hy - 6); G.quadraticCurveTo(4, hy - 9, -2, hy - 4); G.quadraticCurveTo(-6, hy + 4, -10, hy + 9); G.closePath(); }, C.hair);
+    if (girl) shape(() => { G.moveTo(-14, hy + 4); G.quadraticCurveTo(-22, hy + 16, -12, hy + 22); G.quadraticCurveTo(-6, hy + 12, -10, hy + 6); G.closePath(); }, C.hair);
+    G.fillStyle = OL; G.beginPath(); G.ellipse(8, hy, 1.9, 2.8, 0, 0, Math.PI * 2); G.fill();
+    G.fillStyle = 'rgba(240,120,110,.5)'; G.beginPath(); G.ellipse(6, hy + 6, 3, 2, 0, 0, Math.PI * 2); G.fill();
+  } else {
+    shape(() => { G.moveTo(-16, hy + 2); G.quadraticCurveTo(-17, hy - 17, 0, hy - 16.5); G.quadraticCurveTo(17, hy - 17, 16, hy + 2); G.quadraticCurveTo(10, hy - 8, 4, hy - 6); G.quadraticCurveTo(-2, hy - 10, -8, hy - 5); G.quadraticCurveTo(-12, hy - 4, -16, hy + 2); G.closePath(); }, C.hair);
+    G.fillStyle = OL; G.strokeStyle = OL;
+    if (hold) { G.lineWidth = 1.8; for (const k of [-1, 1]) { G.beginPath(); G.moveTo(k * 8, hy - 1); G.lineTo(k * 4, hy + 1); G.lineTo(k * 8, hy + 3); G.stroke(); } G.beginPath(); G.moveTo(-4, hy + 8); G.lineTo(4, hy + 8); G.stroke(); G.lineWidth = 2.4;
+      G.fillStyle = '#9fd6ff'; G.beginPath(); G.moveTo(15, hy - 8); G.quadraticCurveTo(19, hy - 2, 15, hy); G.quadraticCurveTo(12, hy - 3, 15, hy - 8); G.fill(); }
+    else { for (const k of [-1, 1]) { G.beginPath(); G.ellipse(k * 6, hy + 1, 2, 3, 0, 0, Math.PI * 2); G.fill(); } G.lineWidth = 1.6; G.beginPath(); G.arc(0, hy + 6, 3.4, .2, Math.PI - .2); G.stroke(); G.lineWidth = 2.4;
+      G.fillStyle = 'rgba(240,120,110,.45)'; for (const k of [-1, 1]) { G.beginPath(); G.ellipse(k * 10, hy + 5, 3, 2, 0, 0, Math.PI * 2); G.fill(); } }
+  }
+  if (girl) { G.fillStyle = C.band; G.fillRect(-15, hy - 9, side ? 26 : 30, 3.6); }
+  G.restore();
+}
 // relief, drawn under everything else: below each block that has open space beneath it, the block's front face
 const RELIEF = { [WALL]: '#7a3e2c', [STEEL]: '#6a6a74', [EXIT]: '#6a6a74' };
 function drawRelief(g, ox, oy, x0, y0){
   const h = T * .34;
   for (let y = Math.max(0, y0 - 2); y <= Math.min(H - 2, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W - 1, x0 + Math.ceil(CW) + 2); x++) {
     const i = y * W + x, t = grid[i];
+    // where it was dug out, the floor of the cave: dark trodden earth (so the slab has no holes)
+    if (isOpenCell(t) || t === ROCK || t === GEM) g.drawImage(FLOOR3[(x * 7 + y * 13) % 4], x * T - ox, y * T - oy, T, T);
     if (!(t === DIRT || t === WALL || t === STEEL || t === EXIT) || !isOpenCell(grid[i + W]) || (simT - dugAt[i + W]) / tickMs < 1) continue;
     const px = x * T - ox, py = (y + 1) * T - oy;
     g.fillStyle = t === DIRT ? CAVE_DIRT() : RELIEF[t]; g.fillRect(px, py, T, h);
     g.drawImage(RELIEF_SHADE, px, py, T, T * .56);
   }
 }
+const FLOOR3 = [0, 1, 2, 3].map(v => {
+  const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'), R = rng(90 + v * 7);
+  g.fillStyle = '#1c140e'; g.fillRect(0, 0, 32, 32);
+  for (let n = 0; n < 26; n++) { g.fillStyle = R() < .5 ? 'rgba(70,50,34,.55)' : 'rgba(0,0,0,.35)'; g.fillRect(R() * 32, R() * 32, 1 + R() * 2, 1); }
+  return c;
+});
 // the face's shading (darker downwards, a lit top edge) and the soft shadow on the floor in front of it
 const RELIEF_SHADE = (() => {
   const c = document.createElement('canvas'); c.width = 8; c.height = 56; const g = c.getContext('2d');
@@ -4912,7 +5021,7 @@ function renderView(k){
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   infViewP = pv;
-  const glide = [];
+  const glide = [], bills = [], bb = tilt && !(darkCaves && mode !== 'train' && state !== 'menu');
   if (tilt) drawRelief(g, ox, oy, x0, y0);
   for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + Math.ceil(CW) + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
@@ -4938,15 +5047,16 @@ function renderView(k){
       // a resting rock or gem sits in the earth: dirt behind it, opened only towards empty neighbours
       const px = x*T - ox, py = y*T - oy;
       g.drawImage(dirtCut(DV[i], openMask(i), true), px, py, T, T);
-      if (tt === ROCK || tt === GEM) { drawThing(g, s, i, px, py, 0, tt === ROCK); continue; }
+      if (tt === ROCK || tt === GEM) { if (bb) bills.push({ t: tt, s, i, px, py, k: 0 }); else drawThing(g, s, i, px, py, 0, tt === ROCK); continue; }
     }
     const dp = (tt === P1 || tt === P2) && netRole && isRemote(players[tt - P1]) ? netDisp[tt - P1] : null;
     if (dp) glide.push([s, i, 0, dp[0] * T - ox, dp[1] * T - oy]);   // the other phone's kid, where it is drawn
     else if (gk > 0) { const k = glideEase(i, gk); glide.push([s, i, k, (x + (from % W - x) * k) * T - ox, (y + ((from / W | 0) - y) * k) * T - oy]); }
+    else if (bb && BILL.has(tt)) bills.push({ t: tt, s, i, px: x*T - ox, py: y*T - oy, k: 0 });
     else g.drawImage(s, x*T - ox, y*T - oy, T, T);
   }
   drawAmbient(g, ox, oy, x0, y0);
-  glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * zs) / zs, Math.round(py * zs) / zs, T, T); });
+  glide.forEach(([s, i, k, px, py]) => { const t = grid[i]; if (bb && BILL.has(t)) { bills.push({ t, s, i, px, py, k }); return; } if (t === ROCK || t === GEM) drawThing(g, s, i, px, py, k, t === ROCK); else g.drawImage(s, Math.round(px * zs) / zs, Math.round(py * zs) / zs, T, T); });
   drawCrowns(g, ox, oy, x0, y0);
   if (darkCaves && mode !== 'train' && state !== 'menu') drawDark(g, k, ox, oy, x0, y0);
   drawCritters(g, ox, oy);
@@ -5044,7 +5154,7 @@ function renderView(k){
   }
   if (g !== main) {
     main.setTransform(1, 0, 0, 1, 0, 0); main.imageSmoothingEnabled = true;
-    if (tilt) tiltBlit(main, g.canvas, CW * T * zs, CH * T * zs);
+    if (tilt) { tiltBlit(main, g.canvas, CW * T * zs, CH * T * zs); if (bills.length) drawBills(main, bills, oy); }
     else main.drawImage(g.canvas, 0, 0, g.canvas.width * zFull / zs, g.canvas.height * zFull / zs);
     main.imageSmoothingEnabled = false; g = main;
   }

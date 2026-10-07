@@ -166,6 +166,14 @@ En un archivo aparte, **`bd3d.html`**: Boulder Dash en un cubo de bloques con te
 
   ![Vista 3D](docs/vista3d.png)
 
+  En la vista 3D las cosas no van acostadas con la cueva sino **de pie** sobre ella, con su sombra en el piso, más chicas mientras más lejos, y lo más cercano tapa a lo de atrás:
+  - **Los niños** (dibujados de nuevo para esta vista) muestran la espalda, con la pala, al subir; la cara al bajar, y el perfil al ir de lado, caminando. Si se detienen bajo una roca o un diamante, **lo sostienen** con la espalda y los brazos en alto, agachados y haciendo fuerza. Sus juegos cuando nadie los mueve (leer, dormir, la pelota, el cachipún) siguen con sus dibujos de siempre, de pie.
+  - **Las rocas ruedan** al moverse, de lado y cuesta abajo, y se aplastan un poco al caer; **los diamantes** flotan apenas.
+  - **Las luciérnagas** brillan suspendidas sobre el piso y **las mariposas** aletean en el aire.
+  - Lo excavado es piso de tierra oscura, y cada bloque muestra su cara frontal.
+
+  ![Los niños en la vista 3D](docs/vista3d-ninos.png)
+
 ![Cueva M*](docs/cueva-mstar.png) ![Oscuridad](docs/oscuridad.png)
 
 ## Modos
