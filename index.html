@@ -2438,6 +2438,10 @@ let darkCaves = false;
 let miniMap = false;
 try { miniMap = localStorage.getItem('boulder-duo-minimap') === '1'; } catch (e) {}
 try { darkCaves = localStorage.getItem('boulder-duo-dark') === '1'; } catch (e) {}
+// "fake 3D": the cave seen as a gently tilted slab, its low end towards us (which is why things fall downwards);
+// only the picture changes, the cave plays exactly the same
+let tilt3d = false;
+try { tilt3d = localStorage.getItem('boulder-duo-tilt') === '1'; } catch (e) {}
 const DARK = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = VW * T * SS; c.height = VH * T * SS; return c; });
 function drawDark(g, k, ox, oy, x0, y0){
   const dc = DARK[k], d = dc.getContext('2d');
@@ -3798,6 +3802,7 @@ function menu(){
       ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
       <button id="bzoom" class="${zoomLevel !== 1 ? 'on' : ''}">ZOOM: ${zoomLevel === 0 ? 'CUEVA ENTERA' : '×' + String(zoomLevel).replace('.', ',')}</button>
       <button id="bdark" class="${darkCaves ? 'on' : ''}">OSCURIDAD: ${darkCaves ? 'SÍ' : 'NO'}</button>
+      <button id="btilt" class="${tilt3d ? 'on' : ''}">VISTA 3D: ${tilt3d ? 'SÍ' : 'NO'}</button>
       <button id="bmmap" class="${miniMap ? 'on' : ''}">MINIMAPA: ${miniMap ? 'SÍ' : 'NO'}</button>
       <button id="bai" class="${aiKind === 'astar' ? 'on' : ''}">PC: ${aiKind === 'astar' ? 'EXPERTO' : 'APRENDIZ'}</button>
       <button id="bfriend" class="${friendlyOn ? 'on' : ''}">AMIGABLE: ${friendlyOn ? 'SÍ' : 'NO'}</button>
@@ -3825,6 +3830,7 @@ function menu(){
   $('bfriend').onclick = () => { friendlyOn = !friendlyOn; try { localStorage.setItem('boulder-duo-friendly', friendlyOn ? '1' : '0'); } catch (e) {} menu(); };
   $('bzoom').onclick = () => { const L = [1, 1.25, 1.5, 2, .75, .5, 0].filter(z => z === 0 ? wholeOK() : z > zoomFit() + .125 && z >= zoomMin()); setZoom(L[(L.indexOf(zoomLevel) + 1) % L.length] ?? 1, true); menu(); };
   $('bmmap').onclick = () => { miniMap = !miniMap; try { localStorage.setItem('boulder-duo-minimap', miniMap ? '1' : '0'); } catch (e) {} menu(); };
+  $('btilt').onclick = () => { tilt3d = !tilt3d; try { localStorage.setItem('boulder-duo-tilt', tilt3d ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
   $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str');
@@ -4827,6 +4833,58 @@ function renderOverview(g){
   g.font = '8px "Press Start 2P", monospace'; g.textAlign = 'center';
   g.fillStyle = '#9d978f'; g.fillText('MAPA COMPLETO · ENTRENAMIENTO', VW*T/2, oy - 6 > 8 ? oy - 6 : 12);
 }
+/* ---------- VISTA 3D: the tilted cave ----------
+   The view is drawn flat as always, with a little relief added (each block shows the face that looks downhill,
+   towards us), and then laid onto the screen as a slab seen in perspective: the near (low) end at the bottom, full
+   size; the far (high) end at the top, narrower and squeezed, fading into the dark. Row by row, a strip of the flat
+   picture is scaled to the width of the slab at that height, so everything drawn on the cave (the kids, the
+   creatures, the dust, the words) tilts with it. */
+const TILT_FAR = .64, TILT_ROWS = 1.35;   // how wide the far end of the slab is, against the near end; how much more of the cave is seen
+function tiltBlit(main, src, sw, sh){
+  const DW = main.canvas.width, DH = main.canvas.height, a = TILT_FAR, L = Math.log(1 / a), step = Math.max(2, Math.round(DH / 260));
+  // the rock around the slab
+  const bg = main.createLinearGradient(0, 0, 0, DH); bg.addColorStop(0, '#050403'); bg.addColorStop(1, '#17110c');
+  main.fillStyle = bg; main.fillRect(0, 0, DW, DH);
+  const u = v => Math.log((a + (1 - a) * v) / a) / L;
+  for (let y = 0; y < DH; y += step) {
+    const v0 = y / DH, v1 = Math.min(1, (y + step) / DH), s = a + (1 - a) * (v0 + v1) / 2, u0 = u(v0), u1 = u(v1), w = DW * s;
+    main.drawImage(src, 0, u0 * sh, sw, Math.max(.01, (u1 - u0) * sh), (DW - w) / 2, y, w, v1 * DH - y + .5);
+  }
+  // the far end fades into the dark; a soft light falls on the near end
+  const fog = main.createLinearGradient(0, 0, 0, DH);
+  fog.addColorStop(0, 'rgba(0,0,0,.62)'); fog.addColorStop(.42, 'rgba(0,0,0,.12)'); fog.addColorStop(.7, 'rgba(0,0,0,0)'); fog.addColorStop(1, 'rgba(255,220,170,.05)');
+  main.fillStyle = fog; main.fillRect(0, 0, DW, DH);
+  // the slab's thick edges, catching a little light
+  const side = (DW * (1 - a)) / 2;
+  main.save(); main.lineWidth = Math.max(2, DW / 400);
+  for (const sx of [1, -1]) {
+    const x0 = sx > 0 ? 0 : DW, x1 = sx > 0 ? side : DW - side;
+    main.fillStyle = 'rgba(40,30,22,.9)'; main.beginPath(); main.moveTo(x0, DH); main.lineTo(x1, 0); main.lineTo(x1 - sx * DW * .02, 0); main.lineTo(x0 - sx * DW * .03, DH); main.closePath(); main.fill();
+    const eg = main.createLinearGradient(0, 0, 0, DH); eg.addColorStop(0, 'rgba(160,130,100,.08)'); eg.addColorStop(1, 'rgba(220,180,130,.45)');
+    main.strokeStyle = eg; main.beginPath(); main.moveTo(x0, DH); main.lineTo(x1, 0); main.stroke();
+  }
+  main.restore();
+}
+// relief, drawn under everything else: below each block that has open space beneath it, the block's front face
+const RELIEF = { [WALL]: '#7a3e2c', [STEEL]: '#6a6a74', [EXIT]: '#6a6a74' };
+function drawRelief(g, ox, oy, x0, y0){
+  const h = T * .34;
+  for (let y = Math.max(0, y0 - 2); y <= Math.min(H - 2, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W - 1, x0 + Math.ceil(CW) + 2); x++) {
+    const i = y * W + x, t = grid[i];
+    if (!(t === DIRT || t === WALL || t === STEEL || t === EXIT) || !isOpenCell(grid[i + W]) || (simT - dugAt[i + W]) / tickMs < 1) continue;
+    const px = x * T - ox, py = (y + 1) * T - oy;
+    g.fillStyle = t === DIRT ? CAVE_DIRT() : RELIEF[t]; g.fillRect(px, py, T, h);
+    g.drawImage(RELIEF_SHADE, px, py, T, T * .56);
+  }
+}
+// the face's shading (darker downwards, a lit top edge) and the soft shadow on the floor in front of it
+const RELIEF_SHADE = (() => {
+  const c = document.createElement('canvas'); c.width = 8; c.height = 56; const g = c.getContext('2d');
+  const fg = g.createLinearGradient(0, 0, 0, 34); fg.addColorStop(0, 'rgba(0,0,0,.25)'); fg.addColorStop(1, 'rgba(0,0,0,.72)'); g.fillStyle = fg; g.fillRect(0, 0, 8, 34);
+  g.fillStyle = 'rgba(255,240,210,.18)'; g.fillRect(0, 0, 8, 2.5);
+  const sg = g.createLinearGradient(0, 34, 0, 56); sg.addColorStop(0, 'rgba(0,0,0,.35)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sg; g.fillRect(0, 34, 8, 22);
+  return c;
+})();
 const OFFV = [0, 1].map(() => { const c = document.createElement('canvas'); const g = c.getContext('2d'); return g; });
 function renderView(k){
   const main = CTX[k], c = cams[k];
@@ -4839,18 +4897,23 @@ function renderView(k){
   // whole screen pixels per cave pixel: drawn straight; otherwise (the whole cave) drawn at a whole scale on the
   // side and then scaled smoothly onto the screen, so the tiles never show seams
   let zs = zFull;
-  if (Math.abs(zFull - Math.round(zFull)) > 1e-6) {
-    zs = Math.max(1, Math.floor(zFull)); g = OFFV[k];
+  const tilt = tilt3d && !(mode === 'train' && state !== 'menu');
+  // (tilted, the view reaches further up the slab: the far rows, squeezed by the perspective)
+  const CH0 = CH;
+  if (tilt) CH = CH0 * TILT_ROWS;
+  if (tilt || Math.abs(zFull - Math.round(zFull)) > 1e-6) {
+    zs = Math.max(1, Math.floor(zFull + 1e-6)); g = OFFV[k];
     const w = Math.ceil(CW * T * zs) + 2, h = Math.ceil(CH * T * zs) + 2;
     if (g.canvas.width !== w || g.canvas.height !== h) { g.canvas.width = w; g.canvas.height = h; }
     g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false; g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
   }
   g.setTransform(zs, 0, 0, zs, 0, 0);       // the cave is drawn zoomed; the texts on top are not
-  const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * zs) / zs, oy = Math.round((c.y * T + Math.cos(simT * .11) * shk) * zs) / zs;
+  const ox = Math.round((c.x * T + Math.sin(simT * .09) * shk) * zs) / zs, oy = Math.round(((c.y - Math.min(CH - CH0, Math.max(0, c.y))) * T + Math.cos(simT * .11) * shk) * zs) / zs;
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   infViewP = pv;
   const glide = [];
+  if (tilt) drawRelief(g, ox, oy, x0, y0);
   for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + Math.ceil(CW) + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
     if (isOpenCell(grid[i]) && x > 0 && y > 0 && x < W-1 && y < H-1) {
@@ -4981,9 +5044,11 @@ function renderView(k){
   }
   if (g !== main) {
     main.setTransform(1, 0, 0, 1, 0, 0); main.imageSmoothingEnabled = true;
-    main.drawImage(g.canvas, 0, 0, g.canvas.width * zFull / zs, g.canvas.height * zFull / zs);
+    if (tilt) tiltBlit(main, g.canvas, CW * T * zs, CH * T * zs);
+    else main.drawImage(g.canvas, 0, 0, g.canvas.width * zFull / zs, g.canvas.height * zFull / zs);
     main.imageSmoothingEnabled = false; g = main;
   }
+  CH = CH0;
   g.setTransform(SS, 0, 0, SS, 0, 0);
   const p = players[k];
   if (p && state !== 'menu') {
