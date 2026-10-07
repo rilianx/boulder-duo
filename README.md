@@ -109,6 +109,17 @@ Con el botón **INFINITA ALEATORIA** del menú se juega otra cueva sin fin, que 
 
 ![Los primeros tramos: partida, A, A+B, B, B+C, C, C+D, D, D+E, E, E+F](docs/infinita-aleatoria.png)
 
+## Paseo por el prado (prototipo)
+
+Otra idea, en un archivo aparte, **`paseo.html`**: un juego tranquilo de mundo abierto, sin misiones, para pasear y pasar el rato. Por ahora solo los personajes y el ambiente, para ver si vale la pena. Vista desde arriba y de frente (falso 3D): todo se dibuja en el orden de sus pies, así que la niña pasa por detrás de los árboles y de la casa.
+
+- **La protagonista:** una niña pelirroja con trenzas, pecas, sombrero de paja con cinta roja y vestido verde. Camina en todas direcciones, parpadea, y si la dejas quieta mira a su alrededor y se sienta en el pasto. La acompaña su perrito, que la sigue, olfatea y se sienta a su lado.
+- **El ambiente:** un prado con camino de tierra, una casita con humo en la chimenea, cerca y buzón, árboles y arbustos con bayas, un estanque con nenúfares, juncos y un pez que salta, flores y pasto que se mecen con la brisa (y se apartan a su paso), mariposas, pájaros que pasan y sombras de nubes.
+- **El día:** dura 6 minutos: mañana, tarde dorada, noche (con las ventanas encendidas y luciérnagas) y amanecer.
+- **Controles:** flechas o WASD; en el celular, arrastrar el dedo.
+
+![Paseo por el prado](docs/paseo.png)
+
 ## Boulder Dúo 3D (prueba de concepto)
 
 En un archivo aparte, **`bd3d.html`**: Boulder Dash en un cubo de bloques con texturas pixeladas, en vista isométrica, al estilo de los juegos de bloques. Se cava, se juntan los diamantes y se llega a la salida morada; las rocas y diamantes caen hacia abajo y, sobre otra roca, ruedan hacia cualquiera de los **cuatro lados** libres; si te cae una encima pierdes una vida. Las rocas se empujan de lado.
