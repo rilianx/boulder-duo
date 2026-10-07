@@ -9,6 +9,8 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 #cv{position:fixed;inset:0;width:100%;height:100%;display:block}
 .paper{background:#fbf3df;color:#3b2a1c;border:1.5px solid #6b4a30;border-radius:10px 14px 9px 12px;box-shadow:2px 3px 0 rgba(60,40,20,.35)}
 #inv{position:fixed;left:10px;top:10px;padding:5px 11px;font-size:15px;pointer-events:none;line-height:1.5}
+#tasks{position:fixed;left:10px;top:52px;padding:4px 10px;font-size:14px;pointer-events:none;line-height:1.45;max-width:min(330px,calc(100% - 80px))}
+#tasks[hidden]{display:none}
 #clock{position:fixed;right:10px;top:10px;padding:4px 10px;font-size:15px;pointer-events:none}
 #prompt{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);padding:6px 14px;font-size:16px;pointer-events:none;white-space:nowrap}
 #prompt[hidden],#talk[hidden],#act[hidden]{display:none}
@@ -44,6 +46,7 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 <body>
 <canvas id="cv"></canvas>
 <div id="inv" class="paper"></div>
+<div id="tasks" class="paper" hidden></div>
 <div id="clock" class="paper"></div>
 <div id="hint" class="paper">Flechas o WASD para pasear · Espacio para hacer cosas · M para el mapa · en el celular, arrastra el dedo y toca ✋</div>
 <div id="prompt" class="paper" hidden></div>
@@ -520,6 +523,10 @@ function drawTable(c){
   for (let k = -3; k <= 3; k++) line(c, [[TABLE.x + k * 12, TABLE.y - 39], [TABLE.x + k * 12, TABLE.y - 19]], 'rgba(200,80,70,.35)', 1, k);
   ell(c, TABLE.x - 14, TABLE.y - 30, 8, 4, '#fffaf0', true); ell(c, TABLE.x + 16, TABLE.y - 32, 5, 4, '#9db3bf', true);
   if (game.inv.tarta + game.inv.compota > 0) ell(c, TABLE.x - 14, TABLE.y - 32, 6, 3, '#7a4a8a', true);
+  // what Marilla left on the table for Ana
+  if (game.table === 'tarta') { ell(c, TABLE.x + 2, TABLE.y - 30, 10, 4.4, '#d9a46a', true); ell(c, TABLE.x + 2, TABLE.y - 31, 8, 3, '#6a3a6e'); }
+  else if (game.table === 'compota') { blob(c, [[TABLE.x - 3, TABLE.y - 28], [TABLE.x + 5, TABLE.y - 28], [TABLE.x + 5, TABLE.y - 38], [TABLE.x - 3, TABLE.y - 38]], '#e0a24a'); }
+  else if (game.table === 'te') { ell(c, TABLE.x + 2, TABLE.y - 32, 7, 6, '#f2ede2', true); line(c, [[TABLE.x + 8, TABLE.y - 33], [TABLE.x + 13, TABLE.y - 37]], INK, 1.4); }
 }
 
 /* ---------- the parlour at Orchard Slope (Diana's house): a fire, a sofa, tea and raspberry cordial ---------- */
@@ -578,7 +585,7 @@ function drawTea(c){
 
 /* ---------- the game ---------- */
 // scene: 'out' (Avonlea), 'gg' (the kitchen at Green Gables) or 'os' (the parlour at Orchard Slope)
-const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, barry: 0, toby: 0 }, cooking: null, talk: null, said: {}, saidS: {}, seasonShift: 0, teaDay: -1, map: false, journal: [], mem: {} };
+const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, barry: 0, toby: 0 }, cooking: null, talk: null, said: {}, saidS: {}, seasonShift: 0, teaDay: -1, map: false, journal: [], mem: {}, know: {}, tasks: [], plans: {}, table: null, giftFor: {}, npcGiftDay: {}, lastDay: null, taskSeq: 0 };
 const mkPerson = (look, x, y) => ({ look, x, y, dir: 2, walk: 0, moving: false, blink: 0, idle: 0, sit: false, vx: 0, vy: 0, carry: null, pet: false, crouch: false, lookAround: 0 });
 const ana = mkPerson('ana', GG.x - 6, GG.y + 70);
 const matthew = Object.assign(mkPerson('matthew', BARN.x + 60, BARN.y + 50), { goals: [[BARN.x + 60, BARN.y + 50], [GG.x - 140, GG.y + 90], [BARN.x - 20, BARN.y + 70], [GG.x + 120, GG.y + 160]], goal: 0, wait: 3 });
@@ -628,7 +635,7 @@ function near(){
     for (const b of BEDS) if (here(b.x, b.y, 30)) {
       if (S === 3) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La huerta duerme bajo la nieve', act: () => {} });
       else if (b.stage >= 3) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Cortar ' + FLOWER_KINDS[b.kind][1], act: () => { b.stage = 1; game.inv.ramo++; logEv('Ana cortó ' + FLOWER_KINDS[b.kind][1] + ' de la huerta e hizo un ramo.'); float('+1 ramo de ' + FLOWER_KINDS[b.kind][1], b.x, b.y - 26); save(); } });
-      else if (game.hasCan && game.water > 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Regar', act: () => { b.wet = 1; b.grow = 0; game.water--; logEv('Ana regó la huerta.'); drops(b.x, b.y); sfx.water(); save(); } });
+      else if (game.hasCan && game.water > 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Regar', act: () => { b.wet = 1; b.grow = 0; game.water--; logEv('Ana regó la huerta.'); taskEvent('regar'); drops(b.x, b.y); sfx.water(); save(); } });
       else if (game.hasCan && game.water <= 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La regadera está vacía (llénala en la bomba)', act: () => {} });
     }
     if (here(GG.x, GG.y + 6, 26)) out.push({ d: dist(P.x, P.y, GG.x, GG.y + 6) + 4, label: 'Entrar a casa', act: () => goIn('gg') });
@@ -639,6 +646,7 @@ function near(){
     if (game.scene === 'gg') {
       if (here(marilla.x, marilla.y, 34)) out.push({ d: dist(P.x, P.y, marilla.x, marilla.y), label: 'Hablar con Marilla', act: () => talk('marilla') });
       if (here(STOVE.x, STOVE.y + 10, 44)) out.push({ d: dist(P.x, P.y, STOVE.x, STOVE.y + 10), label: 'Cocinar', act: cookMenu });
+      if (game.table && here(TABLE.x, TABLE.y, 64)) out.push({ d: dist(P.x, P.y, TABLE.x, TABLE.y) + 2, label: 'Tomar ' + ITEM_NAME[game.table][0] + ' que dejó Marilla', act: () => { const k = game.table; game.inv[k]++; game.table = null; float('+' + itemText(k), TABLE.x, TABLE.y - 50); logEv(`Ana tomó ${ITEM_NAME[k][0]} que Marilla le dejó en la mesa.`, ['marilla', ...witnesses()]); sfx.happy(); save(); } });
     } else {
       if (here(barry.x, barry.y, 34)) out.push({ d: dist(P.x, P.y, barry.x, barry.y), label: 'Hablar con la Sra. Barry', act: () => talk('barry') });
       if (here(FIRE.x, FIRE.y + 10, 50)) out.push({ d: dist(P.x, P.y, FIRE.x, FIRE.y + 10) + 6, label: 'Calentarse junto al fuego', act: warmUp });
@@ -689,16 +697,18 @@ const SEASON_LINES = {
 };
 const seasonCount = () => Math.floor(dayT / 2) + game.seasonShift;
 const GIFTS = { tarta: ['tarta de bayas', '¡Una tarta! Huele de maravilla.'], compota: ['compota de manzana', '¡Qué rica compota! Gracias.'], te: ['taza de té', 'Un té calentito, justo lo que me hacía falta.'], ramo: ['ramo de flores', '¡Qué flores tan lindas! Las pondré en agua.'] };
-function talk(who){
+function talk(who, again = false){
   const p = PEOPLE[who];
   if (AI.on && !aiKey()) askKey();
-  if (aiReady()) { face(who); conv = null; aiTalk(who, 'Ana se acerca a conversar con ' + NAMES[who] + '.'); return; }
+  const pre = again ? [] : talkPrelude(who);
+  if (aiReady()) { face(who); conv = null; aiTalk(who, 'Ana se acerca a conversar con ' + NAMES[who] + '.' + pre.map(x => ' (' + x + ')').join('')); return; }
   if (!p.sit) { p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2; }
   if (!ana.sit) ana.dir = p.x < ana.x ? 3 : 1;
   let text;
   if (game.saidS[who] !== seasonCount()) { game.saidS[who] = seasonCount(); text = SEASON_LINES[who][S]; }
   else text = LINES[who][game.said[who] = ((game.said[who] ?? -1) + 1) % LINES[who].length];
-  const opts = [];
+  if (pre.some(x => x.startsWith('Ana cumplió'))) text = '¡Gracias por hacer lo que te pedí, Ana! ' + text;
+  const opts = [...taskOptions(who)];
   for (const [k, [name]] of Object.entries(GIFTS)) if (game.inv[k] > 0) opts.push(['Regalar ' + name, () => give(who, k)]);
   opts.push(...walkOption(who), ['Adiós', close]);
   say(who, text, opts);
@@ -730,69 +740,294 @@ const PROV = { openai: { name: 'OpenAI', hint: 'sk-...' }, anthropic: { name: 'A
 const aiKey = () => AI.keys[provider()] || '';
 const aiReady = () => AI.on && !!aiKey();
 let conv = null;   // the conversation going on: { who, id, msgs, turns }
-// what happened, as the game saw it (kept in the save; the AI reads the latest ones)
-function logEv(text){
-  const j = game.journal, e = { d: today() + 1, s: S, t: text };
-  if (j.length && j[j.length - 1].t === text && j[j.length - 1].d === e.d) return;
-  j.push(e); if (j.length > 80) j.splice(0, j.length - 80);
+const hourNow = () => (dayT % 1) * 24 + 6;   // 6 (dawn) .. 30 (dawn again)
+const ITEMS = ['bayas', 'manzanas', 'tarta', 'compota', 'te', 'ramo'];
+const ITEM_NAME = { bayas: ['baya', 'bayas'], manzanas: ['manzana', 'manzanas'], tarta: ['tarta de bayas', 'tartas de bayas'], compota: ['compota de manzana', 'compotas de manzana'], te: ['taza de té', 'tazas de té'], ramo: ['ramo de flores', 'ramos de flores'] };
+const itemText = (k, n = 1) => n + ' ' + ITEM_NAME[k][n > 1 ? 1 : 0];
+// what can be had now (berries and apples in summer and autumn, flowers but in winter, tea always)
+const inSeason = k => ({ bayas: S === 1 || S === 2, manzanas: S === 1 || S === 2, tarta: S === 1 || S === 2 || game.inv.bayas >= 3 || game.inv.tarta > 0, compota: S === 1 || S === 2 || game.inv.manzanas >= 3 || game.inv.compota > 0, te: true, ramo: S !== 3 || game.inv.ramo > 0 })[k];
+// the places the characters (and Ana's errands) can go to; each a spot one can walk to
+const PLACES = {
+  tejas_verdes: ['Tejas Verdes', GG.x - 60, GG.y + 76], cuesta_del_huerto: ['La Cuesta del Huerto', OS.x - 50, OS.y + 64], huerta: ['la huerta de Tejas Verdes', BEDS[4].x, BEDS[4].y + 34],
+  granero: ['el granero', BARN.x + 60, BARN.y + 50], puente: ['el puente del arroyo', BRIDGE.x - 80, BRIDGE.y + 8], camino_blanco: ['el Camino Blanco de las Delicias', (GG.x + BRIDGE.x) / 2, BRIDGE.y + 6],
+  lago: ['el Lago de las Aguas Brillantes', BENCH.x + 40, BENCH.y + 22], bosque_encantado: ['el Bosque Encantado', 15 * T + 30, 30 * T + 24],
+};
+// what each one can do (the game checks every action against this)
+const ABIL = {
+  matthew: { ir: true, visitar: true, regalar: ['manzanas', 'bayas'], regar: true, cocinar: false, acompanar: false },
+  marilla: { ir: false, visitar: false, regalar: ['tarta', 'compota', 'te'], regar: true, cocinar: true, acompanar: false },
+  diana: { ir: true, visitar: true, regalar: ['manzanas', 'bayas', 'ramo'], regar: false, cocinar: false, acompanar: true },
+  barry: { ir: false, visitar: false, regalar: ['manzanas', 'compota'], regar: false, cocinar: false, acompanar: false },
+};
+function abilText(who){
+  const A = ABIL[who], L = [];
+  if (A.ir) L.push('ir a algún lugar de Avonlea (' + Object.values(PLACES).map(p => p[0]).join(', ') + ') y quedarte un rato');
+  if (A.visitar) L.push('ir a buscar a Ana para conversar');
+  if (A.acompanar) L.push('acompañar a Ana a pasear');
+  if (A.cocinar) L.push('cocinar (tarta de bayas, compota de manzana o té) y dejarlo en la mesa de la cocina para Ana');
+  if (A.regar) L.push('regar la huerta');
+  L.push('regalarle a Ana ' + A.regalar.map(k => ITEM_NAME[k][1]).join(', ') + ' (una vez al día, si es la estación)');
+  return L.join('; ');
 }
+
+/* ---------- what each one knows ----------
+   The game keeps Ana's diary of everything she does, and each character knows only what they saw (being near, or
+   in the same room), what was done to them, and what their family told them at home (shared each morning). */
+const sceneOf = k => k === 'marilla' ? 'gg' : k === 'barry' ? 'os' : k === 'diana' ? diana.where : 'out';
+function witnesses(){
+  return Object.keys(PEOPLE).filter(k => sceneOf(k) === game.scene && (game.scene !== 'out' || dist(PEOPLE[k].x, PEOPLE[k].y, ana.x, ana.y) < 320 || (k === 'diana' && diana.follow)));
+}
+function know(k, text, d = today() + 1){
+  const a = game.know[k] = game.know[k] || [];
+  if (a.some(e => e.t === text && e.d === d)) return;
+  a.push({ d, s: S, t: text }); if (a.length > 30) a.splice(0, a.length - 30);
+}
+function logEv(text, who = witnesses()){
+  const j = game.journal, e = { d: today() + 1, s: S, t: text };
+  if (!(j.length && j[j.length - 1].t === text && j[j.length - 1].d === e.d)) { j.push(e); if (j.length > 80) j.splice(0, j.length - 80); }
+  for (const k of new Set(who)) know(k, text);
+}
+function shareNews(){
+  for (const [a, b] of [['matthew', 'marilla'], ['diana', 'barry']]) for (const [x, y] of [[a, b], [b, a]])
+    for (const e of (game.know[x] || []).filter(e => e.d === today() && !e.t.startsWith('(') && !(game.know[y] || []).some(f => f.t === e.t))) know(y, '(' + NAMES[x] + ' le contó) ' + e.t, e.d);
+}
+// what was said in conversations, as the character will remember it
 function remember(who, text){ const m = game.mem[who] = game.mem[who] || []; if (m.some(x => x.endsWith(': ' + text))) return; m.push('día ' + (today() + 1) + ': ' + text); if (m.length > 16) m.splice(0, m.length - 16); save(); }
-const AI_SYSTEM = `Eres la voz de los personajes de "Un día en Avonlea", un juego tranquilo y sin misiones inspirado en "Ana de las Tejas Verdes" (L. M. Montgomery, 1908). La jugadora es Ana Shirley, y tú hablas como el personaje con quien ella conversa. Escribe siempre en español, con tuteo entre Ana y su familia y amigas.
+
+/* ---------- errands: what the others ask Ana to do (the game checks they are done) ---------- */
+const TASK_KINDS = ['ninguno', 'traer', 'regar', 'cocinar', 'recado', 'ir'];
+const activeTasks = () => game.tasks.filter(t => !t.done);
+function taskText(t){
+  switch (t.tipo) {
+    case 'traer': return `Llevarle ${itemText(t.item, t.n)} a ${NAMES[t.para]}`;
+    case 'regar': return `Regar ${t.n} ${t.n > 1 ? 'canteros' : 'cantero'} de la huerta (${t.prog || 0}/${t.n})`;
+    case 'cocinar': return `Cocinar ${ITEM_NAME[t.item][0]}`;
+    case 'recado': return `Decirle a ${NAMES[t.para]}: «${t.recado}»`;
+    default: return `Ir a ${PLACES[t.lugar][0]}`;
+  }
+}
+function validTask(who, e){
+  if (!e || !TASK_KINDS.includes(e.tipo) || e.tipo === 'ninguno' || activeTasks().length >= 3 || activeTasks().some(t => t.from === who && t.tipo === e.tipo)) return null;
+  const n = clamp(Math.round(+e.cantidad || 1), 1, 5), para = PEOPLE[e.para] ? e.para : who, t = { from: who, tipo: e.tipo, n, para, d: today() };
+  if (e.tipo === 'traer') { if (!ITEMS.includes(e.item) || !inSeason(e.item)) return null; t.item = e.item; }
+  else if (e.tipo === 'regar') { if (S === 3) return null; t.n = Math.min(n, 6); t.prog = 0; }
+  else if (e.tipo === 'cocinar') { if (!['tarta', 'compota', 'te'].includes(e.item) || !inSeason(e.item)) return null; t.item = e.item; }
+  else if (e.tipo === 'recado') { const r = String(e.recado || '').trim().slice(0, 160); if (!r || para === who) return null; t.recado = r; }
+  else if (e.tipo === 'ir') { if (!PLACES[e.lugar]) return null; t.lugar = e.lugar; }
+  return t;
+}
+function addTask(t){ t.id = (game.taskSeq = (game.taskSeq || 0) + 1); game.tasks.push(t); logEv(`${NAMES[t.from]} le encargó a Ana: ${taskText(t)}.`, [t.from, ...witnesses()]); sfx.happy(); save(); }
+function taskDone(t){
+  t.done = true; float('📜 ¡Encargo cumplido!', ana.x, ana.y - 64); sfx.done();
+  logEv(`Ana cumplió el encargo de ${NAMES[t.from]}: ${taskText(t)}.`);
+  planSoon(t.from, `Ana cumplió el encargo que le diste (${taskText(t)})`); save();
+}
+// (watering, cooking and going somewhere are seen by the game itself)
+function taskEvent(kind, k){
+  for (const t of activeTasks()) {
+    if (kind === 'regar' && t.tipo === 'regar' && ++t.prog >= t.n) taskDone(t);
+    if (kind === 'cocinar' && t.tipo === 'cocinar' && t.item === k) taskDone(t);
+    if (kind === 'ir' && t.tipo === 'ir' && game.scene === 'out' && dist(ana.x, ana.y, PLACES[t.lugar][1], PLACES[t.lugar][2]) < 110) taskDone(t);
+  }
+}
+// bringing things and messages: done in a conversation with whoever they are for
+function taskOptions(who){
+  const o = [];
+  for (const t of activeTasks()) {
+    if (t.tipo === 'traer' && t.para === who && game.inv[t.item] >= t.n) o.push(['📜 Entregar ' + itemText(t.item, t.n), () => deliver(t)]);
+    if (t.tipo === 'recado' && t.para === who) o.push(['📜 Darle el recado de ' + NAMES[t.from], () => passMessage(t)]);
+  }
+  return o;
+}
+function deliver(t){
+  const who = t.para; game.inv[t.item] -= t.n; t.done = true; game.fond[who] = Math.min(5, game.fond[who] + 1);
+  if (t.from === who) { t.thanked = true; game.fond[who] = Math.min(5, game.fond[who] + 1); }
+  hearts(PEOPLE[who].x, PEOPLE[who].y - 56); sfx.done();
+  logEv(`Ana le llevó ${itemText(t.item, t.n)} a ${NAMES[who]}` + (t.from === who ? ', como le había pedido.' : `, de parte de ${NAMES[t.from]}.`), [who, ...witnesses()]);
+  if (t.from !== who) planSoon(t.from, `Ana cumplió el encargo que le diste (${taskText(t)})`);
+  save();
+  const note = t.from === who ? `(Ana te entrega ${itemText(t.item, t.n)}: el encargo que tú le pediste.)` : `(Ana te entrega ${itemText(t.item, t.n)} de parte de ${NAMES[t.from]}, que se lo encargó.)`;
+  if (aiReady()) aiTalk(who, note); else say(who, '¡Gracias, Ana! Justo lo que hacía falta.', [['De nada', close]]);
+}
+function passMessage(t){
+  const who = t.para; t.done = true; know(who, `${NAMES[t.from]} le mandó a decir con Ana: «${t.recado}»`);
+  logEv(`Ana le dio a ${NAMES[who]} el recado de ${NAMES[t.from]}.`, [who]); planSoon(t.from, `Ana le dio tu recado a ${NAMES[who]}`); planSoon(who, `Ana te trajo un recado de ${NAMES[t.from]}: «${t.recado}»`); sfx.done(); save();
+  if (aiReady()) aiTalk(who, `(Ana te trae un recado de ${NAMES[t.from]}: «${t.recado}»)`); else say(who, 'Vaya, gracias por avisarme, Ana.', [['De nada', close]]);
+}
+// on meeting someone: thanks for an errand done, a present they had planned, why they came looking for her
+function talkPrelude(who){
+  const n = [], p = PEOPLE[who];
+  for (const t of game.tasks.filter(t => t.from === who && t.done && !t.thanked)) { t.thanked = true; game.fond[who] = Math.min(5, game.fond[who] + 1); hearts(p.x, p.y - 56); n.push(`Ana cumplió el encargo que le pediste (${taskText(t)}); agradéceselo.`); }
+  const k = game.giftFor[who];
+  if (k && ABIL[who].regalar.includes(k) && inSeason(k) && game.npcGiftDay[who] !== today()) { const q = k === 'bayas' || k === 'manzanas' ? 3 : 1; game.inv[k] += q; game.npcGiftDay[who] = today(); float('+' + itemText(k, q), ana.x, ana.y - 60); logEv(`${NAMES[who]} le regaló a Ana ${itemText(k, q)}.`, [who, ...witnesses()]); n.push(`Le das a Ana ${itemText(k, q)}, como tenías pensado.`); }
+  delete game.giftFor[who];
+  if (p.wantsTalk) { n.push(`Tú fuiste a buscar a Ana${p.why ? ' (' + p.why + ')' : ''}.`); p.wantsTalk = false; }
+  save();
+  return n;
+}
+// something a character does right away, decided in a conversation (checked against what they can do)
+function applyAction(who, a){
+  if (!a || !a.tipo || a.tipo === 'ninguna') return;
+  const A = ABIL[who], p = PEOPLE[who];
+  if (a.tipo === 'regalar' && A.regalar.includes(a.item) && inSeason(a.item) && game.npcGiftDay[who] !== today()) {
+    const q = clamp(Math.round(+a.cantidad || 1), 1, 3); game.inv[a.item] += q; game.npcGiftDay[who] = today();
+    float('+' + itemText(a.item, q), ana.x, ana.y - 60); logEv(`${NAMES[who]} le regaló a Ana ${itemText(a.item, q)}.`, [who, ...witnesses()]); sfx.happy();
+  } else if (a.tipo === 'acompanar' && A.acompanar && diana.where === game.scene && !diana.follow) { diana.follow = true; logEv('Ana y Diana salieron a pasear juntas.', ['diana', ...witnesses()]); }
+  else if (a.tipo === 'ir' && A.ir && PLACES[a.lugar]) { p.target = { place: a.lugar, until: hourNow() + 2 }; if (who === 'diana') diana.follow = false; }
+  save();
+}
+
+/* ---------- plans: each morning (and when something happens) the AI plans the day of each one ---------- */
+const PLAN_SCHEMA = { type: 'object', additionalProperties: false, required: ['pensamiento', 'pasos'], properties: {
+  pensamiento: { type: 'string' },
+  pasos: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['hora', 'accion', 'lugar', 'item', 'motivo'], properties: {
+    hora: { type: 'integer' }, accion: { type: 'string', enum: ['ir', 'esperar', 'visitar_a_ana', 'cocinar', 'regar', 'regalar'] },
+    lugar: { type: 'string', enum: ['', ...Object.keys(PLACES)] }, item: { type: 'string', enum: ['', ...ITEMS] }, motivo: { type: 'string' } } } } } };
+const planQ = [], planAt = {};
+let planBusy = false, planWait = 0;
+function planSoon(who, reason, force = false){
+  if (!aiReady() || planQ.some(q => q[0] === who)) return;
+  const at = today() * 24 + hourNow();
+  if (!force && planAt[who] != null && at - planAt[who] < 1.5) return;
+  planAt[who] = at; planQ.push([who, reason]); pumpPlans();
+}
+async function pumpPlans(){
+  if (planBusy || !planQ.length || !aiReady()) return;
+  planBusy = true;
+  const [who, reason] = planQ.shift();
+  try { await makePlan(who, reason); } catch (e) { console.debug('[avonlea IA] plan', who, e.message); planWait = 60; }
+  planBusy = false; pumpPlans();
+}
+function validStep(who, s, h0){
+  const A = ABIL[who], h = Math.round(+s.hora);
+  if (!(h >= h0 && h <= 23)) return null;
+  const st = { hora: h, accion: s.accion, lugar: s.lugar, item: s.item, motivo: String(s.motivo || '').slice(0, 160) };
+  if (s.accion === 'ir') return A.ir && PLACES[s.lugar] ? st : null;
+  if (s.accion === 'visitar_a_ana') return A.visitar ? st : null;
+  if (s.accion === 'cocinar') return A.cocinar && ['tarta', 'compota', 'te'].includes(s.item) ? st : null;
+  if (s.accion === 'regar') return A.regar && S !== 3 ? st : null;
+  if (s.accion === 'regalar') return A.regalar.includes(s.item) ? st : null;
+  return s.accion === 'esperar' ? st : null;
+}
+async function makePlan(who, reason){
+  const h0 = Math.ceil(hourNow());
+  if (h0 > 22) return;
+  const msg = stateText(who) + `\n\nAHORA PASA: ${reason}.\nPLANIFICA lo que ${NAMES[who]} hará en lo que queda de hoy (son las ${Math.floor(hourNow())}:00; el día termina a las 24). "pensamiento": una o dos frases en primera persona, con la voz de ${NAMES[who]}, sobre qué piensa hacer hoy y por qué. "pasos": de 1 a 4 acciones en orden, con "hora" entera entre ${h0} y 23, usando solo lo que ${NAMES[who]} puede hacer; "lugar" solo para ir, "item" solo para cocinar o regalar (si no, ""), y "motivo" en pocas palabras.`;
+  const r = await aiCall([{ role: 'user', content: msg }], PLAN_SCHEMA);
+  const steps = (Array.isArray(r.out.pasos) ? r.out.pasos : []).map(s => validStep(who, s, h0)).filter(Boolean).sort((a, b) => a.hora - b.hora).slice(0, 4);
+  game.plans[who] = { day: today(), thought: String(r.out.pensamiento || '').slice(0, 300), steps, reason };
+  save();
+}
+function doStep(who, s){
+  const p = PEOPLE[who];
+  p.why = s.motivo;
+  if (s.accion === 'ir') p.target = { place: s.lugar, until: hourNow() + 2.5 };
+  else if (s.accion === 'visitar_a_ana') p.target = { ana: true, until: hourNow() + 2.5 };
+  else if (s.accion === 'esperar') p.target = null;
+  else if (s.accion === 'cocinar') { game.table = s.item; logEv(`Marilla cocinó ${ITEM_NAME[s.item][0]} y la dejó en la mesa de la cocina para Ana.`, ['marilla', 'matthew']); if (game.scene === 'gg') float('Marilla dejó ' + ITEM_NAME[s.item][0] + ' en la mesa', TABLE.x, TABLE.y - 60); }
+  else if (s.accion === 'regar') { if (S !== 3) { BEDS.forEach(b => { if (!b.wet && b.stage < 3) { b.wet = 1; b.grow = 0; } }); logEv(`${NAMES[who]} regó la huerta.`, [who, who === 'matthew' ? 'marilla' : 'matthew']); } }
+  else if (s.accion === 'regalar') game.giftFor[who] = s.item;
+  save();
+}
+// carrying the plans out: the steps whose hour has come (of several at once, only the last walk counts)
+function runPlans(dt){
+  if ((planWait -= dt) < 0 && aiReady()) { planWait = 3; for (const who of Object.keys(PEOPLE)) if ((!game.plans[who] || game.plans[who].day !== today()) && hourNow() < 22) planSoon(who, game.plans[who] ? 'Empieza un nuevo día' : 'Ana empieza su día en Avonlea', true); }
+  const h = hourNow();
+  for (const who of Object.keys(PEOPLE)) {
+    const P = game.plans[who]; if (!P || P.day !== today()) continue;
+    const due = P.steps.filter(s => !s.done && s.hora <= h); if (!due.length) continue;
+    due.forEach(s => { s.done = true; });
+    const walks = due.filter(s => ['ir', 'visitar_a_ana', 'esperar'].includes(s.accion));
+    for (const s of due) if (!walks.includes(s) || s === walks[walks.length - 1]) doStep(who, s);
+  }
+}
+// someone with a place to go walks there (if Ana is indoors they just get there); stuck behind a tree, they step aside
+function goTarget(p, dt, sp){
+  const tg = p.target;
+  if (!tg || hourNow() > tg.until) { p.target = null; return false; }
+  if (tg.ana && game.scene !== 'out') return false;
+  const [tx, ty] = tg.ana ? [ana.x + (p.x < ana.x ? -30 : 30), ana.y] : PLACES[tg.place].slice(1);
+  if (game.scene !== 'out') { p.x = tx; p.y = ty; return true; }
+  if (dist(p.x, p.y, tx, ty) < 26) { p.moving = false; if (tg.ana) { p.target = null; p.wantsTalk = true; p.dir = ana.x < p.x ? 3 : 1; float(NAMES[p.look] + ' te buscaba', p.x, p.y - 64); } return true; }
+  const ox = p.x, oy = p.y; walkTo(p, tx, ty, sp, dt);
+  if (Math.hypot(p.x - ox, p.y - oy) < sp * dt * .3) { p.stuck = (p.stuck || 0) + dt; moveBy(p, Math.sin(TT * 3 + p.x) * sp * dt, Math.cos(TT * 2) * sp * dt); if (p.stuck > 5) { p.stuck = 0; p.target = tg.ana ? tg : null; } }
+  else p.stuck = 0;
+  return true;
+}
+
+/* ---------- the prompt ---------- */
+const AI_SYSTEM = `Eres la voz de los personajes de "Un día en Avonlea", un juego tranquilo y sin misiones inspirado en "Ana de las Tejas Verdes" (L. M. Montgomery, 1908). La jugadora es Ana Shirley. Tú das voz y vida al personaje con quien Ana conversa, o planificas su día. Escribe siempre en español, con tuteo entre Ana y su familia y amigas.
 
 EL MUNDO
 Avonlea, en la Isla del Príncipe Eduardo, hacia 1880. Lugares: Tejas Verdes (la granja de los Cuthbert, casa blanca de tejados verdes, con su cocina, su huerta de seis canteros con rosas, girasoles y lilas, la bomba de agua y el granero), La Cuesta del Huerto (la casa de los Barry, con su salita, su chimenea y su huerto de manzanos), el arroyo con su puente de madera, el Camino Blanco de las Delicias (con cerezos), el Lago de las Aguas Brillantes (con una banca) y el Bosque Encantado (oscuro, de pinos, que Ana y Diana "encantaron" con su imaginación y ahora les da miedo).
 Las estaciones duran dos días: en primavera florecen los manzanos y cerezos; en verano y otoño hay bayas en los arbustos y manzanas en el huerto de los Barry; en otoño las hojas se ponen rojas y doradas; en invierno nieva, el lago se congela y la huerta duerme bajo la nieve.
 
-LO QUE ANA PUEDE HACER EN EL JUEGO (si sugieres algo, que sea de esto)
-Pasear; acariciar a Toby, el perro de Tejas Verdes (no habla); tomar la regadera en la bomba y regar la huerta, que crece hasta florecer, y cortar flores para hacer ramos; recoger bayas y manzanas (solo en verano y otoño); cocinar en la cocina de Tejas Verdes tarta de bayas, compota de manzana o té; regalar lo que tiene; tomar el té con Diana en la salita de los Barry; calentarse junto a la chimenea; pasear con Diana; sentarse en la banca del lago.
+LO QUE ANA PUEDE HACER EN EL JUEGO
+Pasear; acariciar a Toby, el perro de Tejas Verdes (no habla); tomar la regadera en la bomba y regar la huerta, que crece hasta florecer, y cortar flores para hacer ramos (no en invierno); recoger bayas y manzanas (solo en verano y otoño); cocinar en la cocina de Tejas Verdes tarta de bayas (con 3 bayas), compota de manzana (con 3 manzanas) o té; regalar lo que tiene; tomar el té con Diana en la salita de los Barry; calentarse junto a la chimenea; pasear con Diana; sentarse en la banca del lago; llevar cosas o recados de unos a otros.
 
 LOS PERSONAJES
 - Ana Shirley: once años, huérfana, la adoptaron los Cuthbert. Pelirroja (detesta su pelo), pecosa, de imaginación desbordante, habla mucho y con palabras grandiosas ("alma gemela", "espíritu afín", "hay tanto lugar para la imaginación"), dramática, se mete en líos sin querer y es muy cariñosa.
 - Matthew Cuthbert: unos sesenta años, hermano de Marilla. Tímidísimo, de muy pocas palabras, le dan miedo casi todas las mujeres, pero adora a Ana y siempre se pone de su lado. Trabaja en la granja: las vacas, el heno, el granero. Muletillas: "Bueno, pues...", "Ya lo creo, ya lo creo". Frases cortas, titubeantes, tiernas.
-- Marilla Cuthbert: hermana de Matthew, severa, práctica y ordenada, con un humor seco que esconde; quiere mucho a Ana aunque le cuesta decirlo, y la reprende por soñar despierta o hablar demasiado. Lleva siempre su broche de amatista. Se ocupa de la casa y de la cocina.
-- Diana Barry: la amiga del alma de Ana, de pelo negro y rizado, dulce, alegre y un poco miedosa; admira la imaginación de Ana. Se juraron amistad eterna. Una vez Ana le sirvió por error vino de grosellas creyendo que era cordial de frambuesa, Diana se emborrachó y su madre les prohibió verse por un tiempo: ahora lo recuerdan entre risas y vergüenza.
-- Sra. Barry: la madre de Diana. Correcta, estricta y algo estirada; desconfió de Ana después de lo del vino, pero ahora la aprecia, con cierta cautela.
+- Marilla Cuthbert: hermana de Matthew, severa, práctica y ordenada, con un humor seco que esconde; quiere mucho a Ana aunque le cuesta decirlo, y la reprende por soñar despierta o hablar demasiado. Lleva siempre su broche de amatista. Se ocupa de la casa y de la cocina, y no sale de ella.
+- Diana Barry: la amiga del alma de Ana, de pelo negro y rizado, dulce, alegre y un poco miedosa; admira la imaginación de Ana. Se juraron amistad eterna. Una vez Ana le sirvió por error vino de grosellas creyendo que era cordial de frambuesa, Diana se emborrachó y su madre les prohibió verse por un tiempo: ahora lo recuerdan entre risas y vergüenza. Está en su jardín de día y en casa al atardecer y en invierno.
+- Sra. Barry: la madre de Diana. Correcta, estricta y algo estirada; desconfió de Ana después de lo del vino, pero ahora la aprecia, con cierta cautela. No sale de su salita.
 Fuera de escena existen la escuela, la señorita Stacy, la Sra. Rachel Lynde (la vecina chismosa), Gilbert Blythe (que una vez le dijo "Zanahorias" a Ana) y la iglesia; se pueden nombrar en la conversación, pero no aparecen en el juego.
 
-CÓMO RESPONDER
-- Habla solo como el personaje que conversa con Ana, con su voz propia. Una a tres frases cortas: unas 40 palabras como máximo.
-- Ten en cuenta lo que es verdad ahora (la hora, la estación, el lugar, lo que Ana lleva, quién la acompaña) y nombra a veces, con naturalidad, algo de lo que pasó o de lo que el personaje recuerda; no lo enumeres todo y no repitas lo que ya dijiste en esta conversación.
-- No contradigas el estado: por ejemplo, no hay manzanas en primavera ni flores en invierno, y si Ana no lleva algo no lo tiene.
-- No inventes sucesos que el juego tendría que mostrar (nadie llega, nadie se va, no aparecen objetos); puedes contar cosas del pasado o de fuera de escena.
+LO QUE CADA PERSONAJE SABE
+Cada uno sabe solo lo que vio, lo que le contaron en su casa y lo que conversó con Ana: está en su estado. No sabe lo que no está ahí (por ejemplo, Marilla no sabe lo que Ana hizo en casa de los Barry, a menos que se lo cuenten).
+
+CONVERSAR (cuando te piden la respuesta del personaje)
+- Habla solo como ese personaje, con su voz propia. Una a tres frases cortas: unas 40 palabras como máximo.
+- Ten en cuenta lo que es verdad ahora (la hora, la estación, el lugar, lo que Ana lleva, quién la acompaña), lo que el personaje sabe y recuerda, y su plan de hoy; nombra a veces, con naturalidad, algo de eso; no lo enumeres todo y no repitas lo que ya dijiste en esta conversación.
+- No contradigas el estado: no hay manzanas ni bayas en primavera ni en invierno, ni flores en invierno; si Ana no lleva algo, no lo tiene.
+- No inventes sucesos que el juego tendría que mostrar; las únicas cosas que pueden pasar son las de "encargo" y "accion".
 - El cariño (de 0 a 5) cambia el tono: con poco cariño el personaje es más reservado, con mucho es más cálido y cercano.
 - Nunca hables de juegos, puntos, corazones, inteligencia artificial ni cosas modernas.
-- "replies": dos o tres cosas distintas que Ana podría decir a continuación, con la voz de Ana (por ejemplo una soñadora, una cariñosa o práctica, una curiosa), de 12 palabras como máximo cada una. No incluyas despedidas ni regalos: el juego los agrega solo.
-- "memory": si en este intercambio pasó o se dijo algo nuevo que el personaje recordaría días después (un secreto, una promesa, un regalo, un plan, algo que Ana contó), escríbelo en una frase corta en tercera persona, desde el personaje (por ejemplo "Ana le contó que quiere ser poetisa"). Si no hay nada nuevo, deja "".`;
-const AI_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'replies', 'memory'], properties: { text: { type: 'string' }, replies: { type: 'array', items: { type: 'string' } }, memory: { type: 'string' } } };
+- "replies": dos o tres cosas distintas que Ana podría decir a continuación, con la voz de Ana, de 12 palabras como máximo cada una. No incluyas despedidas, regalos ni aceptar encargos: el juego los agrega solo.
+- "memory": si en este intercambio se dijo algo nuevo que el personaje recordaría días después (un secreto, una promesa, un plan, algo que Ana contó), una frase corta en tercera persona desde el personaje (por ejemplo "Ana le contó que quiere ser poetisa"); si no, "".
+- "encargo": de vez en cuando (no en cada conversación, y nunca si Ana ya tiene 3 encargos o ya tiene uno tuyo pendiente), el personaje puede pedirle algo a Ana, si va con su carácter y con la estación, y lo dice en "text". Tipos: "traer" (llevar "cantidad" de "item" a "para", que puede ser el mismo personaje), "regar" ("cantidad" de canteros, no en invierno), "cocinar" ("item": tarta, compota o te), "recado" (decirle "recado" a "para", otro personaje), "ir" (ir a "lugar"). Marilla pide tareas de la casa y la huerta; Matthew casi nunca pide nada, y si lo hace es tímido; Diana propone juegos, ir a lugares y recados para su madre; la Sra. Barry, recados para Marilla. Si no hay encargo, "tipo": "ninguno". Los campos que no se usan van vacíos ("" o 0).
+- "accion": algo que el personaje hace ahora mismo, solo de lo que puede hacer (está en su estado): "regalar" ("item" y "cantidad" de 1 a 3), "acompanar" (Diana sale a pasear con Ana), "ir" (se va a "lugar"). Si no hace nada, "tipo": "ninguna".
+
+PLANIFICAR (cuando te piden el plan del día)
+- Piensa como el personaje: su carácter, su trabajo, la estación, la hora, lo que sabe, lo que recuerda, los encargos que dio y lo que acaba de pasar.
+- Usa solo las acciones que ese personaje puede hacer. Planes sencillos y propios de su vida: Matthew trabaja en el granero, a veces pasea y busca a Ana para darle algo; Marilla cocina y riega; Diana juega, pasea a lugares bonitos y a veces busca a Ana; la Sra. Barry casi solo espera en su salita y a veces prepara un regalo.`;
+const S_ITEM = { type: 'string', enum: ['', ...ITEMS] }, S_WHO = { type: 'string', enum: ['', ...Object.keys(PEOPLE)] }, S_PLACE = { type: 'string', enum: ['', ...Object.keys(PLACES)] };
+const AI_SCHEMA = { type: 'object', additionalProperties: false, required: ['text', 'replies', 'memory', 'encargo', 'accion'], properties: {
+  text: { type: 'string' }, replies: { type: 'array', items: { type: 'string' } }, memory: { type: 'string' },
+  encargo: { type: 'object', additionalProperties: false, required: ['tipo', 'item', 'cantidad', 'para', 'lugar', 'recado'], properties: { tipo: { type: 'string', enum: TASK_KINDS }, item: S_ITEM, cantidad: { type: 'integer' }, para: S_WHO, lugar: S_PLACE, recado: { type: 'string' } } },
+  accion: { type: 'object', additionalProperties: false, required: ['tipo', 'item', 'cantidad', 'lugar'], properties: { tipo: { type: 'string', enum: ['ninguna', 'regalar', 'acompanar', 'ir'] }, item: S_ITEM, cantidad: { type: 'integer' }, lugar: S_PLACE } } } };
 function placeText(){
   if (game.scene === 'gg') return 'en la cocina de Tejas Verdes';
   if (game.scene === 'os') return 'en la salita de La Cuesta del Huerto, junto a la chimenea';
-  const spots = [['frente a Tejas Verdes', GG.x, GG.y + 60], ['frente a La Cuesta del Huerto', OS.x, OS.y + 60], ['en el huerto de manzanos de los Barry', OS.x, OS.y + 200], ['junto al granero', BARN.x, BARN.y + 40], ['en el puente del arroyo', BRIDGE.x, BRIDGE.y], ['en el Camino Blanco de las Delicias', GG.x + 400, BRIDGE.y], ['a orillas del Lago de las Aguas Brillantes', LAKE.x, LAKE.y - LAKE.ry], ['cerca del Bosque Encantado', 9 * T, 40 * T]];
-  let best = spots[0], bd = 1e9; for (const sp of spots) { const d = dist(ana.x, ana.y, sp[1], sp[2]); if (d < bd) { bd = d; best = sp; } }
-  return best[0] + (bd > 500 ? ' (algo lejos de ahí, en el campo)' : '');
+  let best = null, bd = 1e9; for (const pl of Object.values(PLACES)) { const d = dist(ana.x, ana.y, pl[1], pl[2]); if (d < bd) { bd = d; best = pl[0]; } }
+  return (bd > 500 ? 'en el campo, algo lejos de ' : 'cerca de ') + best;
 }
 function stateText(who){
   const d = dayT % 1, hh = Math.floor((d * 24 + 6) % 24), mm = Math.floor(((d * 24 + 6) % 1) * 60);
   const moment = hh < 6 ? 'de madrugada' : hh < 11 ? 'de mañana' : hh < 14 ? 'al mediodía' : hh < 17 ? 'de tarde' : hh < 20 ? 'al atardecer' : 'de noche';
-  const I = game.inv, NM = { bayas: ['baya', 'bayas'], manzanas: ['manzana', 'manzanas'], tarta: ['tarta de bayas', 'tartas de bayas'], compota: ['compota de manzana', 'compotas de manzana'], te: ['taza de té', 'tazas de té'], ramo: ['ramo de flores', 'ramos de flores'] };
-  const carry = Object.entries(I).filter(([, n]) => n > 0).map(([k, n]) => n + ' ' + NM[k][n > 1 ? 1 : 0]);
+  const carry = ITEMS.filter(k => game.inv[k] > 0).map(k => itemText(k, game.inv[k]));
   if (game.hasCan) carry.push('la regadera (' + (game.water ? 'con agua' : 'vacía') + ')');
-  const bloom = BEDS.filter(b => b.stage >= 3).length;
+  const bloom = BEDS.filter(b => b.stage >= 3).length, dry = BEDS.filter(b => !b.wet && b.stage < 3).length;
   const L = [
     `AHORA: día ${today() + 1} en Avonlea, ${SEASONS[S].toLowerCase()} (día ${today() % 2 + 1} de 2 de la estación), las ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}, ${moment}.`,
-    `Lugar: Ana está ${placeText()}${diana.follow && who !== 'diana' ? ', paseando con Diana' : ''}; Toby la acompaña.`,
+    `Ana está ${placeText()}${diana.follow && who !== 'diana' ? ', paseando con Diana' : ''}; Toby la acompaña.`,
     `Ana lleva: ${carry.length ? carry.join(', ') : 'nada en las manos'}.`,
-    `La huerta: ${S === 3 ? 'duerme bajo la nieve' : bloom + ' de 6 canteros con flores'}.`,
+    `La huerta: ${S === 3 ? 'duerme bajo la nieve' : `${bloom} de 6 canteros con flores; ${dry} sin regar`}.` + (game.table ? ` En la mesa de la cocina hay ${ITEM_NAME[game.table][0]}.` : ''),
     `Cariño hacia Ana (0 a 5): Matthew ${game.fond.matthew}, Marilla ${game.fond.marilla}, Diana ${game.fond.diana}, Sra. Barry ${game.fond.barry}.`,
-    `Habla con Ana: ${NAMES[who]}.`,
+    '', `PERSONAJE: ${NAMES[who]}.`, `Lo que ${NAMES[who]} puede hacer: ${abilText(who)}.` + (game.npcGiftDay[who] === today() ? ' (Hoy ya le regaló algo a Ana.)' : ''),
   ];
-  const ev = game.journal.slice(-24);
-  L.push('', 'LO QUE HA PASADO ÚLTIMAMENTE (lo más reciente al final):', ...(ev.length ? ev.map(e => `- día ${e.d} (${SEASONS[e.s].toLowerCase()}): ${e.t}`) : ['- (nada todavía: es el primer día)']));
+  const P = game.plans[who];
+  if (P && P.day === today()) L.push(`Su plan de hoy: ${P.thought}` + (P.steps.length ? ' Pasos: ' + P.steps.map(s => `${s.hora}:00 ${s.accion.replace(/_/g, ' ')}${s.lugar ? ' a ' + PLACES[s.lugar][0] : ''}${s.item ? ' ' + ITEM_NAME[s.item][0] : ''}${s.done ? ' (hecho)' : ''}`).join('; ') + '.' : ''));
+  const mine = game.tasks.filter(t => t.from === who && (!t.done || !t.thanked)), others = activeTasks().filter(t => t.from !== who).length;
+  L.push(`Encargos que ${NAMES[who]} le dio a Ana: ${mine.length ? mine.map(t => taskText(t) + (t.done ? ' (ya lo cumplió)' : ' (pendiente)')).join('; ') : 'ninguno pendiente'}. Ana tiene ${activeTasks().length} encargo(s) pendiente(s) en total${others ? ` (${others} de otras personas)` : ''}.`);
+  const k = game.know[who] || [];
+  L.push('', `LO QUE ${NAMES[who].toUpperCase()} SABE QUE HA PASADO (lo vio o se lo contaron; lo más reciente al final):`, ...(k.length ? k.slice(-18).map(e => `- día ${e.d} (${SEASONS[e.s].toLowerCase()}): ${e.t}`) : ['- (nada todavía)']));
   const m = game.mem[who] || [];
-  L.push('', `LO QUE ${NAMES[who].toUpperCase()} RECUERDA DE OTRAS CONVERSACIONES:`, ...(m.length ? m.map(x => '- ' + x) : ['- (nada todavía)']));
+  L.push('', `LO QUE ${NAMES[who].toUpperCase()} RECUERDA DE SUS CONVERSACIONES CON ANA:`, ...(m.length ? m.map(x => '- ' + x) : ['- (nada todavía)']));
   return L.join('\n');
 }
-// one request to Claude: the fixed prompt first (cached), then this conversation
+
+/* ---------- calling the AI ---------- */
 async function post(url, headers, body){
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 45000);
   let res;
@@ -802,55 +1037,62 @@ async function post(url, headers, body){
   return { res, data: await res.json().catch(() => ({})) };
 }
 const httpError = (res, data) => new Error({ 401: 'la clave no es válida', 403: 'la clave no tiene permiso', 429: 'demasiadas conversaciones seguidas (o sin saldo), espera un poco', 529: 'el servicio está saturado' }[res.status] || ('error ' + res.status + (data.error?.message ? ': ' + data.error.message : '')));
-function parseOut(txt){
-  let out; try { out = JSON.parse(txt); } catch (e) { throw new Error('respuesta incompleta'); }
-  if (typeof out.text !== 'string' || !out.text.trim()) throw new Error('respuesta vacía');
-  return { text: out.text.trim(), replies: (Array.isArray(out.replies) ? out.replies : []).filter(r => typeof r === 'string' && r.trim()).slice(0, 3), memory: typeof out.memory === 'string' ? out.memory.trim() : '' };
-}
-const aiCall = messages => provider() === 'openai' ? openaiCall(messages) : claudeCall(messages);
+function parseJSON(txt){ try { const o = JSON.parse(txt); if (o && typeof o === 'object') return o; } catch (e) {} throw new Error('respuesta incompleta'); }
+const aiCall = (messages, schema = AI_SCHEMA) => provider() === 'openai' ? openaiCall(messages, schema) : claudeCall(messages, schema);
 // OpenAI (Chat Completions): the fixed prompt goes first so it is cached automatically; the answer must fit the schema
-async function openaiCall(messages, strict = true){
-  const body = { model: AI.model, max_completion_tokens: 4000, messages: [{ role: 'system', content: AI_SYSTEM + (strict ? '' : '\n\nResponde solo con un objeto JSON con las claves "text", "replies" (lista) y "memory".') }, ...messages] };
-  if (strict) { body.response_format = { type: 'json_schema', json_schema: { name: 'respuesta', strict: true, schema: AI_SCHEMA } }; body.reasoning_effort = 'low'; }
+async function openaiCall(messages, schema, strict = true){
+  const body = { model: AI.model, max_completion_tokens: 4000, messages: [{ role: 'system', content: AI_SYSTEM + (strict ? '' : '\n\nResponde solo con un objeto JSON que siga este esquema: ' + JSON.stringify(schema)) }, ...messages] };
+  if (strict) { body.response_format = { type: 'json_schema', json_schema: { name: 'respuesta', strict: true, schema } }; body.reasoning_effort = 'low'; }
   else body.response_format = { type: 'json_object' };
   const { res, data } = await post('https://api.openai.com/v1/chat/completions', { 'content-type': 'application/json', authorization: 'Bearer ' + aiKey() }, body);
   // (if the model does not take the schema or the effort setting, ask again more simply)
-  if (!res.ok) { if (res.status === 400 && strict) return openaiCall(messages, false); throw httpError(res, data); }
+  if (!res.ok) { if (res.status === 400 && strict) return openaiCall(messages, schema, false); throw httpError(res, data); }
   const msg = data.choices?.[0]?.message || {};
   if (msg.refusal) throw new Error('no quiso responder eso');
   console.debug('[avonlea IA]', data.model, data.usage);
-  return { content: msg.content || '', ...parseOut(msg.content || '') };
+  return { content: msg.content || '', out: parseJSON(msg.content || '') };
 }
-async function claudeCall(messages, retry = true){
-  const body = { model: AI.model, max_tokens: 4000, system: [{ type: 'text', text: AI_SYSTEM, cache_control: { type: 'ephemeral' } }], messages, output_config: { format: { type: 'json_schema', schema: AI_SCHEMA } } };
+// Claude (Messages API): the fixed prompt is marked for caching
+async function claudeCall(messages, schema, retry = true){
+  const body = { model: AI.model, max_tokens: 4000, system: [{ type: 'text', text: AI_SYSTEM, cache_control: { type: 'ephemeral' } }], messages, output_config: { format: { type: 'json_schema', schema } } };
   const headers = { 'content-type': 'application/json', 'x-api-key': aiKey(), 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
   // (low effort: quick answers for a chat; on the Opus and Sonnet models, a declined answer is retried on another model)
   if (AI.model !== 'claude-haiku-4-5') { body.output_config.effort = 'low'; if (retry) { body.fallbacks = 'default'; headers['anthropic-beta'] = 'server-side-fallback-2026-07-01'; } }
   const { res, data } = await post('https://api.anthropic.com/v1/messages', headers, body);
   if (!res.ok) {
-    if (res.status === 400 && retry && /fallback/i.test(data.error?.message || '')) return claudeCall(messages, false);
+    if (res.status === 400 && retry && /fallback/i.test(data.error?.message || '')) return claudeCall(messages, schema, false);
     throw httpError(res, data);
   }
   if (data.stop_reason === 'refusal') throw new Error('no quiso responder eso');
   console.debug('[avonlea IA]', data.model, data.usage);
-  return { content: data.content, ...parseOut((data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')) };
+  return { content: data.content, out: parseJSON((data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')) };
 }
+
+/* ---------- a conversation ---------- */
 function aiTalk(who, userText){
   if (!conv || conv.who !== who || conv.model !== AI.model) conv = { who, id: Math.random(), msgs: [], turns: 0, model: AI.model };
   const c = conv;
-  c.msgs.push({ role: 'user', content: c.msgs.length ? userText : stateText(who) + '\n\nAHORA PASA: ' + userText });
+  c.msgs.push({ role: 'user', content: c.msgs.length ? userText : stateText(who) + '\n\nAHORA PASA: ' + userText + '\nResponde como ' + NAMES[who] + '.' });
   c.turns++;
   say(who, NAMES[who] + ' está pensando…', [['Adiós', close]], true);
   aiCall(c.msgs).then(r => {
     if (conv !== c || game.talk?.who !== who) return;
+    const o = r.out, text = typeof o.text === 'string' ? o.text.trim() : '';
+    if (!text) throw new Error('respuesta vacía');
     c.msgs.push({ role: 'assistant', content: r.content });
-    if (r.memory) remember(who, r.memory);
-    const opts = [];
+    if (typeof o.memory === 'string' && o.memory.trim()) remember(who, o.memory.trim());
+    applyAction(who, o.accion);
+    const opts = [], req = validTask(who, o.encargo);
+    if (req) {
+      opts.push(['📜 Sí, lo haré', () => { addTask(req); aiTalk(who, `(Ana acepta el encargo: ${taskText(req)}.)`); }]);
+      opts.push(['Ahora no puedo', () => aiTalk(who, '(Ana dice que ahora no puede hacer ese encargo.)')]);
+    }
     // (after a few exchanges the conversation winds down)
-    if (c.turns < 6) for (const q of r.replies) opts.push(['«' + q + '»', () => { logEv('Ana conversó con ' + NAMES[who] + '.'); aiTalk(who, 'Ana dice: «' + q + '»'); }]);
+    if (c.turns < 6) for (const q of (Array.isArray(o.replies) ? o.replies : []).filter(q => typeof q === 'string' && q.trim()).slice(0, 3)) opts.push(['«' + q.trim() + '»', () => { logEv('Ana conversó con ' + NAMES[who] + '.', [who]); aiTalk(who, 'Ana dice: «' + q.trim() + '»'); }]);
+    opts.push(...taskOptions(who));
     for (const [k, [name]] of Object.entries(GIFTS)) if (game.inv[k] > 0) opts.push(['Regalar ' + name, () => give(who, k)]);
     opts.push(...walkOption(who), ['Adiós', close]);
-    say(who, r.text, opts);
+    say(who, text, opts);
   }).catch(err => {
     if (conv !== c) return;
     conv = null; notice('✒ La IA no respondió (' + err.message + '). Uso las frases de siempre.');
@@ -861,11 +1103,11 @@ function askKey(){
   const P = PROV[provider()], k = (prompt(`Para conversar con IA (${AI.model}), pega tu clave de la API de ${P.name} (${P.hint}). Se guarda solo en este navegador.`) || '').trim();
   if (k) { AI.keys[provider()] = k; saveAI(); } else { AI.on = false; saveAI(); }
 }
-function talkFixed(who){ const on = AI.on; AI.on = false; try { talk(who); } finally { AI.on = on; } }
+function talkFixed(who){ const on = AI.on; AI.on = false; try { talk(who, true); } finally { AI.on = on; } }
 function give(who, k){
   game.inv[k]--; game.fond[who] = Math.min(5, game.fond[who] + 1);
   const p = PEOPLE[who]; hearts(p.x, p.y - 56); sfx.happy();
-  logEv('Ana le regaló ' + GIFTS[k][0].replace(/^(\S+)/, 'una $1').replace('una ramo', 'un ramo') + ' a ' + NAMES[who] + '.'); save();
+  logEv('Ana le regaló ' + GIFTS[k][0].replace(/^(\S+)/, 'una $1').replace('una ramo', 'un ramo') + ' a ' + NAMES[who] + '.', [who, ...witnesses()]); planSoon(who, 'Ana te acaba de hacer un regalo'); save();
   if (aiReady()) { aiTalk(who, '(Ana le regala a ' + NAMES[who] + ' ' + GIFTS[k][0].replace(/^(\S+)/, 'una $1').replace('una ramo', 'un ramo') + ', hecha o juntada por ella.)'); return; }
   const extra = who === 'matthew' ? ' Bueno, pues... gracias, Ana.' : who === 'marilla' ? ' Vaya, Ana. Muy bien hecho.' : who === 'barry' ? ' Qué amable eres, Ana.' : ' ¡Eres la mejor amiga del mundo!';
   say(who, GIFTS[k][1] + extra, [['De nada', close]]);
@@ -914,8 +1156,8 @@ function note(f, d, vol = .03, type = 'sine', at = 0){ if (!AC) return; const o 
 const sfx = { happy: () => { note(660, .3); note(880, .35, .03, 'sine', .12); note(990, .4, .025, 'sine', .24); }, water: () => { for (let k = 0; k < 4; k++) note(1200 + k * 160, .08, .015, 'triangle', k * .05); }, cook: () => note(330, .5, .02, 'triangle'), done: () => { note(523, .25); note(659, .25, .03, 'sine', .1); note(784, .4, .03, 'sine', .2); } };
 
 /* ---------- keeping the day: in the browser ---------- */
-function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, saidS: game.saidS, seasonShift: game.seasonShift, teaDay: game.teaDay, journal: game.journal, mem: game.mem, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
-try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; game.saidS = s.saidS || {}; game.seasonShift = s.seasonShift || 0; game.teaDay = s.teaDay ?? -1; game.journal = s.journal || []; game.mem = s.mem || {}; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
+function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, saidS: game.saidS, seasonShift: game.seasonShift, teaDay: game.teaDay, journal: game.journal, mem: game.mem, know: game.know, tasks: game.tasks, plans: game.plans, table: game.table, giftFor: game.giftFor, npcGiftDay: game.npcGiftDay, lastDay: game.lastDay, taskSeq: game.taskSeq, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
+try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; game.saidS = s.saidS || {}; game.seasonShift = s.seasonShift || 0; game.teaDay = s.teaDay ?? -1; game.journal = s.journal || []; game.mem = s.mem || {}; for (const k of ['know', 'plans', 'giftFor', 'npcGiftDay']) game[k] = s[k] || {}; game.tasks = s.tasks || []; game.table = s.table || null; game.lastDay = s.lastDay ?? null; game.taskSeq = s.taskSeq || 0; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
 addEventListener('pagehide', save); setInterval(save, 10000);
 
 /* ---------- input ---------- */
@@ -973,21 +1215,25 @@ $('aitest').addEventListener('click', async () => {
 });
 $('aimem').addEventListener('click', () => {
   const o = $('aiout'); o.hidden = false;
-  const mem = Object.entries(game.mem).map(([w, m]) => NAMES[w] + ' recuerda:\n' + m.map(x => '  · ' + x).join('\n')).join('\n\n');
-  o.textContent = (mem || 'Todavía nadie recuerda nada especial.') + '\n\nLo que ha pasado:\n' + (game.journal.slice(-30).map(e => '  · día ' + e.d + ': ' + e.t).join('\n') || '  (nada todavía)');
+  const per = Object.keys(PEOPLE).map(w => {
+    const P = game.plans[w], k = game.know[w] || [], m = game.mem[w] || [];
+    return `— ${NAMES[w]} —\n` + (P && P.day === today() ? `Plan de hoy: ${P.thought}\n` + P.steps.map(s => `  ${s.done ? '✓' : '·'} ${s.hora}:00 ${s.accion.replace(/_/g, ' ')}${s.lugar ? ' a ' + PLACES[s.lugar][0] : ''}${s.item ? ' (' + ITEM_NAME[s.item][0] + ')' : ''}${s.motivo ? ': ' + s.motivo : ''}`).join('\n') + '\n' : 'Sin plan todavía.\n')
+      + 'Sabe:\n' + (k.slice(-8).map(e => '  · día ' + e.d + ': ' + e.t).join('\n') || '  (nada)') + '\nRecuerda de sus conversaciones:\n' + (m.map(x => '  · ' + x).join('\n') || '  (nada)');
+  }).join('\n\n');
+  o.textContent = per + '\n\n— Encargos —\n' + (game.tasks.map(t => '  ' + (t.done ? '✓ ' : '· ') + taskText(t) + ' (de ' + NAMES[t.from] + ')').join('\n') || '  (ninguno)') + '\n\n— Diario de Ana —\n' + (game.journal.slice(-30).map(e => '  · día ' + e.d + ': ' + e.t).join('\n') || '  (nada todavía)');
 });
-$('aiforget').addEventListener('click', () => { if (!confirm('¿Borrar todo lo que recuerdan y el diario de lo que ha pasado?')) return; game.mem = {}; game.journal = []; save(); $('aiout').hidden = false; $('aiout').textContent = 'Listo: es como si fuera el primer día.'; });
+$('aiforget').addEventListener('click', () => { if (!confirm('¿Borrar todo lo que recuerdan y el diario de lo que ha pasado?')) return; game.mem = {}; game.journal = []; game.know = {}; game.plans = {}; game.tasks = []; game.giftFor = {}; save(); $('aiout').hidden = false; $('aiout').textContent = 'Listo: es como si fuera el primer día.'; });
 $('mapnext').addEventListener('click', () => { game.seasonShift = (game.seasonShift + 1) % 4; save(); });
 
 /* ---------- the loop ---------- */
 const cam = { x: ana.x, y: ana.y };
-let last = performance.now(), TT = 0, here = null;
+let last = performance.now(), TT = 0, here = null, taskTick = 0;
 function update(dt){
   TT += dt; dayT += dt / 480; boil = Math.floor(TT * 6);
   const { night } = light();
   // the season: two days each
   const ns = (seasonCount() % 4 + 4) % 4;
-  if (ns !== S) { S = ns; if (TT > 1) logEv('Llegó ' + ['la primavera', 'el verano', 'el otoño', 'el invierno'][S] + '.'); if (TT > 1) notice(SICON[S] + ' ' + ['¡Llegó la primavera! Los manzanos están en flor.', '¡Llegó el verano! Hay bayas y manzanas, y luciérnagas de noche.', '¡Llegó el otoño! Las hojas se ponen rojas y doradas.', '¡Llegó el invierno! El lago se heló y la huerta duerme bajo la nieve.'][S]); }
+  if (ns !== S) { S = ns; if (TT > 1) { logEv('Llegó ' + ['la primavera', 'el verano', 'el otoño', 'el invierno'][S] + '.', Object.keys(PEOPLE)); for (const w of Object.keys(PEOPLE)) planSoon(w, 'Acaba de llegar ' + ['la primavera', 'el verano', 'el otoño', 'el invierno'][S], true); } if (TT > 1) notice(SICON[S] + ' ' + ['¡Llegó la primavera! Los manzanos están en flor.', '¡Llegó el verano! Hay bayas y manzanas, y luciérnagas de noche.', '¡Llegó el otoño! Las hojas se ponen rojas y doradas.', '¡Llegó el invierno! El lago se heló y la huerta duerme bajo la nieve.'][S]); }
   // Ana: walks where she is told (not while talking or cooking); sits on the bench until she moves
   let mx = 0, my = 0;
   if (!game.talk && !game.cooking && !game.map && $('ai').hidden) {
@@ -1005,11 +1251,22 @@ function update(dt){
   if (ana.idle > 9 && game.scene === 'out' && !game.talk) ana.sit = true;
   for (const p of [ana, matthew, diana, marilla, barry]) { p.blink -= dt; if (p.blink < -2.5 - Math.random() * 3) p.blink = .14; }
   // cooking: a moment at the stove, then it is ready
-  if (game.cooking && (game.cooking.t -= dt) <= 0) { const k = game.cooking.k; game.inv[k]++; game.cooking = null; logEv('Ana cocinó ' + { tarta: 'una tarta de bayas', compota: 'compota de manzana', te: 'té' }[k] + ' en la cocina de Tejas Verdes.'); float('¡' + { tarta: 'Tarta de bayas', compota: 'Compota de manzana', te: 'Té' }[k] + ' lista!', STOVE.x, STOVE.y - 70); sfx.done(); save(); }
+  if (game.cooking && (game.cooking.t -= dt) <= 0) { const k = game.cooking.k; game.inv[k]++; game.cooking = null; logEv('Ana cocinó ' + { tarta: 'una tarta de bayas', compota: 'compota de manzana', te: 'té' }[k] + ' en la cocina de Tejas Verdes.'); taskEvent('cocinar', k); float('¡' + { tarta: 'Tarta de bayas', compota: 'Compota de manzana', te: 'Té' }[k] + ' lista!', STOVE.x, STOVE.y - 70); sfx.done(); save(); }
   // the others: Matthew about the farm, Diana about her garden (or with Ana), Marilla in the kitchen
   // (Diana goes home in the evening and stays in all winter; Mrs. Barry keeps the parlour)
   const wantHome = night > .35 || S === 3, busy = w => game.talk?.who === w;
-  if (game.scene === 'out' && !busy('matthew')) wander(matthew, dt, 34);
+  // a new day: news are shared at home, old errands lapse; then the plans are carried out
+  if (game.lastDay !== today()) {
+    if (game.lastDay != null && game.lastDay < today()) {
+      shareNews();
+      for (const t of activeTasks().filter(t => today() - t.d >= 2)) { t.done = t.thanked = true; know(t.from, `Ana no alcanzó a hacer el encargo: ${taskText(t)}.`); }
+      game.tasks = game.tasks.filter(t => !(t.done && t.thanked));
+    }
+    game.lastDay = today(); save();
+  }
+  runPlans(dt);
+  if ((taskTick -= dt) < 0) { taskTick = .5; taskEvent('ir'); }
+  if (!busy('matthew') && !goTarget(matthew, dt, 40) && game.scene === 'out') wander(matthew, dt, 34);
   if (game.scene === 'gg' && !busy('marilla')) wander(marilla, dt, 30);
   if (game.scene === 'os' && !busy('barry')) wander(barry, dt, 28);
   if (diana.sit && !ana.sit) diana.sit = false;
@@ -1021,7 +1278,7 @@ function update(dt){
     diana.goals = DIANA_OUT;
     if (game.scene !== 'out') { if (wantHome) dianaIn(); }
     else if (wantHome) { diana.homeT = (diana.homeT || 0) + dt; if (walkTo(diana, OS.x, OS.y + 8, 46, dt) || diana.homeT > 20 || dist(diana.x, diana.y, cam.x, cam.y) > 700) dianaIn(); }
-    else if (!busy('diana')) wander(diana, dt, 40);
+    else if (!busy('diana') && !goTarget(diana, dt, 46)) wander(diana, dt, 40);
   } else if (diana.where === 'os') {
     diana.goals = DIANA_IN;
     if (!wantHome && game.scene !== 'os') { diana.where = 'out'; diana.goals = DIANA_OUT; diana.goal = 0; diana.x = OS.x; diana.y = OS.y + 30; diana.sit = false; }
@@ -1122,6 +1379,13 @@ function render(){
   }
   list.push({ y: ana.y + (ana.sit && !inside ? 6 : 0), draw: () => drawPerson(g, ana, t) }, { y: toby.y, draw: () => drawDog(g, toby, t) });
   list.sort((a, b) => a.y - b.y).forEach(o => o.draw());
+  // a little "!" over whoever has something for Ana: thanks, a present, a delivery, or came looking for her
+  for (const [k, p] of Object.entries(PEOPLE)) {
+    if (sceneOf(k) !== game.scene || (k === 'diana' && diana.follow) || !(p.wantsTalk || game.giftFor[k] || game.tasks.some(t => t.from === k && t.done && !t.thanked) || taskOptions(k).length)) continue;
+    const by = p.y - 62 * LOOKS[p.look].h - Math.abs(Math.sin(t * 3)) * 3;
+    blob(g, [[p.x - 6, by - 14], [p.x + 6, by - 14], [p.x + 6, by], [p.x + 2, by], [p.x, by + 4], [p.x - 2, by], [p.x - 6, by]], '#fbf3df');
+    g.fillStyle = '#c0582e'; g.font = 'bold 12px Georgia, serif'; g.textAlign = 'center'; g.fillText('!', p.x, by - 2.5);
+  }
   // a tree in front of her lets her show through a little
   if (!inside) for (const tr of trees) if (tr.y > ana.y + 4 && Math.abs(tr.x - ana.x) < 34 * tr.s && tr.y - ana.y < 90 * tr.s) { g.save(); g.globalAlpha = .5; drawPerson(g, ana, t); g.restore(); break; }
   if (!inside) {
@@ -1168,6 +1432,8 @@ function render(){
   if (I.bayas) bits.push('🫐 ' + I.bayas); if (I.manzanas) bits.push('🍎 ' + I.manzanas); if (I.tarta) bits.push('🥧 ' + I.tarta); if (I.compota) bits.push('🍯 ' + I.compota); if (I.te) bits.push('☕ ' + I.te); if (I.ramo) bits.push('💐 ' + I.ramo);
   if (game.hasCan) bits.push('💧 ' + game.water + '/6');
   $('inv').textContent = bits.length ? bits.join('  ') : 'Ana · Tejas Verdes';
+  const ts = activeTasks(), tl = ts.map(t => '📜 ' + taskText(t) + (t.para !== t.from || t.tipo !== 'traer' ? ' · ' + NAMES[t.from] : '')).join('\n');
+  if ($('tasks').dataset.t !== tl) { $('tasks').dataset.t = tl; $('tasks').textContent = tl; $('tasks').style.whiteSpace = 'pre-line'; $('tasks').hidden = !ts.length; }
   const d = dayT % 1, hh = Math.floor((d * 24 + 6) % 24), mm = Math.floor(((d * 24 + 6) % 1) * 60);
   $('clock').textContent = SICON[S] + ' ' + SEASONS[S] + ' · ' + (night > .5 ? '☾ ' : '') + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
   if (game.map) drawMap();
@@ -1242,7 +1508,7 @@ function drawMap(){
   $('maptitle').textContent = 'Avonlea · ' + SEASONS[S] + ', día ' + (Math.floor(dayT) % 2 + 1) + ' · ' + SICON[S];
 }
 function loop(now){ const dt = clamp((now - last) / 1000, 0, .05); last = now; update(dt); render(); requestAnimationFrame(loop); }
-window.__avonlea = { game, ana, matthew, diana, marilla, barry, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, FIRE, SOFA, TEA, KDOOR, KIT, act: () => { actNow = true; }, setDay: v => { dayT = v; }, season: () => S, toggleMap, goIn, goOut, AI, stateText, aiTalk, logEv, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
+window.__avonlea = { game, ana, matthew, diana, marilla, barry, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, FIRE, SOFA, TEA, KDOOR, KIT, act: () => { actNow = true; }, setDay: v => { dayT = v; }, season: () => S, toggleMap, goIn, goOut, AI, stateText, aiTalk, logEv, PLACES, makePlan, planQ, hourNow, taskOptions, activeTasks, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
 requestAnimationFrame(loop);
 })();
 </script>
