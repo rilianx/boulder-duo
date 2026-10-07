@@ -1386,7 +1386,7 @@ Line=12 8 12 10 STEELWALL
 /* The cave is W x H cells: 40 x 22 like the originals, or 80 x 44 for the big random caves (setSize). Every array
    indexed by cell is made for the biggest (MAXN) so it never has to be made again. */
 let W = 40, H = 22;
-const T = 16, TICK = 120, MAXW = 80, MAXH = 44, MAXN = Math.max(MAXW * MAXH, 135 * 54);   // the biggest: a big random cave, or the endless cave's window (3 x 2 tiles of 45 x 27)
+const T = 16, TICK = 120, MAXW = 80, MAXH = 44, MAXN = Math.max(MAXW * MAXH, 180 * 54);   // the biggest: a big random cave, or the endless cave's window (4 x 2 tiles of 45 x 27)
 /* Length of a tick in the original caves, by difficulty level: level 1 is the slowest. The random levels of the
    training mode (and the Python copy in rl/) keep TICK. The game clock still counts real seconds. */
 const CAVE_TICK = [170, 145, 120, 105, 92];
@@ -2757,15 +2757,16 @@ function genBig(n, lvl, P){
    - A cave's exit and the next one's entrance are always open: a tunnel of earth from each to the cave's side,
      and between the two caves a passage, a few cells wide, through a band of steel: earth with some boulders and
      space and maybe a firefly. It joins them for real: kids, boulders and enemies all go through.
-   - Local maps: only the piece ("chunk": a cave and the steel band after and below it) each kid is in and the one
-     after it are kept, in a window of 3 x 2 tiles of 45 x 27 cells. If the kids are apart, the chunks between them
-     are not there and their passages are shut with steel. A chunk nobody is in any more is forgotten; if a kid
-     behind reaches it later it is built anew.
+   - Local maps: only the piece ("chunk": a cave and the steel band after and below it) each kid is in, the one
+     before (so the passage behind stays open) and the one after are kept, in a window of 4 x 2 tiles of 45 x 27
+     cells. If the kids are apart, the chunks between them are not there and their passages are shut with steel
+     (and if the window cannot hold everyone's chunk before, the one ahead keeps it first). A chunk nobody is near
+     any more is forgotten; if a kid behind reaches it later it is built anew.
    - The amoeba and the magic wall of each cave keep their own clocks, and the amoeba grows only while somebody is
      in its cave. There is no clock and nothing to unlock: diamonds are points.
    Everything comes from the chunk number, so two phones build the same chunks, and the window moves inside the tick
    (and is part of the saved state), so they move it at the same moment. */
-const INF_TW = 45, INF_TH = 27, INF_WC = 3, INF_WR = 2, INF_SLOTS = INF_WC * INF_WR, INF_W = INF_TW * INF_WC, INF_H = INF_TH * INF_WR, INF_NONE = -99;
+const INF_TW = 45, INF_TH = 27, INF_WC = 4, INF_WR = 2, INF_SLOTS = INF_WC * INF_WR, INF_W = INF_TW * INF_WC, INF_H = INF_TH * INF_WR, INF_NONE = -99;
 const INF_CAVES = CAVE_SETS.bd1.caves.filter(c => c.props.Intermission !== 'true'), INF_N = INF_CAVES.length;
 const INF_IO = INF_CAVES.map(c => { const L = caveLayout(c, 0); return { inbox: L.inbox, outbox: L.outbox || [38, 20] }; });
 const INF_STEP = [[1, 0], [0, -1], [0, 1]];   // 0 right, 1 up, 2 down
@@ -2940,16 +2941,21 @@ function infCamShift(oldLay, newLay){
 const INF_ARR = () => [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV];
 // the chunks each kid needs (its own and the next), in runs; and where they go in the window: each run keeps the
 // world's shape, and as many chunks as can stay where they are
-function infWanted(){
-  const runs = [];
+function infBases(){
+  const bs = [];
   players.forEach(p => {
     if (p.exited || !(p.alive || p.respawn > 0)) return;
     const b = p.alive ? infBaseAt(p.x, p.y) : infBaseAt(p.dieX ?? p.x, p.dieY ?? p.y);
-    if (b !== null) runs.push([b, b + 1]);
+    if (b !== null) bs.push(b);
   });
+  return bs;
+}
+// back[n]: whether kid n (in the order of infBases) also keeps the chunk before its own
+function infWanted(bs, back){
+  const runs = bs.map((b, n) => back[n] && b - 1 >= -1 ? [b - 1, b, b + 1] : [b, b + 1]);
   runs.sort((a, b) => a[0] - b[0]);
   const out = [];
-  runs.forEach(r => { const last = out[out.length - 1]; if (last && r[0] <= last[last.length - 1]) { for (let k = last[last.length - 1] + 1; k <= r[1]; k++) last.push(k); } else out.push(r.slice()); });
+  runs.forEach(r => { const last = out[out.length - 1]; if (last && r[0] <= last[last.length - 1]) { for (let k = last[last.length - 1] + 1; k <= r[r.length - 1]; k++) last.push(k); } else out.push(r.slice()); });
   return out;
 }
 function infPack(runs, old){
@@ -2974,8 +2980,13 @@ function infPack(runs, old){
   return best && best.lay;
 }
 function infRelayout(){
-  const runs = infWanted(); if (!runs.length) return;
-  const lay = infPack(runs, INF.lay); if (!lay || lay.join() === INF.lay.join()) return;
+  const bs = infBases(); if (!bs.length) return;
+  // everyone's chunk before too if it fits; else first for the one ahead; at least each one's own and the next
+  const ahead = bs.indexOf(Math.max(...bs));
+  const tries = [bs.map(() => true), bs.map((b, n) => n === ahead), bs.map(() => false)];
+  let lay = null;
+  for (const back of tries) { lay = infPack(infWanted(bs, back), INF.lay); if (lay) break; }
+  if (!lay || lay.join() === INF.lay.join()) return;
   const old = INF.lay.slice(), A = INF_ARR(), copy = A.map(a => a.slice()), moved = new Set();
   INF.lay = lay;
   for (const k in INF.rec) if (!lay.includes(+k)) delete INF.rec[k];
