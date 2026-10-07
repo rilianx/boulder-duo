@@ -20,16 +20,26 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
 #talk button:focus{outline:2px solid #d9a441}
 @media (max-width:640px){#hint{top:58px !important;max-width:calc(100% - 30px) !important}}
 #hint{position:fixed;left:50%;top:12px;transform:translateX(-50%);padding:5px 12px;font-size:14px;pointer-events:none;transition:opacity 1.5s;text-align:center;max-width:calc(100% - 200px)}
+#mapbtn{position:fixed;right:10px;top:46px;width:42px;height:36px;font-size:20px;line-height:30px;padding:0;cursor:pointer}
+#map{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(30,20,10,.45)}
+#map[hidden]{display:none}
+#map .sheet{padding:8px 10px 10px;text-align:center}
+#map .mt{font-size:18px;font-style:italic;margin-bottom:5px}
+#mapcv{display:block;margin:0 auto;border-radius:4px}
+#map .mb{display:flex;gap:8px;justify-content:center;margin-top:8px}
+#map button{font:15px Georgia,serif;background:#fffaf0;color:#3b2a1c;border:1.5px solid #6b4a30;border-radius:8px 11px 7px 10px;padding:5px 11px;cursor:pointer}
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
 <div id="inv" class="paper"></div>
 <div id="clock" class="paper"></div>
-<div id="hint" class="paper">Flechas o WASD para pasear · Espacio para hacer cosas · en el celular, arrastra el dedo y toca ✋</div>
+<div id="hint" class="paper">Flechas o WASD para pasear · Espacio para hacer cosas · M para el mapa · en el celular, arrastra el dedo y toca ✋</div>
 <div id="prompt" class="paper" hidden></div>
 <button id="act" class="paper" hidden>✋</button>
 <div id="talk" class="paper" hidden></div>
+<button id="mapbtn" class="paper" title="Mapa (M)">🗺</button>
+<div id="map" hidden><div class="paper sheet"><div class="mt" id="maptitle"></div><canvas id="mapcv"></canvas><div class="mb"><button id="mapnext">Siguiente estación (prueba)</button><button id="mapclose">Cerrar</button></div></div></div>
 <script>
 /* Un día en Avonlea: a first look at a calm game inspired by "Anne of Green Gables" (L. M. Montgomery, 1908). No
    missions: Ana lives at Green Gables with Matthew and Marilla, and spends the days as she likes: watering the
@@ -39,6 +49,10 @@ html,body{margin:0;height:100%;background:#2b3a26;overflow:hidden;touch-action:n
    - Drawn by hand: pencil outlines that wobble a little and "boil" (redrawn a few times a second, like hand-drawn
      animation), watercolour fills that do not quite meet the line, and paper grain over everything.
    - The day lasts 8 minutes: morning, a golden evening, a night with lit windows and fireflies, dawn.
+   - The seasons turn every two days: apple blossom in spring, berries and fireflies in summer, red leaves falling
+     in autumn, snow and a frozen lake in winter (and everyone in scarves).
+   - Indoors: the kitchen at Green Gables, and Diana's parlour at Orchard Slope, where they take tea by the fire.
+   - A map of Avonlea (M), drawn on a sheet of paper, with where everyone is.
    - What she has, what has grown and how fond everyone is of her are kept in the browser. */
 (() => {
 'use strict';
@@ -53,6 +67,9 @@ const $ = id => document.getElementById(id);
    Outlines are drawn twice, each time with its points nudged a little; the nudges change a few times a second
    (boil), and come from the shape's size, so a shape that moves keeps its wobble. */
 let boil = 0;
+// the season (0 spring, 1 summer, 2 autumn, 3 winter) and whether the outdoors is being drawn (for the scarves)
+let S = 0, drawingOut = true;
+const SEASONS = ['Primavera', 'Verano', 'Otoño', 'Invierno'], SICON = ['🌸', '☀', '🍂', '❄'];
 const INK = 'rgba(70,42,26,.78)';
 function sketch(c, pts, closed, seed, col = INK, w = 1){
   for (let pass = 0; pass < 2; pass++) {
@@ -157,43 +174,57 @@ for (const H of [GG, OS]) for (let n = 0; n < 50; n++) { const x = H.x - H.w / 2
 for (let n = 0; n < 70; n++) { const a = R() * TAU, k = .96 + R() * .1; reeds.push({ x: LAKE.x + Math.cos(a) * LAKE.rx * k, y: LAKE.y + Math.sin(a) * LAKE.ry * k, h: 14 + R() * 12, ph: R() * TAU }); }
 for (let n = 0; n < 12; n++) { const a = R() * TAU, k = R() * .75; pads.push({ x: LAKE.x + Math.cos(a) * LAKE.rx * k, y: LAKE.y + Math.sin(a) * LAKE.ry * k, r: 7 + R() * 6, a: R() * TAU, bloom: R() < .4 }); }
 
-/* ---------- the ground, painted once (watercolour washes, the paths, the brook's bed) ---------- */
+/* ---------- the ground, painted again each season (watercolour washes, the paths, the brook's bed) ---------- */
 const ground = document.createElement('canvas'); ground.width = WW; ground.height = WH;
-(() => {
-  const c = ground.getContext('2d');
-  c.fillStyle = '#8fb862'; c.fillRect(0, 0, WW, WH);
+let groundSeason = -1;
+const GPAL = [
+  { base: '#94c266', wash: ['170,212,110', '120,170,80', '196,218,122'], grass: 'rgba(70,110,40,.18)', path: ['rgba(150,120,70,.3)', '#cdae7a', '#dbbf8d'], bed: '#8a6440', wood: '40,70,40,.45', bank: '120,95,60' },
+  { base: '#86b058', wash: ['150,192,92', '104,148,62', '184,200,102'], grass: 'rgba(60,95,35,.2)', path: ['rgba(150,120,70,.3)', '#cfab72', '#ddbd86'], bed: '#86603c', wood: '36,64,34,.5', bank: '120,95,60' },
+  { base: '#aaa65c', wash: ['204,170,92', '150,146,70', '214,140,70'], grass: 'rgba(110,90,40,.2)', path: ['rgba(150,110,70,.3)', '#c9a676', '#d6b98a'], bed: '#80603e', wood: '90,60,30,.4', bank: '120,90,55' },
+  { base: '#e9eef2', wash: ['255,255,255', '204,216,230', '236,240,247'], grass: 'rgba(150,170,195,.16)', path: ['rgba(150,150,160,.25)', '#d6d3cc', '#e3e0d9'], bed: '#d9d6d2', wood: '120,140,165,.3', bank: '150,160,175' },
+];
+function paintGround(s){
+  const c = ground.getContext('2d'), r = rng(4242), P = GPAL[s];
+  groundSeason = s;
+  c.fillStyle = P.base; c.fillRect(0, 0, WW, WH);
   for (let n = 0; n < 520; n++) {
-    const x = R() * WW, y = R() * WH, r = 30 + R() * 130, gr = c.createRadialGradient(x, y, 0, x, y, r);
-    const col = R() < .4 ? '160,200,104' : R() < .5 ? '116,160,76' : '182,206,112';
-    gr.addColorStop(0, `rgba(${col},.33)`); gr.addColorStop(1, `rgba(${col},0)`); c.fillStyle = gr; c.fillRect(x - r, y - r, r * 2, r * 2);
+    const x = r() * WW, y = r() * WH, rr = 30 + r() * 130, gr = c.createRadialGradient(x, y, 0, x, y, rr);
+    const col = r() < .4 ? P.wash[0] : r() < .5 ? P.wash[1] : P.wash[2];
+    gr.addColorStop(0, `rgba(${col},.33)`); gr.addColorStop(1, `rgba(${col},0)`); c.fillStyle = gr; c.fillRect(x - rr, y - rr, rr * 2, rr * 2);
   }
   // the Haunted Wood is darker
-  const hw = c.createRadialGradient(9 * T, 40 * T, 40, 9 * T, 40 * T, 13 * T); hw.addColorStop(0, 'rgba(40,70,40,.45)'); hw.addColorStop(1, 'rgba(40,70,40,0)'); c.fillStyle = hw; c.fillRect(0, 26 * T, 24 * T, 24 * T);
+  const hw = c.createRadialGradient(9 * T, 40 * T, 40, 9 * T, 40 * T, 13 * T); hw.addColorStop(0, `rgba(${P.wood})`); hw.addColorStop(1, `rgba(${P.wood.split(',').slice(0, 3)},0)`); c.fillStyle = hw; c.fillRect(0, 26 * T, 24 * T, 24 * T);
   // pencil strokes of grass over the wash
-  c.strokeStyle = 'rgba(70,100,40,.18)'; c.lineWidth = .8;
-  for (let n = 0; n < 6000; n++) { const x = R() * WW, y = R() * WH; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 1 + R() * 2, y - 2 - R() * 3); c.stroke(); }
+  c.strokeStyle = P.grass; c.lineWidth = .8;
+  for (let n = 0; n < 6000; n++) { const x = r() * WW, y = r() * WH; c.beginPath(); c.moveTo(x, y); c.lineTo(x + 1 + r() * 2, y - 2 - r() * 3); c.stroke(); }
+  // autumn: fallen leaves; winter: the snow glitters a little
+  if (s === 2) for (let n = 0; n < 2600; n++) { const x = r() * WW, y = r() * WH; c.fillStyle = ['rgba(200,90,50,.55)', 'rgba(220,150,60,.55)', 'rgba(180,60,40,.5)', 'rgba(230,190,80,.5)'][n % 4]; c.beginPath(); c.ellipse(x, y, 2.4 + r() * 1.6, 1.2 + r(), r() * TAU, 0, TAU); c.fill(); }
+  if (s === 3) for (let n = 0; n < 2400; n++) { const x = r() * WW, y = r() * WH; c.fillStyle = r() < .5 ? 'rgba(170,190,215,.35)' : 'rgba(255,255,255,.9)'; c.beginPath(); c.ellipse(x, y, 1 + r() * 2.5, .6 + r(), 0, 0, TAU); c.fill(); }
   const stroke = (pts, w, col) => { c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(...pts[0]); for (let i = 1; i < pts.length; i++) { const p = pts[i - 1], q = pts[i]; c.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2); } c.lineTo(...pts[pts.length - 1]); c.stroke(); };
-  for (const p of paths) { stroke(p, 54, 'rgba(150,120,70,.3)'); stroke(p, 40, '#cdae7a'); stroke(p, 26, '#dbbf8d'); }
+  for (const p of paths) { stroke(p, 54, P.path[0]); stroke(p, 40, P.path[1]); stroke(p, 26, P.path[2]); }
   // pencil edges of the paths
   for (const p of paths) for (const side of [-1, 1]) { c.strokeStyle = 'rgba(110,80,50,.35)'; c.lineWidth = 1; c.beginPath(); for (let i = 0; i < p.length; i++) { const [x, y] = p[i], [nx, ny] = p[Math.min(i + 1, p.length - 1)], [px, py] = p[Math.max(i - 1, 0)], a = Math.atan2(ny - py, nx - px) + side * Math.PI / 2; const X = x + Math.cos(a) * 19, Y = y + Math.sin(a) * 19; i ? c.lineTo(X, Y) : c.moveTo(X, Y); } c.stroke(); }
-  for (let n = 0; n < 900; n++) { const x = R() * WW, y = R() * WH; if (nearPath(x, y, 16)) { c.fillStyle = R() < .5 ? 'rgba(120,95,60,.4)' : 'rgba(245,232,200,.5)'; c.beginPath(); c.ellipse(x, y, 1.5 + R() * 2, 1 + R(), 0, 0, TAU); c.fill(); } }
+  for (let n = 0; n < 900; n++) { const x = r() * WW, y = r() * WH; if (nearPath(x, y, 16)) { c.fillStyle = r() < .5 ? 'rgba(120,95,60,.4)' : 'rgba(245,232,200,.5)'; c.beginPath(); c.ellipse(x, y, 1.5 + r() * 2, 1 + r(), 0, 0, TAU); c.fill(); } }
+  // winter: footprints in the snow along the paths
+  if (s === 3) for (const [a, b] of segs) for (let q = 0; q < 1; q += 18 / Math.hypot(b[0] - a[0], b[1] - a[1])) { const x = lerp(a[0], b[0], q), y = lerp(a[1], b[1], q), o = (Math.round(q * 1000) % 2 ? 4 : -4); c.fillStyle = 'rgba(140,150,170,.35)'; c.beginPath(); c.ellipse(x + o, y + o * .3, 2.2, 1.4, 0, 0, TAU); c.fill(); }
   // the brook's bed and the lake's shore
-  stroke(brook, 40, 'rgba(120,100,70,.45)');
+  stroke(brook, 40, `rgba(${P.bank},.45)`);
   c.save(); c.translate(LAKE.x, LAKE.y); c.scale(1, LAKE.ry / LAKE.rx);
-  const bank = c.createRadialGradient(0, 0, LAKE.rx * .7, 0, 0, LAKE.rx * 1.14); bank.addColorStop(0, 'rgba(120,95,60,0)'); bank.addColorStop(.88, 'rgba(120,95,60,.5)'); bank.addColorStop(1, 'rgba(120,95,60,0)');
+  const bank = c.createRadialGradient(0, 0, LAKE.rx * .7, 0, 0, LAKE.rx * 1.14); bank.addColorStop(0, `rgba(${P.bank},0)`); bank.addColorStop(.88, `rgba(${P.bank},.5)`); bank.addColorStop(1, `rgba(${P.bank},0)`);
   c.fillStyle = bank; c.beginPath(); c.arc(0, 0, LAKE.rx * 1.14, 0, TAU); c.fill(); c.restore();
-  for (const H of [GG, OS]) { c.fillStyle = 'rgba(130,95,55,.3)'; c.beginPath(); c.ellipse(H.x, H.y + 30, H.w / 2 + 6, 26, 0, 0, TAU); c.fill(); }
-  // the garden beds' earth
-  for (const b of BEDS) { c.fillStyle = '#8a6440'; c.beginPath(); c.ellipse(b.x, b.y, 21, 14, 0, 0, TAU); c.fill(); c.strokeStyle = 'rgba(60,40,25,.5)'; c.lineWidth = 1; c.stroke(); c.strokeStyle = 'rgba(60,40,25,.3)'; for (let k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(b.x - 15, b.y + k * 5); c.lineTo(b.x + 15, b.y + k * 5); c.stroke(); } }
-})();
+  for (const H of [GG, OS]) { c.fillStyle = s === 3 ? 'rgba(150,140,130,.22)' : 'rgba(130,95,55,.3)'; c.beginPath(); c.ellipse(H.x, H.y + 30, H.w / 2 + 6, 26, 0, 0, TAU); c.fill(); }
+  // the garden beds' earth (under snow in winter)
+  for (const b of BEDS) { c.fillStyle = P.bed; c.beginPath(); c.ellipse(b.x, b.y, 21, 14, 0, 0, TAU); c.fill(); c.strokeStyle = 'rgba(60,40,25,.5)'; c.lineWidth = 1; c.stroke(); c.strokeStyle = s === 3 ? 'rgba(140,130,125,.4)' : 'rgba(60,40,25,.3)'; for (let k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(b.x - 15, b.y + k * 5); c.lineTo(b.x + 15, b.y + k * 5); c.stroke(); } }
+}
 
 /* ---------- people ----------
    Each is drawn at its feet, about 46 to 54 pixels tall, from the front, the back or the side. */
 const LOOKS = {
-  ana:     { hair: '#c0582e', hairD: '#8f3b1d', style: 'braids', dress: '#5c8c63', dressD: '#436b4a', collar: '#fbf6ea', hat: true, freckles: true, skin: '#f6d6bb', h: 1 },
-  diana:   { hair: '#2e2420', hairD: '#16100c', style: 'curls', dress: '#d98aa0', dressD: '#b56a82', collar: '#fff4f6', bow: '#f6e7a8', skin: '#f3d0b4', h: 1 },
-  matthew: { hair: '#c9c4bb', hairD: '#8e8a82', style: 'old', beard: true, dress: '#4d4a54', dressD: '#37353c', coat: true, hatDark: true, skin: '#eac6a8', h: 1.22 },
-  marilla: { hair: '#5a4636', hairD: '#3b2d22', style: 'bun', dress: '#7a6e7e', dressD: '#5d5361', apron: '#f4efe4', brooch: true, skin: '#eecaae', h: 1.18 },
+  ana:     { hair: '#c0582e', hairD: '#8f3b1d', style: 'braids', dress: '#5c8c63', dressD: '#436b4a', collar: '#fbf6ea', hat: true, freckles: true, skin: '#f6d6bb', h: 1, scarf: '#d9433b' },
+  diana:   { hair: '#2e2420', hairD: '#16100c', style: 'curls', dress: '#d98aa0', dressD: '#b56a82', collar: '#fff4f6', bow: '#f6e7a8', skin: '#f3d0b4', h: 1, scarf: '#f2e3a0' },
+  matthew: { hair: '#c9c4bb', hairD: '#8e8a82', style: 'old', beard: true, dress: '#4d4a54', dressD: '#37353c', coat: true, hatDark: true, skin: '#eac6a8', h: 1.22, scarf: '#9a6a44' },
+  marilla: { hair: '#5a4636', hairD: '#3b2d22', style: 'bun', dress: '#7a6e7e', dressD: '#5d5361', apron: '#f4efe4', brooch: true, skin: '#eecaae', h: 1.18, scarf: '#5c8c63' },
+  barry:   { hair: '#3b2a22', hairD: '#24180f', style: 'bun', dress: '#5a6a8e', dressD: '#465474', collar: '#f4efe4', brooch: true, skin: '#f0cdb0', h: 1.18, scarf: '#a58ad8' },
 };
 const SKIN_LINE = 'rgba(150,90,60,.7)';
 function drawPerson(c, p, t){
@@ -225,6 +256,11 @@ function drawPerson(c, p, t){
   // collar, brooch
   if (d !== 0) blob(c, [[-5, -24.5], [5, -24.5], [3, -21.5], [0, -23], [-3, -21.5]], L.collar || L.dressD, false);
   if (L.brooch && d === 2) ell(c, 0, -22, 1.3, 1.3, '#d9a441', true);
+  // a knitted scarf out of doors in winter, its end in the wind
+  if (S === 3 && drawingOut) {
+    blob(c, [[-5.8, -26], [5.8, -26], [5.4, -21.6], [-5.4, -21.6]], L.scarf);
+    if (d !== 0) { const ex = side ? -3 : 2.5; blob(c, [[ex, -22], [ex + 3, -22], [ex + 3.4 + wind * 1.4, -14.5], [ex + .4 + wind * 1.4, -14.5]], L.scarf); c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(ex + .4 + wind * 1.4, -16.5, 3, 1); }
+  }
   // hair behind, then the head
   const hy = -32;
   const braid = (bx, by, len, k) => {
@@ -303,12 +339,27 @@ function drawTree(c, o, t){
   ell(c, x + 10 * s, y + 2, 30 * s, 10 * s, 'rgba(30,50,20,.22)');
   if (o.kind === 'pine') {
     blob(c, [[x - 3 * s, y], [x + 3 * s, y], [x + 2.5 * s, y - 14 * s], [x - 2.5 * s, y - 14 * s]], '#6e4a30');
-    for (let k = 0; k < 3; k++) { const w = (22 - k * 6) * s, yy = y - (12 + k * 17) * s; blob(c, [[x - w + sway * k * .3, yy], [x + w + sway * k * .3, yy], [x + sway * (k + 1) * .4, yy - 26 * s]], ['#2f5a3c', '#3a6b45', '#4a7d50'][k]); }
+    for (let k = 0; k < 3; k++) {
+      const w = (22 - k * 6) * s, yy = y - (12 + k * 17) * s, L = [x - w + sway * k * .3, yy], Rt = [x + w + sway * k * .3, yy], Tp = [x + sway * (k + 1) * .4, yy - 26 * s];
+      blob(c, [L, Rt, Tp], ['#2f5a3c', '#3a6b45', '#4a7d50'][k]);
+      // snow lies on each layer of a pine in winter
+      if (S === 3) blob(c, [[lerp(L[0], Tp[0], .45), lerp(L[1], Tp[1], .45)], Tp, [lerp(Rt[0], Tp[0], .45), lerp(Rt[1], Tp[1], .45)], [Tp[0] + 4 * s, yy - 9 * s], [Tp[0] - 2 * s, yy - 13 * s]], '#f6f8fb');
+    }
     return;
   }
   blob(c, [[x - 5 * s, y], [x + 5 * s, y], [x + 3.5 * s, y - 32 * s], [x - 3.5 * s, y - 32 * s]], '#7a5536');
   const cx = x + sway, cy = y - 56 * s;
-  const greens = o.kind === 'blossom' ? ['#e8a8b8', '#f4c4cf', '#fbdde3', '#fff1f3'] : o.kind === 'apple' ? ['#4f8a42', '#62a04b', '#86bb5e', '#b0d67e'] : ['#4a7d3e', '#5c9446', '#7cb05a', '#a4cc76'];
+  if (S === 3) {
+    // winter: bare branches with snow along them
+    const BR = [[-1, -30, -12, -52, -24, -66], [1, -30, 13, -50, 22, -68], [0, -32, -2, -60, 4, -80], [-1, -40, -16, -46, -26, -44], [1, -42, 15, -60, 26, -58]];
+    for (const [a0, b0, a1, b1, a2, b2] of BR) { line(c, [[x + a0 * s, y + b0 * s], [x + a1 * s + sway * .4, y + b1 * s], [x + a2 * s + sway, y + b2 * s]], '#6a4a30', 2.6 * s, a2 + b2); line(c, [[x + a1 * s + sway * .4, y + b1 * s], [x + (a1 + a2) * .5 * s + sway, y + (b1 + b2) * .5 * s - 8 * s]], '#6a4a30', 1.2 * s, a1); }
+    for (const [, , a1, b1, a2, b2] of BR) { ell(c, x + a1 * s + sway * .4, y + b1 * s - 2, 4 * s, 1.6 * s, '#f6f8fb'); ell(c, x + (a1 + a2) / 2 * s + sway * .7, y + (b1 + b2) / 2 * s - 2, 3.4 * s, 1.4 * s, '#f6f8fb'); }
+    return;
+  }
+  const AUT = [['#a8432c', '#c8583a', '#e07b4a', '#f2a66a'], ['#b8682a', '#d8873a', '#eaa84e', '#f6cc7a'], ['#b8962e', '#d4b240', '#e8cc5c', '#f6e48a']];
+  const greens = o.kind === 'blossom' ? (S === 0 ? ['#e8a8b8', '#f4c4cf', '#fbdde3', '#fff1f3'] : S === 1 ? ['#4f8a42', '#62a04b', '#86bb5e', '#b0d67e'] : AUT[0])
+    : o.kind === 'apple' ? (S === 0 ? ['#6a9e4e', '#f0d4dc', '#fbe8ec', '#ffffff'] : S === 1 ? ['#4f8a42', '#62a04b', '#86bb5e', '#b0d67e'] : ['#6a8a3a', '#8aa048', '#b8b05a', '#d8c870'])
+    : S === 0 ? ['#5f9a46', '#74b052', '#98c868', '#c0e08a'] : S === 1 ? ['#4a7d3e', '#5c9446', '#7cb05a', '#a4cc76'] : AUT[Math.floor(o.ph / TAU * 3) % 3];
   const blobs = [[-16, 8, 20], [16, 8, 19], [0, 12, 21], [-10, -8, 19], [11, -9, 18], [0, -18, 16]];
   for (const [bx, by, r] of blobs) ell(c, cx + bx * s, cy + by * s + 3, r * s, r * .92 * s, greens[0]);
   // the crown's outline: one pencil line around all its blobs
@@ -318,13 +369,16 @@ function drawTree(c, o, t){
   for (const [bx, by, r] of blobs.slice(3)) ell(c, cx + bx * s - 3, cy + by * s - 4, r * .55 * s, r * .45 * s, greens[2]);
   for (const [bx, by, r] of blobs.slice(4)) ell(c, cx + bx * s - 5, cy + by * s - 7, r * .25 * s, r * .2 * s, greens[3]);
   hatch(c, cx - 4 * s, cy + 8 * s, 24 * s, 14 * s, seedOf(x, y));
-  if (o.kind === 'apple') for (let k = 0; k < o.apples; k++) { const [ax, ay] = [[-12, 2], [10, -4], [2, 10]][k]; ell(c, cx + ax * s, cy + ay * s, 2.6, 2.6, '#d9433b', true); }
+  if (o.kind === 'apple' && (S === 1 || S === 2)) for (let k = 0; k < o.apples; k++) { const [ax, ay] = [[-12, 2], [10, -4], [2, 10]][k]; ell(c, cx + ax * s, cy + ay * s, 2.6, 2.6, '#d9433b', true); }
 }
 function drawBush(c, o, t){
   const s = o.s, x = o.x, y = o.y, sw = Math.sin(t * 1.2 + o.ph) * .8;
   ell(c, x + 4, y + 1, 18 * s, 6 * s, 'rgba(30,50,20,.2)');
-  for (const [bx, by, r, col] of [[-8, -8, 10, '#4b8540'], [8, -8, 10, '#4b8540'], [0, -12, 11, '#5b9a48'], [-3, -15, 6, '#7cb85a']]) ell(c, x + bx * s + sw, y + by * s, r * s, r * .85 * s, col, r > 8);
-  for (let k = 0; k < o.berries; k++) { const [bx, by] = [[-7, -10], [5, -13], [9, -6]][k]; ell(c, x + bx * s + sw, y + by * s, 1.9, 1.9, '#3c4fa8', true); }
+  const BC = [['#4b8540', '#5b9a48', '#7cb85a'], ['#4b8540', '#5b9a48', '#7cb85a'], ['#8a7a3a', '#a8883e', '#c8a24a'], ['#6a7a64', '#7a8a72', '#f6f8fb']][S];
+  for (const [bx, by, r, k] of [[-8, -8, 10, 0], [8, -8, 10, 0], [0, -12, 11, 1], [-3, -15, 6, 2]]) ell(c, x + bx * s + sw, y + by * s, r * s, r * .85 * s, BC[k], r > 8);
+  if (S === 3) { ell(c, x + sw, y - 19 * s, 10 * s, 3.4 * s, '#f6f8fb', true); ell(c, x - 9 * s + sw, y - 15 * s, 6 * s, 2.4 * s, '#f6f8fb'); return; }
+  if (S === 0) for (let k = 0; k < 6; k++) ell(c, x + [-9, -2, 6, 10, -5, 2][k] * s + sw, y + [-11, -16, -14, -7, -5, -9][k] * s, 1.6, 1.6, '#fffaf2', true);
+  if (S === 1 || S === 2) for (let k = 0; k < o.berries; k++) { const [bx, by] = [[-7, -10], [5, -13], [9, -6]][k]; ell(c, x + bx * s + sw, y + by * s, 1.9, 1.9, '#3c4fa8', true); }
 }
 function drawHouse(c, o, t, night){
   const H = o.h, x = H.x, y = H.y, w = H.w, h = o.small ? 56 : 66;
@@ -348,15 +402,20 @@ function drawHouse(c, o, t, night){
   blob(c, [[x - w / 2 - 14, ry + 6], [x + w / 2 + 14, ry + 6], [x + w / 2 - 6, ry - rd], [x - w / 2 + 6, ry - rd]], o.roof);
   c.strokeStyle = 'rgba(40,60,35,.35)'; c.lineWidth = 1; for (let k = 1; k < 7; k++) { const yy = ry + 6 - (rd + 6) * k / 7, ww = w / 2 + 14 - 20 * k / 7; c.beginPath(); c.moveTo(x - ww, yy); c.lineTo(x + ww, yy); c.stroke(); }
   hatch(c, x - w / 2, ry - rd + 4, w, rd * .5, seedOf(x, 3), 'rgba(30,40,25,.18)');
+  if (S === 3) { const pts = [[x - w / 2 + 6, ry - rd], [x + w / 2 - 6, ry - rd]]; for (let k = 0; k <= 10; k++) { const f = .2 + Math.sin(k * 1.9 + x) * .05, ww = w / 2 + 14 - 20 * f; pts.push([x + ww - k / 10 * ww * 2, ry + 6 - (rd + 6) * f + (k % 2) * 4]); } blob(c, pts, '#f6f8fb'); }
   for (const gx of o.small ? [0] : [-w / 2 + 70, w / 2 - 70]) {
     const gy = ry - rd * .45;
     blob(c, [[x + gx - 26, ry + 4], [x + gx + 26, ry + 4], [x + gx, gy]], o.roof);
+    if (S === 3) blob(c, [[x + gx - 27, ry + 5], [x + gx, gy - 3], [x + gx + 27, ry + 5], [x + gx + 22, ry + 6], [x + gx, gy + 3], [x + gx - 22, ry + 6]], '#f6f8fb');
     blob(c, [[x + gx - 18, ry + 2], [x + gx + 18, ry + 2], [x + gx, gy + 10]], o.wall);
     blob(c, [[x + gx - 6, ry - 14], [x + gx + 6, ry - 14], [x + gx + 6, ry - 2], [x + gx - 6, ry - 2]], glow ? '#ffd27a' : '#a9cbd8');
   }
   const chx = x + w / 2 - 34, chy = ry - rd + 18;
   blob(c, [[chx - 8, chy], [chx + 8, chy], [chx + 8, chy - 30], [chx - 8, chy - 30]], '#a46a50');
-  for (let k = 0; k < 6; k++) { const q = ((t * .22 + k / 6) % 1), sx = chx + Math.sin(q * 6 + k) * 6 + q * 22, sy = chy - 36 - q * 70; ell(c, sx, sy, 5 + q * 12, 4 + q * 9, `rgba(245,245,240,${.42 * (1 - q)})`); }
+  if (S === 3) ell(c, chx, chy - 31, 9, 3, '#f6f8fb', true);
+  // smoke from the chimney (more of it in autumn and winter, when the fires are lit all day)
+  const sm = S >= 2 ? .6 : .42, nk = S >= 2 ? 9 : 6;
+  for (let k = 0; k < nk; k++) { const q = ((t * .22 + k / nk) % 1), sx = chx + Math.sin(q * 6 + k) * 6 + q * 22, sy = chy - 36 - q * 70; ell(c, sx, sy, 5 + q * 12, 4 + q * 9, `rgba(245,245,240,${sm * (1 - q)})`); }
 }
 function drawBarn(c, o){
   const x = o.x, y = o.y, w = BARN.w, h = 64;
@@ -366,6 +425,7 @@ function drawBarn(c, o){
   blob(c, [[x - 24, y], [x - 24, y - 44], [x + 24, y - 44], [x + 24, y]], '#8f3f2e');
   line(c, [[x - 24, y - 44], [x + 24, y]], '#f1e6d4', 2.4); line(c, [[x + 24, y - 44], [x - 24, y]], '#f1e6d4', 2.4);
   blob(c, [[x - w / 2 - 10, y - h + 4], [x + w / 2 + 10, y - h + 4], [x + w / 2 - 10, y - h - 66], [x - w / 2 + 10, y - h - 66]], '#6f6a66');
+  if (S === 3) blob(c, [[x - w / 2 + 10, y - h - 66], [x + w / 2 - 10, y - h - 66], [x + w / 2 - 2, y - h - 36], [x + 20, y - h - 30], [x - 30, y - h - 34], [x - w / 2 + 2, y - h - 30]], '#f6f8fb');
 }
 function drawProp(c, o, t, night){
   if (o.kind === 'house') drawHouse(c, o, t, night);
@@ -389,6 +449,8 @@ function drawProp(c, o, t, night){
 }
 function drawBed(c, b, t){
   // the plants of a garden bed: seed, sprout, leaves, flowers; wet earth darker
+  // in winter the garden sleeps under the snow
+  if (S === 3) { ell(c, b.x, b.y - 2, 19, 9, '#f6f8fb', 'rgba(140,150,170,.6)'); return; }
   if (b.wet) { c.fillStyle = 'rgba(60,40,25,.35)'; c.beginPath(); c.ellipse(b.x, b.y, 20, 13, 0, 0, TAU); c.fill(); }
   const [col] = FLOWER_KINDS[b.kind];
   for (let k = 0; k < 5; k++) {
@@ -434,13 +496,71 @@ function drawTable(c){
   if (game.inv.tarta + game.inv.compota > 0) ell(c, TABLE.x - 14, TABLE.y - 32, 6, 3, '#7a4a8a', true);
 }
 
+/* ---------- the parlour at Orchard Slope (Diana's house): a fire, a sofa, tea and raspberry cordial ---------- */
+const FIRE = { x: 10.2 * T, y: 3.3 * T }, SOFA = { x: 3.6 * T, y: 4.5 * T }, TEA = { x: 7.4 * T, y: 6 * T };
+function drawParlour(c, t, night){
+  c.fillStyle = '#b7875a'; c.fillRect(0, 0, KIT.w, KIT.h);
+  c.strokeStyle = 'rgba(100,60,35,.35)'; c.lineWidth = 1; for (let y = 2.4 * T; y < KIT.h; y += 14) { c.beginPath(); c.moveTo(0, y); c.lineTo(KIT.w, y); c.stroke(); for (let x = (y / 14 % 2) * 40 + 20; x < KIT.w; x += 80) { c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 14); c.stroke(); } }
+  // striped wallpaper with little roses, a picture, a window with lace curtains (snow outside in winter)
+  blob(c, [[0, 0], [KIT.w, 0], [KIT.w, 2.4 * T], [0, 2.4 * T]], '#f3e0df');
+  for (let x = 6; x < KIT.w; x += 16) { c.fillStyle = 'rgba(200,130,140,.25)'; c.fillRect(x, 2, 5, 2.4 * T - 4); if ((x / 16 | 0) % 2) for (let y = 12; y < 2.4 * T; y += 22) ell(c, x + 2.5, y, 1.6, 1.6, 'rgba(210,90,110,.5)'); }
+  c.fillStyle = '#7a5536'; c.fillRect(0, 2.4 * T - 6, KIT.w, 6);
+  const wx = 5.8 * T;
+  blob(c, [[wx - 30, 12], [wx + 30, 12], [wx + 30, 54], [wx - 30, 54]], night > .3 ? '#34416a' : S === 3 ? '#e4eef4' : '#bfe0ea');
+  if (S === 3) for (let k = 0; k < 9; k++) ell(c, wx - 24 + ((k * 23 + t * 6) % 48), 14 + ((k * 17 + t * 9) % 38), 1.2, 1.2, '#fff');
+  c.strokeStyle = '#7a5536'; c.lineWidth = 3; c.beginPath(); c.moveTo(wx, 12); c.lineTo(wx, 54); c.moveTo(wx - 30, 33); c.lineTo(wx + 30, 33); c.stroke();
+  for (const sd of [-1, 1]) blob(c, [[wx + sd * 34, 8], [wx + sd * 20, 8], [wx + sd * 26, 36], [wx + sd * 36, 58]], 'rgba(255,252,245,.9)');
+  blob(c, [[1.6 * T - 18, 16], [1.6 * T + 18, 16], [1.6 * T + 18, 48], [1.6 * T - 18, 48]], '#c9a04a'); blob(c, [[1.6 * T - 13, 21], [1.6 * T + 13, 21], [1.6 * T + 13, 43], [1.6 * T - 13, 43]], '#9fb8a0');
+  ell(c, 1.6 * T, 30, 5, 6, '#e8cdb2', true);
+  // a rag rug
+  ell(c, 6.6 * T, 6.4 * T, 92, 36, '#7a5a8a', true); ell(c, 6.6 * T, 6.4 * T, 72, 26, '#d9a441'); ell(c, 6.6 * T, 6.4 * T, 46, 15, '#efe0c8');
+  // the fireplace: bricks, a mantel with a clock and candlesticks, and the fire
+  const fx = FIRE.x, fy = FIRE.y;
+  blob(c, [[fx - 44, fy], [fx + 44, fy], [fx + 44, fy - 70], [fx - 44, fy - 70]], '#a8553e');
+  c.strokeStyle = 'rgba(80,30,20,.35)'; c.lineWidth = 1; for (let y = fy - 64; y < fy; y += 8) { c.beginPath(); c.moveTo(fx - 43, y); c.lineTo(fx + 43, y); c.stroke(); }
+  blob(c, [[fx - 52, fy - 70], [fx + 52, fy - 70], [fx + 52, fy - 78], [fx - 52, fy - 78]], '#7a5536');
+  blob(c, [[fx - 24, fy], [fx - 24, fy - 34], [fx, fy - 44], [fx + 24, fy - 34], [fx + 24, fy]], '#2a2224');
+  for (let k = 0; k < 5; k++) { const q = Math.sin(t * 7 + k * 2.1); ell(c, fx - 12 + k * 6, fy - 10 - Math.abs(q) * 5, 5, 9 + q * 3, k % 2 ? 'rgba(255,190,70,.95)' : 'rgba(240,110,50,.95)'); }
+  ell(c, fx, fy - 4, 18, 3, '#5b3a28', true);
+  blob(c, [[fx - 8, fy - 78], [fx + 8, fy - 78], [fx + 8, fy - 96], [fx - 8, fy - 96]], '#8a6040'); ell(c, fx, fy - 88, 5, 5, '#fffaf0', true);
+  for (const sx of [-36, 36]) { c.fillStyle = '#d9a441'; c.fillRect(fx + sx - 1.5, fy - 92, 3, 14); ell(c, fx + sx, fy - 95 - Math.abs(Math.sin(t * 5 + sx)), 1.6, 3, '#ffd27a'); }
+  // the door out
+  blob(c, [[KDOOR.x - 18, KIT.h], [KDOOR.x - 18, KIT.h - 6], [KDOOR.x + 18, KIT.h - 6], [KDOOR.x + 18, KIT.h]], '#7a4f32');
+}
+function drawSofa(c){
+  const x = SOFA.x, y = SOFA.y, V = '#7f9e6e', VD = '#5f7e52';
+  ell(c, x, y + 4, 62, 8, 'rgba(40,25,15,.22)');
+  blob(c, [[x - 56, y - 22], [x + 56, y - 22], [x + 52, y - 50], [x - 52, y - 50]], V);
+  for (const k of [-1, 0, 1]) ell(c, x + k * 32, y - 38, 6, 6, VD);
+  blob(c, [[x - 54, y - 2], [x + 54, y - 2], [x + 54, y - 22], [x - 54, y - 22]], VD);
+  blob(c, [[x - 50, y - 18], [x + 50, y - 18], [x + 48, y - 28], [x - 48, y - 28]], V);
+  for (const sd of [-1, 1]) blob(c, [[x + sd * 50, y], [x + sd * 62, y], [x + sd * 62, y - 34], [x + sd * 50, y - 34]], V);
+  c.fillStyle = '#5b3a28'; c.fillRect(x - 58, y, 4, 4); c.fillRect(x + 54, y, 4, 4);
+  ell(c, x - 30, y - 30, 9, 6, '#f2c94c', true);
+}
+function drawTea(c){
+  const x = TEA.x, y = TEA.y;
+  ell(c, x, y + 2, 34, 7, 'rgba(40,25,15,.22)');
+  c.fillStyle = '#6a4a30'; c.fillRect(x - 2, y - 24, 4, 24); c.fillRect(x - 14, y - 2, 28, 3);
+  ell(c, x, y - 26, 32, 12, '#8a6040', true); ell(c, x, y - 28, 30, 10.5, '#fffaf0', true);
+  // teapot, two cups, and the bottle of raspberry cordial
+  ell(c, x - 12, y - 32, 7, 6, '#9db3bf', true); line(c, [[x - 19, y - 33], [x - 24, y - 37]], 'rgba(70,90,100,.9)', 1.6);
+  ell(c, x + 4, y - 27, 4, 2.4, '#fff', true); ell(c, x + 14, y - 30, 4, 2.4, '#fff', true);
+  blob(c, [[x + 20, y - 30], [x + 25, y - 30], [x + 25, y - 42], [x + 23.5, y - 46], [x + 21.5, y - 46], [x + 20, y - 42]], '#c83a4a');
+  c.fillStyle = '#fffaf0'; c.fillRect(x + 20.5, y - 38, 4, 4);
+}
+
 /* ---------- the game ---------- */
-const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, toby: 0 }, cooking: null, talk: null, said: {} };
+// scene: 'out' (Avonlea), 'gg' (the kitchen at Green Gables) or 'os' (the parlour at Orchard Slope)
+const game = { scene: 'out', inv: { bayas: 0, manzanas: 0, tarta: 0, compota: 0, te: 0, ramo: 0 }, hasCan: false, water: 0, fond: { matthew: 0, marilla: 0, diana: 0, barry: 0, toby: 0 }, cooking: null, talk: null, said: {}, saidS: {}, seasonShift: 0, teaDay: -1, map: false };
 const mkPerson = (look, x, y) => ({ look, x, y, dir: 2, walk: 0, moving: false, blink: 0, idle: 0, sit: false, vx: 0, vy: 0, carry: null, pet: false, crouch: false, lookAround: 0 });
 const ana = mkPerson('ana', GG.x - 6, GG.y + 70);
 const matthew = Object.assign(mkPerson('matthew', BARN.x + 60, BARN.y + 50), { goals: [[BARN.x + 60, BARN.y + 50], [GG.x - 140, GG.y + 90], [BARN.x - 20, BARN.y + 70], [GG.x + 120, GG.y + 160]], goal: 0, wait: 3 });
-const diana = Object.assign(mkPerson('diana', OS.x - 50, OS.y + 60), { goals: [[OS.x - 50, OS.y + 60], [OS.x + 80, OS.y + 140], [OS.x - 130, OS.y + 180], [OS.x + 20, OS.y + 70]], goal: 0, wait: 2, follow: false });
+// Diana is out in her garden by day, and at home in the evenings and all winter ('where' is the scene she is in)
+const DIANA_OUT = [[OS.x - 50, OS.y + 60], [OS.x + 80, OS.y + 140], [OS.x - 130, OS.y + 180], [OS.x + 20, OS.y + 70]], DIANA_IN = [[5.8 * T, 3.4 * T], [8.4 * T, 4.4 * T], [4.6 * T, 6.6 * T]];
+const diana = Object.assign(mkPerson('diana', OS.x - 50, OS.y + 60), { goals: DIANA_OUT, goal: 0, wait: 2, follow: false, where: 'out' });
 const marilla = Object.assign(mkPerson('marilla', TABLE.x + 70, TABLE.y + 30), { goals: [[TABLE.x + 70, TABLE.y + 30], [STOVE.x + 60, STOVE.y + 40], [10.5 * T, 3.4 * T]], goal: 0, wait: 4 });
+const barry = Object.assign(mkPerson('barry', 8.6 * T, 4.4 * T), { goals: [[8.6 * T, 4.4 * T], [11.4 * T, 6 * T], [4.4 * T, 6.8 * T], [7.6 * T, 3.4 * T]], goal: 0, wait: 3 });
 const toby = { x: ana.x + 30, y: ana.y + 20, dir: 1, walk: 0, moving: false, sitT: 0, sniff: 0, petted: 0 };
 const SPEED = 84;
 function blockedOut(x, y){
@@ -448,8 +568,9 @@ function blockedOut(x, y){
     trees.some(t => Math.hypot(t.x - x, (t.y - y) * 1.6) < 11 * t.s) || dist(x, y, PUMP.x, PUMP.y) < 9;
 }
 function blockedIn(x, y){
-  return x < 14 || x > KIT.w - 14 || y < 2.4 * T + 8 || (y > KIT.h - 4 && Math.abs(x - KDOOR.x) > 16) ||
-    (Math.abs(x - STOVE.x) < 36 && y < STOVE.y + 6) || (Math.abs(x - TABLE.x) < 60 && y > TABLE.y - 26 && y < TABLE.y + 6);
+  if (x < 14 || x > KIT.w - 14 || y < 2.4 * T + 8 || (y > KIT.h - 4 && Math.abs(x - KDOOR.x) > 16)) return true;
+  if (game.scene === 'os') return (Math.abs(x - FIRE.x) < 46 && y < FIRE.y + 6) || (Math.abs(x - SOFA.x) < 62 && y < SOFA.y - 12) || ((x - TEA.x) / 36) ** 2 + ((y - TEA.y + 4) / 12) ** 2 < 1;
+  return (Math.abs(x - STOVE.x) < 36 && y < STOVE.y + 6) || (Math.abs(x - TABLE.x) < 60 && y > TABLE.y - 26 && y < TABLE.y + 6);
 }
 const blocked = (x, y) => game.scene === 'out' ? blockedOut(x, y) : blockedIn(x, y);
 function moveBy(o, dx, dy){ if (!blocked(o.x + dx, o.y)) o.x += dx; if (!blocked(o.x, o.y + dy)) o.y += dy; }
@@ -462,38 +583,68 @@ function walkTo(p, tx, ty, sp, dt){
 }
 function wander(p, dt, sp){
   if (p.wait > 0) { p.wait -= dt; p.moving = false; return; }
-  const [gx, gy] = p.goals[p.goal];
+  const [gx, gy] = p.goals[p.goal % p.goals.length];
   if (walkTo(p, gx, gy, sp, dt)) { p.goal = (p.goal + 1 + Math.floor(Math.random() * (p.goals.length - 1))) % p.goals.length; p.wait = 3 + Math.random() * 6; p.dir = 2; }
 }
 
 /* ---------- what can be done here ---------- */
-const NAMES = { matthew: 'Matthew', marilla: 'Marilla', diana: 'Diana', toby: 'Toby' };
+const NAMES = { matthew: 'Matthew', marilla: 'Marilla', diana: 'Diana', barry: 'Sra. Barry', toby: 'Toby' };
+const PEOPLE = { matthew, marilla, diana, barry };
 function near(){
   const out = [], P = ana, here = (x, y, r = 30) => dist(P.x, P.y, x, y) < r;
   if (game.scene === 'out') {
     if (here(toby.x, toby.y, 28)) out.push({ d: dist(P.x, P.y, toby.x, toby.y), label: 'Acariciar a Toby', act: pet });
-    for (const [who, p] of [['matthew', matthew], ['diana', diana]]) if (here(p.x, p.y, 34)) out.push({ d: dist(P.x, P.y, p.x, p.y), label: 'Hablar con ' + NAMES[who], act: () => talk(who) });
-    for (const b of bushes) if (b.berries && here(b.x, b.y - 4, 30)) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Recoger bayas', act: () => { game.inv.bayas += b.berries; float('+' + b.berries + ' bayas', b.x, b.y - 30); b.berries = 0; b.regrow = 90; save(); } });
-    for (const t of trees) if (t.kind === 'apple' && t.apples && here(t.x, t.y, 34 * t.s)) out.push({ d: dist(P.x, P.y, t.x, t.y), label: 'Recoger manzanas', act: () => { game.inv.manzanas += t.apples; float('+' + t.apples + ' manzanas', t.x, t.y - 70); t.apples = 0; t.regrow = 120; save(); } });
+    for (const [who, p] of [['matthew', matthew], ['diana', diana]]) if ((who !== 'diana' || diana.where === 'out') && here(p.x, p.y, 34)) out.push({ d: dist(P.x, P.y, p.x, p.y), label: 'Hablar con ' + NAMES[who], act: () => talk(who) });
+    const ripe = S === 1 || S === 2;
+    for (const b of bushes) if (ripe && b.berries && here(b.x, b.y - 4, 30)) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Recoger bayas', act: () => { game.inv.bayas += b.berries; float('+' + b.berries + ' bayas', b.x, b.y - 30); b.berries = 0; b.regrow = 90; save(); } });
+    for (const t of trees) if (ripe && t.kind === 'apple' && t.apples && here(t.x, t.y, 34 * t.s)) out.push({ d: dist(P.x, P.y, t.x, t.y), label: 'Recoger manzanas', act: () => { game.inv.manzanas += t.apples; float('+' + t.apples + ' manzanas', t.x, t.y - 70); t.apples = 0; t.regrow = 120; save(); } });
     if (here(PUMP.x, PUMP.y, 34)) out.push({ d: dist(P.x, P.y, PUMP.x, PUMP.y), label: game.hasCan ? 'Llenar la regadera' : 'Tomar la regadera', act: () => { game.hasCan = true; game.water = 6; ana.carry = 'can'; float('regadera llena', PUMP.x, PUMP.y - 36); sfx.water(); save(); } });
     for (const b of BEDS) if (here(b.x, b.y, 30)) {
-      if (b.stage >= 3) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Cortar ' + FLOWER_KINDS[b.kind][1], act: () => { b.stage = 1; game.inv.ramo++; float('+1 ramo de ' + FLOWER_KINDS[b.kind][1], b.x, b.y - 26); save(); } });
+      if (S === 3) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La huerta duerme bajo la nieve', act: () => {} });
+      else if (b.stage >= 3) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Cortar ' + FLOWER_KINDS[b.kind][1], act: () => { b.stage = 1; game.inv.ramo++; float('+1 ramo de ' + FLOWER_KINDS[b.kind][1], b.x, b.y - 26); save(); } });
       else if (game.hasCan && game.water > 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y), label: 'Regar', act: () => { b.wet = 1; b.grow = 0; game.water--; drops(b.x, b.y); sfx.water(); save(); } });
       else if (game.hasCan && game.water <= 0 && !b.wet) out.push({ d: dist(P.x, P.y, b.x, b.y) + 50, label: 'La regadera está vacía (llénala en la bomba)', act: () => {} });
     }
-    if (here(GG.x, GG.y + 6, 26)) out.push({ d: dist(P.x, P.y, GG.x, GG.y + 6) + 4, label: 'Entrar a casa', act: () => goIn() });
+    if (here(GG.x, GG.y + 6, 26)) out.push({ d: dist(P.x, P.y, GG.x, GG.y + 6) + 4, label: 'Entrar a casa', act: () => goIn('gg') });
+    if (here(OS.x, OS.y + 6, 26)) out.push({ d: dist(P.x, P.y, OS.x, OS.y + 6) + 4, label: 'Entrar a ' + OS.name, act: () => goIn('os') });
     if (here(BENCH.x, BENCH.y + 6, 26)) out.push({ d: dist(P.x, P.y, BENCH.x, BENCH.y + 6) + 4, label: ana.sit ? 'Levantarse' : 'Sentarse a mirar el lago', act: () => { ana.sit = !ana.sit; if (ana.sit) { ana.x = BENCH.x; ana.y = BENCH.y - 2; ana.dir = 2; } } });
   } else {
-    if (here(marilla.x, marilla.y, 34)) out.push({ d: dist(P.x, P.y, marilla.x, marilla.y), label: 'Hablar con Marilla', act: () => talk('marilla') });
-    if (here(STOVE.x, STOVE.y + 10, 44)) out.push({ d: dist(P.x, P.y, STOVE.x, STOVE.y + 10), label: 'Cocinar', act: cookMenu });
+    if (diana.where === game.scene && here(diana.x, diana.y, 34)) out.push({ d: dist(P.x, P.y, diana.x, diana.y), label: 'Hablar con Diana', act: () => talk('diana') });
+    if (game.scene === 'gg') {
+      if (here(marilla.x, marilla.y, 34)) out.push({ d: dist(P.x, P.y, marilla.x, marilla.y), label: 'Hablar con Marilla', act: () => talk('marilla') });
+      if (here(STOVE.x, STOVE.y + 10, 44)) out.push({ d: dist(P.x, P.y, STOVE.x, STOVE.y + 10), label: 'Cocinar', act: cookMenu });
+    } else {
+      if (here(barry.x, barry.y, 34)) out.push({ d: dist(P.x, P.y, barry.x, barry.y), label: 'Hablar con la Sra. Barry', act: () => talk('barry') });
+      if (here(FIRE.x, FIRE.y + 10, 50)) out.push({ d: dist(P.x, P.y, FIRE.x, FIRE.y + 10) + 6, label: 'Calentarse junto al fuego', act: warmUp });
+      if (here(TEA.x, TEA.y, 50) || here(SOFA.x, SOFA.y, 60)) out.push({ d: Math.min(dist(P.x, P.y, TEA.x, TEA.y), dist(P.x, P.y, SOFA.x, SOFA.y)) + 8, label: ana.sit ? 'Levantarse' : diana.where === 'os' ? 'Tomar el té con Diana' : 'Sentarse en el sofá', act: ana.sit ? () => { ana.sit = false; diana.sit = false; } : teaTime });
+    }
     if (here(KDOOR.x, KIT.h, 26)) out.push({ d: dist(P.x, P.y, KDOOR.x, KIT.h), label: 'Salir', act: () => goOut() });
   }
   out.sort((a, b) => a.d - b.d);
   return out[0] || null;
 }
 function pet(){ ana.pet = true; ana.crouch = true; toby.petted = 2.2; toby.dir = toby.x < ana.x ? 1 : 3; ana.dir = toby.x > ana.x ? 1 : 3; game.fond.toby++; hearts(toby.x, toby.y - 24); sfx.happy(); save(); setTimeout(() => { ana.pet = false; ana.crouch = false; }, 1600); }
-function goIn(){ game.scene = 'in'; ana.x = KDOOR.x; ana.y = KIT.h - 14; ana.dir = 0; toby.x = ana.x + 26; toby.y = ana.y; if (diana.follow) { diana.x = ana.x - 26; diana.y = ana.y; } cam.x = KIT.w / 2; cam.y = KIT.h / 2; }
-function goOut(){ game.scene = 'out'; ana.x = GG.x; ana.y = GG.y + 24; ana.dir = 2; toby.x = ana.x + 24; toby.y = ana.y + 10; if (diana.follow) { diana.x = ana.x - 24; diana.y = ana.y + 10; } cam.x = ana.x; cam.y = ana.y; }
+function goIn(room){ game.scene = room; ana.x = KDOOR.x; ana.y = KIT.h - 14; ana.dir = 0; ana.sit = false; toby.x = ana.x + 26; toby.y = ana.y; if (diana.follow) { diana.where = room; diana.sit = false; diana.x = ana.x - 26; diana.y = ana.y; } cam.x = KIT.w / 2; cam.y = KIT.h / 2; }
+function goOut(){
+  const H = game.scene === 'os' ? OS : GG;
+  game.scene = 'out'; ana.x = H.x; ana.y = H.y + 24; ana.dir = 2; ana.sit = false; toby.x = ana.x + 24; toby.y = ana.y + 10;
+  if (diana.follow) { diana.where = 'out'; diana.sit = false; diana.goals = DIANA_OUT; diana.x = ana.x - 24; diana.y = ana.y + 10; }
+  cam.x = ana.x; cam.y = ana.y;
+}
+const today = () => Math.floor(dayT);
+function warmUp(){ ana.dir = 0; float(S === 3 ? 'Qué calentito, después de tanta nieve…' : 'Qué lindo crepita el fuego', FIRE.x, FIRE.y - 100); if (S === 3) hearts(ana.x, ana.y - 56); sfx.happy(); }
+function teaTime(){
+  ana.sit = true; ana.x = SOFA.x - 20; ana.y = SOFA.y - 4; ana.dir = 2;
+  if (diana.where !== 'os') { float('Un ratito de descanso', ana.x, ana.y - 60); return; }
+  diana.sit = true; diana.moving = false; diana.x = SOFA.x + 20; diana.y = SOFA.y - 4; diana.dir = 2;
+  const first = game.teaDay !== today();
+  if (first) { game.teaDay = today(); game.fond.diana = Math.min(5, game.fond.diana + 1); hearts(SOFA.x, SOFA.y - 60); sfx.happy(); save(); }
+  const TEA_LINES = ['Mamá nos dejó té y galletas. ¡Y cordial de frambuesa!', '¿Más té, Ana? Me encanta tomar el té contigo, como dos señoras de verdad.', 'Cuando seamos mayores tomaremos el té así todas las tardes, ¿verdad?', 'Mira cómo nieva afuera... ¡y aquí tan calentitas!'];
+  say('diana', first ? TEA_LINES[S === 3 ? 3 : today() % 3] : 'Ya tomamos el té hoy, Ana... ¡pero podemos quedarnos conversando!', [
+    ['¿Seguro que es cordial de frambuesa?', () => say('diana', '¡Sí, sí! Esta vez lo revisé dos veces. Nada de vino de grosellas... ¡qué susto el de aquella vez!', [['Brindemos por nuestra amistad', () => { hearts(diana.x, diana.y - 50); sfx.happy(); close(); }]])],
+    ['Qué rico', close],
+  ]);
+}
 
 /* ---------- talking ----------
    A box with who speaks, how fond of her they are (♥), what they say and what Ana can answer. */
@@ -502,22 +653,33 @@ const LINES = {
   marilla: ['Ana, no te quedes soñando despierta. Aunque... la cocina está ordenada, eso sí.', 'Si quieres cocinar, la estufa está encendida. Cuidado con no quemar nada esta vez.', 'Matthew no lo dice, pero te echa de menos cuando te vas donde Diana.', 'Riega la huerta antes de que caiga el sol, que las plantas lo agradecen.', 'Hmm. Bueno, admito que hoy te has portado muy bien.'],
   diana: ['¡Ana, mi alma gemela! Te estaba esperando.', 'Mamá dice que puedo salir hasta que se ponga el sol. ¿Vamos al lago?', '¿Te acuerdas de nuestro juramento de amistad? ¡Para siempre!', 'Los manzanos están llenos este año. Toma las que quieras.', 'El Bosque Encantado me da un poquito de miedo... pero contigo no.'],
 };
+LINES.barry = ['Ana Shirley, siempre es un gusto verte por aquí. Pórtate bien, ¿eh?', 'Diana habla de ti todo el día, ¿sabes?', 'Esta vez el cordial de frambuesa está bien etiquetado, te lo aseguro.', 'Saluda a Marilla de mi parte, querida.'];
+// once each season, the first thing each of them says is about the season
+const SEASON_LINES = {
+  matthew: ['Bueno, pues... ya brotó todo. La primavera, ¿no? Ya lo creo.', 'Hace calor para la siega, ya lo creo. Bueno, el heno no se corta solo.', 'Las manzanas de los Barry están en su punto. Marilla querrá hacer compota, supongo.', 'Abrígate bien, Ana. El frío... bueno, pues, no es broma.'],
+  marilla: ['Hay que limpiar la casa a fondo, que es primavera. Y tú me vas a ayudar, Ana.', 'Con este calor, mejor un té y no enciendas mucho la estufa.', 'Es tiempo de manzanas: una buena compota para el invierno no está de más.', 'Siéntate cerca de la estufa, niña, que vienes helada.'],
+  diana: ['¡Mira los manzanos en flor, Ana! Parecen novias vestidas de blanco.', '¡Qué calor! ¿Vamos a remojar los pies en el lago?', 'El Bosque Encantado está todo rojo y dorado... ¡como un cuento!', '¡Está nevando! Mamá no me deja salir sin bufanda. Ven, entra a calentarte junto al fuego.'],
+  barry: ['Buenos días, Ana. Diana está deseando verte.', 'Qué calor, ¿verdad? Hay limonada en la despensa.', 'Diana me ayudó con las manzanas. Llévale algunas a Marilla.', 'Pasa, pasa, que hace un frío terrible. Diana está junto al fuego.'],
+};
+const seasonCount = () => Math.floor(dayT / 2) + game.seasonShift;
 const GIFTS = { tarta: ['tarta de bayas', '¡Una tarta! Huele de maravilla.'], compota: ['compota de manzana', '¡Qué rica compota! Gracias.'], te: ['taza de té', 'Un té calentito, justo lo que me hacía falta.'], ramo: ['ramo de flores', '¡Qué flores tan lindas! Las pondré en agua.'] };
 function talk(who){
-  const p = { matthew, marilla, diana }[who];
-  p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2;
-  ana.dir = p.x < ana.x ? 3 : 1;
-  const n = game.said[who] = ((game.said[who] ?? -1) + 1) % LINES[who].length;
+  const p = PEOPLE[who];
+  if (!p.sit) { p.dir = ana.x < p.x ? 3 : 1; if (Math.abs(ana.y - p.y) > Math.abs(ana.x - p.x)) p.dir = ana.y < p.y ? 0 : 2; }
+  if (!ana.sit) ana.dir = p.x < ana.x ? 3 : 1;
+  let text;
+  if (game.saidS[who] !== seasonCount()) { game.saidS[who] = seasonCount(); text = SEASON_LINES[who][S]; }
+  else text = LINES[who][game.said[who] = ((game.said[who] ?? -1) + 1) % LINES[who].length];
   const opts = [];
   for (const [k, [name]] of Object.entries(GIFTS)) if (game.inv[k] > 0) opts.push(['Regalar ' + name, () => give(who, k)]);
   if (who === 'diana') opts.push(diana.follow ? ['Hasta mañana, Diana', () => { diana.follow = false; say(who, '¡Hasta mañana, Ana! Que sueñes bonito.', [['Adiós', close]]); }] : ['¿Paseamos juntas?', () => { diana.follow = true; game.fond.diana++; save(); say(who, '¡Sí! Vamos, Ana, a donde tú quieras.', [['¡Vamos!', close]]); }]);
   opts.push(['Adiós', close]);
-  say(who, LINES[who][n], opts);
+  say(who, text, opts);
 }
 function give(who, k){
   game.inv[k]--; game.fond[who] = Math.min(5, game.fond[who] + 1);
-  const p = { matthew, marilla, diana }[who]; hearts(p.x, p.y - 56); sfx.happy(); save();
-  const extra = who === 'matthew' ? ' Bueno, pues... gracias, Ana.' : who === 'marilla' ? ' Vaya, Ana. Muy bien hecho.' : ' ¡Eres la mejor amiga del mundo!';
+  const p = PEOPLE[who]; hearts(p.x, p.y - 56); sfx.happy(); save();
+  const extra = who === 'matthew' ? ' Bueno, pues... gracias, Ana.' : who === 'marilla' ? ' Vaya, Ana. Muy bien hecho.' : who === 'barry' ? ' Qué amable eres, Ana.' : ' ¡Eres la mejor amiga del mundo!';
   say(who, GIFTS[k][1] + extra, [['De nada', close]]);
 }
 function say(who, text, opts){
@@ -545,6 +707,8 @@ const drops = (x, y) => { for (let k = 0; k < 10; k++) fx.push({ kind: 'drop', x
 /* ---------- life about: butterflies, birds, fireflies, clouds ---------- */
 const butterflies = Array.from({ length: 16 }, (_, k) => ({ x: R() * WW, y: R() * WH, ph: R() * TAU, c: ['#fff3a8', '#ffd0e4', '#bfe3ff', '#ffb58a'][k % 4], tx: R() * WW, ty: R() * WH }));
 const fireflies = Array.from({ length: 34 }, () => ({ x: R() * 400 - 200, y: R() * 300 - 150, ph: R() * TAU }));
+// snow in winter, falling leaves in autumn, petals in spring (in screen space)
+const weather = Array.from({ length: 110 }, () => ({ x: Math.random(), y: Math.random(), ph: Math.random() * TAU, s: .5 + Math.random(), c: Math.floor(Math.random() * 4) }));
 const clouds = Array.from({ length: 8 }, () => ({ x: R() * WW, y: R() * WH, r: 120 + R() * 170 }));
 let birds = [], nextBirds = 6;
 let dayT = .3;   // 0 dawn (6:00), .25 noon, .5 evening (18:00), the night, back to dawn
@@ -561,8 +725,8 @@ function note(f, d, vol = .03, type = 'sine', at = 0){ if (!AC) return; const o 
 const sfx = { happy: () => { note(660, .3); note(880, .35, .03, 'sine', .12); note(990, .4, .025, 'sine', .24); }, water: () => { for (let k = 0; k < 4; k++) note(1200 + k * 160, .08, .015, 'triangle', k * .05); }, cook: () => note(330, .5, .02, 'triangle'), done: () => { note(523, .25); note(659, .25, .03, 'sine', .1); note(784, .4, .03, 'sine', .2); } };
 
 /* ---------- keeping the day: in the browser ---------- */
-function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
-try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
+function save(){ try { localStorage.setItem('avonlea', JSON.stringify({ inv: game.inv, hasCan: game.hasCan, water: game.water, fond: game.fond, said: game.said, saidS: game.saidS, seasonShift: game.seasonShift, teaDay: game.teaDay, beds: BEDS.map(b => [b.stage, b.wet, b.grow]), dayT })); } catch (e) {} }
+try { const s = JSON.parse(localStorage.getItem('avonlea') || 'null'); if (s) { Object.assign(game.inv, s.inv); game.hasCan = s.hasCan; game.water = s.water; Object.assign(game.fond, s.fond); game.said = s.said || {}; game.saidS = s.saidS || {}; game.seasonShift = s.seasonShift || 0; game.teaDay = s.teaDay ?? -1; (s.beds || []).forEach((v, k) => { if (BEDS[k]) [BEDS[k].stage, BEDS[k].wet, BEDS[k].grow] = v; }); if (s.dayT) dayT = s.dayT; if (game.hasCan) ana.carry = 'can'; } } catch (e) {}
 addEventListener('pagehide', save); setInterval(save, 10000);
 
 /* ---------- input ---------- */
@@ -570,6 +734,8 @@ const keys = new Set();
 let actNow = false;
 addEventListener('keydown', e => {
   audio(); hint();
+  if (e.code === 'KeyM' && !game.talk) { toggleMap(); return; }
+  if (game.map) { if (e.code === 'Escape' || e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); toggleMap(false); } return; }
   if (game.talk) {
     const n = +e.key; if (n >= 1 && game.talkOpts && game.talkOpts[n - 1]) { game.talkOpts[n - 1][1](); return; }
     if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') { e.preventDefault(); if (game.talkOpts && game.talkOpts.length === 1) game.talkOpts[0][1](); else if (e.code === 'Escape') close(); }
@@ -585,6 +751,13 @@ addEventListener('pointermove', e => { if (stick) { stick.x = e.clientX; stick.y
 addEventListener('pointerup', () => { stick = null; }); addEventListener('pointercancel', () => { stick = null; });
 $('act').addEventListener('pointerdown', e => { e.stopPropagation(); audio(); actNow = true; });
 let hinted = false; function hint(){ if (hinted) return; hinted = true; setTimeout(() => { $('hint').style.opacity = 0; }, 4000); }
+// a note at the top for a moment (when the season turns)
+let noteTimer = 0;
+function notice(text){ const h = $('hint'); h.textContent = text; h.style.transition = 'none'; h.style.opacity = 1; void h.offsetWidth; h.style.transition = ''; clearTimeout(noteTimer); noteTimer = setTimeout(() => { h.style.opacity = 0; }, 4500); }
+$('mapbtn').addEventListener('pointerdown', e => { e.stopPropagation(); audio(); if (!game.talk) toggleMap(); });
+$('mapclose').addEventListener('click', () => toggleMap(false));
+$('mapcv').addEventListener('click', () => toggleMap(false));
+$('mapnext').addEventListener('click', () => { game.seasonShift = (game.seasonShift + 1) % 4; save(); });
 
 /* ---------- the loop ---------- */
 const cam = { x: ana.x, y: ana.y };
@@ -592,9 +765,12 @@ let last = performance.now(), TT = 0, here = null;
 function update(dt){
   TT += dt; dayT += dt / 480; boil = Math.floor(TT * 6);
   const { night } = light();
+  // the season: two days each
+  const ns = (seasonCount() % 4 + 4) % 4;
+  if (ns !== S) { S = ns; if (TT > 1) notice(SICON[S] + ' ' + ['¡Llegó la primavera! Los manzanos están en flor.', '¡Llegó el verano! Hay bayas y manzanas, y luciérnagas de noche.', '¡Llegó el otoño! Las hojas se ponen rojas y doradas.', '¡Llegó el invierno! El lago se heló y la huerta duerme bajo la nieve.'][S]); }
   // Ana: walks where she is told (not while talking or cooking); sits on the bench until she moves
   let mx = 0, my = 0;
-  if (!game.talk && !game.cooking) {
+  if (!game.talk && !game.cooking && !game.map) {
     if (keys.has('ArrowLeft') || keys.has('KeyA')) mx--; if (keys.has('ArrowRight') || keys.has('KeyD')) mx++;
     if (keys.has('ArrowUp') || keys.has('KeyW')) my--; if (keys.has('ArrowDown') || keys.has('KeyS')) my++;
     if (stick) { const dx = stick.x - stick.x0, dy = stick.y - stick.y0, l = Math.hypot(dx, dy); if (l > 10) { mx = dx / Math.max(l, 50); my = dy / Math.max(l, 50); } }
@@ -607,16 +783,33 @@ function update(dt){
   ana.walk = ana.moving ? (ana.walk + dt * 1.9 * Math.hypot(ana.vx, ana.vy) / SPEED) % 1 : 0;
   if (ana.idle > 3 && ana.idle < 9 && !ana.sit && !game.talk) { ana.dir = 2; ana.lookAround = Math.sin(ana.idle * 1.4) * 1.4; }
   if (ana.idle > 9 && game.scene === 'out' && !game.talk) ana.sit = true;
-  for (const p of [ana, matthew, diana, marilla]) { p.blink -= dt; if (p.blink < -2.5 - Math.random() * 3) p.blink = .14; }
+  for (const p of [ana, matthew, diana, marilla, barry]) { p.blink -= dt; if (p.blink < -2.5 - Math.random() * 3) p.blink = .14; }
   // cooking: a moment at the stove, then it is ready
   if (game.cooking && (game.cooking.t -= dt) <= 0) { const k = game.cooking.k; game.inv[k]++; game.cooking = null; float('¡' + { tarta: 'Tarta de bayas', compota: 'Compota de manzana', te: 'Té' }[k] + ' lista!', STOVE.x, STOVE.y - 70); sfx.done(); save(); }
   // the others: Matthew about the farm, Diana about her garden (or with Ana), Marilla in the kitchen
-  if (game.scene === 'out') {
-    if (game.talk?.who !== 'matthew') wander(matthew, dt, 34);
-    if (diana.follow) { const tx = ana.x + (ana.dir === 1 ? -24 : 24), ty = ana.y - 6; if (dist(diana.x, diana.y, tx, ty) > 18) walkTo(diana, tx, ty, SPEED * (dist(diana.x, diana.y, tx, ty) > 80 ? 1.4 : 1), dt); else { diana.moving = false; diana.dir = ana.dir; } }
-    else if (game.talk?.who !== 'diana') wander(diana, dt, 40);
-    if (night > .6 && diana.follow && !game.talk) { diana.follow = false; float('Diana se fue a casa', diana.x, diana.y - 60); }
-  } else if (game.talk?.who !== 'marilla') wander(marilla, dt, 30);
+  // (Diana goes home in the evening and stays in all winter; Mrs. Barry keeps the parlour)
+  const wantHome = night > .35 || S === 3, busy = w => game.talk?.who === w;
+  if (game.scene === 'out' && !busy('matthew')) wander(matthew, dt, 34);
+  if (game.scene === 'gg' && !busy('marilla')) wander(marilla, dt, 30);
+  if (game.scene === 'os' && !busy('barry')) wander(barry, dt, 28);
+  if (diana.sit && !ana.sit) diana.sit = false;
+  const dianaIn = () => { diana.where = 'os'; diana.goals = DIANA_IN; diana.x = DIANA_IN[0][0]; diana.y = DIANA_IN[0][1]; diana.homeT = 0; diana.moving = false; };
+  if (diana.follow) {
+    if (diana.where === game.scene && !diana.sit) { const tx = ana.x + (ana.dir === 1 ? -24 : 24), ty = ana.y - 6; if (dist(diana.x, diana.y, tx, ty) > 18) walkTo(diana, tx, ty, SPEED * (dist(diana.x, diana.y, tx, ty) > 80 ? 1.4 : 1), dt); else { diana.moving = false; diana.dir = ana.dir; } }
+    if (night > .6 && game.scene === 'out' && !game.talk) { diana.follow = false; float('Diana se fue a casa', diana.x, diana.y - 60); }
+  } else if (diana.where === 'out') {
+    diana.goals = DIANA_OUT;
+    if (game.scene !== 'out') { if (wantHome) dianaIn(); }
+    else if (wantHome) { diana.homeT = (diana.homeT || 0) + dt; if (walkTo(diana, OS.x, OS.y + 8, 46, dt) || diana.homeT > 20 || dist(diana.x, diana.y, cam.x, cam.y) > 700) dianaIn(); }
+    else if (!busy('diana')) wander(diana, dt, 40);
+  } else if (diana.where === 'os') {
+    diana.goals = DIANA_IN;
+    if (!wantHome && game.scene !== 'os') { diana.where = 'out'; diana.goals = DIANA_OUT; diana.goal = 0; diana.x = OS.x; diana.y = OS.y + 30; diana.sit = false; }
+    else if (game.scene === 'os' && !diana.sit && !busy('diana')) wander(diana, dt, 30);
+  } else if (game.scene === diana.where) {
+    // she came along into Green Gables and was told goodbye: out of the door she goes
+    if (walkTo(diana, KDOOR.x, KIT.h - 8, 40, dt)) { diana.where = 'out'; diana.x = GG.x - 20; diana.y = GG.y + 30; }
+  } else { diana.where = 'out'; diana.x = GG.x - 20; diana.y = GG.y + 30; }
   // Toby: comes along, sniffs about, sits; wags when petted
   const tx = ana.x + (ana.dir === 3 ? 26 : -26), ty = ana.y + 14, dx = tx - toby.x, dy = ty - toby.y, dd = Math.hypot(dx, dy);
   toby.petted -= dt;
@@ -625,18 +818,19 @@ function update(dt){
   else { toby.sitT += dt; toby.walk = 0; }
   toby.sniff -= dt; if (!ana.moving && toby.sitT > .5 && toby.sitT < 1 && Math.random() < dt * .4) toby.sniff = 1.4;
   // the garden grows (a watered bed comes up a stage after a while); berries and apples come back
-  for (const b of BEDS) if (b.wet && (b.grow += dt) > 25) { b.wet = 0; b.grow = 0; b.stage = Math.min(3, b.stage + 1); }
+  if (S !== 3) for (const b of BEDS) if (b.wet && (b.grow += dt) > 25) { b.wet = 0; b.grow = 0; b.stage = Math.min(3, b.stage + 1); }
   for (const b of bushes) if (!b.berries && (b.regrow -= dt) <= 0) b.berries = 3;
   for (const t of trees) if (t.kind === 'apple' && !t.apples && (t.regrow -= dt) <= 0) t.apples = 3;
   // what she can do here, and doing it
-  here = game.talk || game.cooking ? null : near();
+  here = game.talk || game.cooking || game.map ? null : near();
   if (actNow) { actNow = false; if (here) here.act(); }
   // life about
   for (const b of butterflies) { b.ph += dt * 9; const dx = b.tx - b.x, dy = b.ty - b.y, dd = Math.hypot(dx, dy); if (dd < 8) { b.tx = clamp(b.x + (Math.random() - .5) * 300, 0, WW); b.ty = clamp(b.y + (Math.random() - .5) * 300, 0, WH); } else { b.x += dx / dd * 22 * dt; b.y += dy / dd * 22 * dt; } }
   for (const f of fireflies) { f.ph += dt; f.x += Math.sin(f.ph * .7) * .3; f.y += Math.cos(f.ph * .5) * .25; }
   for (const c of clouds) { c.x += 9 * dt; c.y += 3 * dt; if (c.x - c.r > WW) { c.x = -c.r; c.y = Math.random() * WH; } }
   nextBirds -= dt;
-  if (nextBirds < 0 && night < .5 && game.scene === 'out') { nextBirds = 14 + Math.random() * 20; const y = cam.y - 200 + Math.random() * 400; birds = Array.from({ length: 3 + Math.floor(Math.random() * 3) }, (_, k) => ({ x: cam.x - 700 - k * 26, y: y + (k % 2) * 16, ph: Math.random() * TAU })); }
+  for (const w of weather) { w.ph += dt * 2; w.y += dt * (S === 3 ? .045 : .07) * w.s; w.x += dt * (Math.sin(w.ph) * .02 + (S === 3 ? .006 : .025)); if (w.y > 1.02) { w.y = -.02; w.x = Math.random(); } if (w.x > 1.02) w.x = -.02; }
+  if (nextBirds < 0 && night < .5 && game.scene === 'out' && S !== 3) { nextBirds = 14 + Math.random() * 20; const y = cam.y - 200 + Math.random() * 400; birds = Array.from({ length: 3 + Math.floor(Math.random() * 3) }, (_, k) => ({ x: cam.x - 700 - k * 26, y: y + (k % 2) * 16, ph: Math.random() * TAU })); }
   for (const b of birds) { b.x += 120 * dt; b.ph += dt * 10; } birds = birds.filter(b => b.x < cam.x + 900);
   for (const f of fx) { f.t += dt; if (f.kind === 'drop') { f.vy += 200 * dt; f.y += f.vy * dt; } }
   fx = fx.filter(f => f.t < (f.kind === 'text' ? 2 : 1.2));
@@ -645,7 +839,9 @@ function update(dt){
 function render(){
   const W = innerWidth, H = innerHeight, dpr = devicePixelRatio || 1;
   if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
-  const { night, dusk } = light(), t = TT, inside = game.scene === 'in';
+  const { night, dusk } = light(), t = TT, inside = game.scene !== 'out';
+  drawingOut = !inside;
+  if (groundSeason !== S) paintGround(S);
   const Z = inside ? Math.min(W / KIT.w, H / KIT.h) * .94 : clamp(Math.min(W / ((H > W ? 8 : 12) * T), H / (9 * T)), 1.1, 3.2);
   const vw = W / Z, vh = H / Z;
   const ox = inside ? (KIT.w - vw) / 2 : clamp(cam.x - vw / 2, 0, WW - vw), oy = inside ? (KIT.h - vh) / 2 : clamp(cam.y - vh / 2, 0, WH - vh);
@@ -654,54 +850,62 @@ function render(){
   const inView = (x, y, m = 80) => x > ox - m && x < ox + vw + m && y > oy - m && y < oy + vh + m * 2;
   const list = [];
   if (inside) {
-    drawKitchen(g, t, night);
-    list.push({ y: TABLE.y, draw: () => drawTable(g) }, { y: marilla.y, draw: () => drawPerson(g, marilla, t) });
+    if (game.scene === 'gg') { drawKitchen(g, t, night); list.push({ y: TABLE.y, draw: () => drawTable(g) }, { y: marilla.y, draw: () => drawPerson(g, marilla, t) }); }
+    else { drawParlour(g, t, night); list.push({ y: SOFA.y - 20, draw: () => drawSofa(g) }, { y: TEA.y, draw: () => drawTea(g) }, { y: barry.y, draw: () => drawPerson(g, barry, t) }); }
+    if (diana.where === game.scene) list.push({ y: diana.y, draw: () => drawPerson(g, diana, t) });
   } else {
     g.drawImage(ground, ox, oy, vw, vh, ox, oy, vw, vh);
     // the brook and the lake: water with the sky's shimmer, lily pads, a fish jumping now and then
-    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#6aa8c4'; g.lineWidth = 28; g.beginPath(); g.moveTo(...brook[0]); brook.slice(1).forEach(p => g.lineTo(...p)); g.stroke();
+    // (in winter both are frozen: pale ice with cracks, and a glint now and then)
+    const ice = S === 3;
+    g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = ice ? '#cfe2ea' : '#6aa8c4'; g.lineWidth = 28; g.beginPath(); g.moveTo(...brook[0]); brook.slice(1).forEach(p => g.lineTo(...p)); g.stroke();
     g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1.2;
-    for (let k = 0; k < 40; k++) { const s = brookSegs[k % brookSegs.length], q = ((t * .25 + k * .37) % 1), x = lerp(s[0][0], s[1][0], q) + Math.sin(k * 3) * 6, y = lerp(s[0][1], s[1][1], q); if (inView(x, y)) { g.beginPath(); g.moveTo(x - 4, y); g.lineTo(x + 4, y + 1); g.stroke(); } }
+    if (!ice) for (let k = 0; k < 40; k++) { const s = brookSegs[k % brookSegs.length], q = ((t * .25 + k * .37) % 1), x = lerp(s[0][0], s[1][0], q) + Math.sin(k * 3) * 6, y = lerp(s[0][1], s[1][1], q); if (inView(x, y)) { g.beginPath(); g.moveTo(x - 4, y); g.lineTo(x + 4, y + 1); g.stroke(); } }
     line(g, brook.map(([x, y]) => [x - 14, y]), 'rgba(60,90,110,.55)', 1); line(g, brook.map(([x, y]) => [x + 14, y]), 'rgba(60,90,110,.55)', 1, 5);
     g.save(); g.beginPath(); g.ellipse(LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, 0, 0, TAU); g.clip();
-    const wg = g.createLinearGradient(0, LAKE.y - LAKE.ry, 0, LAKE.y + LAKE.ry); wg.addColorStop(0, '#6fb0cc'); wg.addColorStop(1, '#4a86a4'); g.fillStyle = wg; g.fillRect(LAKE.x - LAKE.rx, LAKE.y - LAKE.ry, LAKE.rx * 2, LAKE.ry * 2);
+    const wg = g.createLinearGradient(0, LAKE.y - LAKE.ry, 0, LAKE.y + LAKE.ry); wg.addColorStop(0, ice ? '#e2eff4' : '#6fb0cc'); wg.addColorStop(1, ice ? '#b9d4e0' : '#4a86a4'); g.fillStyle = wg; g.fillRect(LAKE.x - LAKE.rx, LAKE.y - LAKE.ry, LAKE.rx * 2, LAKE.ry * 2);
+    if (ice) { const r = rng(9); for (let k = 0; k < 14; k++) { let x = LAKE.x + (r() - .5) * LAKE.rx * 1.6, y = LAKE.y + (r() - .5) * LAKE.ry * 1.4; const pts = [[x, y]]; for (let q = 0; q < 4; q++) { x += (r() - .5) * 60; y += (r() - .5) * 24; pts.push([x, y]); } line(g, pts, 'rgba(120,150,170,.45)', .9, k); } }
     g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = 1.2;
-    for (let k = 0; k < 12; k++) { const yy = LAKE.y - LAKE.ry + (k + .5) * LAKE.ry * 2 / 12, xx = LAKE.x + Math.sin(t * .6 + k * 1.7) * LAKE.rx * .55; g.beginPath(); g.moveTo(xx - 20, yy); g.quadraticCurveTo(xx, yy - 2 + Math.sin(t * 2 + k), xx + 20, yy); g.stroke(); }
+    if (!ice) for (let k = 0; k < 12; k++) { const yy = LAKE.y - LAKE.ry + (k + .5) * LAKE.ry * 2 / 12, xx = LAKE.x + Math.sin(t * .6 + k * 1.7) * LAKE.rx * .55; g.beginPath(); g.moveTo(xx - 20, yy); g.quadraticCurveTo(xx, yy - 2 + Math.sin(t * 2 + k), xx + 20, yy); g.stroke(); }
     // sparkles: the Lake of Shining Waters shines
     for (let k = 0; k < 18; k++) { const a = Math.sin(t * 2 + k * 7.1), sx = LAKE.x + Math.sin(k * 12.9) * LAKE.rx * .8, sy = LAKE.y + Math.cos(k * 7.7) * LAKE.ry * .7; if (a > .6) { g.fillStyle = `rgba(255,255,240,${(a - .6) * 2})`; g.fillRect(sx - 2, sy, 4, 1); g.fillRect(sx, sy - 2, 1, 4); } }
     const jt = (t % 9) / 9, jx = LAKE.x + Math.sin(Math.floor(t / 9) * 3.1) * LAKE.rx * .5, jy = LAKE.y + Math.cos(Math.floor(t / 9) * 2.3) * LAKE.ry * .4;
-    if (jt < .25) for (let k = 0; k < 3; k++) { const r = jt * 4 * 26 + k * 7; g.strokeStyle = `rgba(255,255,255,${.5 * (1 - jt * 4)})`; g.beginPath(); g.ellipse(jx, jy, r, r * .45, 0, 0, TAU); g.stroke(); }
+    if (jt < .25 && !ice) for (let k = 0; k < 3; k++) { const r = jt * 4 * 26 + k * 7; g.strokeStyle = `rgba(255,255,255,${.5 * (1 - jt * 4)})`; g.beginPath(); g.ellipse(jx, jy, r, r * .45, 0, 0, TAU); g.stroke(); }
     g.restore();
     ell(g, LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, 'rgba(0,0,0,0)', 'rgba(60,90,110,.6)');
-    for (const p of pads) { ell(g, p.x, p.y, p.r, p.r * .55, '#5c9a4c', true); if (p.bloom) { ell(g, p.x + 2, p.y - 2, 3, 2.2, '#ffd7e8', true); ell(g, p.x + 2, p.y - 2.5, 1.2, 1, '#f7e27a'); } }
+    if (!ice) for (const p of pads) { ell(g, p.x, p.y, p.r, p.r * .55, '#5c9a4c', true); if (p.bloom) { ell(g, p.x + 2, p.y - 2, 3, 2.2, '#ffd7e8', true); ell(g, p.x + 2, p.y - 2.5, 1.2, 1, '#f7e27a'); } }
     for (const b of BEDS) if (inView(b.x, b.y)) drawBed(g, b, t);
     // grass and flowers in the breeze, parting as she walks
     g.lineCap = 'round';
+    const TC = [['rgba(70,130,45,.85)', 'rgba(110,165,64,.85)'], ['rgba(70,120,45,.85)', 'rgba(96,150,60,.85)'], ['rgba(140,130,60,.85)', 'rgba(175,150,70,.85)'], ['rgba(150,140,110,.7)', 'rgba(150,140,110,.7)']][S];
     for (const s of tufts) {
-      if (!inView(s.x, s.y, 20)) continue;
+      if (!inView(s.x, s.y, 20) || (S === 3 && s.c > .25)) continue;
       let bend = Math.sin(t * 1.6 + s.x * .02 + s.ph * .3) * 2.2;
       const dx = s.x - ana.x, dy = (s.y - ana.y) * 2, d = Math.hypot(dx, dy); if (d < 22) bend += (dx > 0 ? 1 : -1) * (22 - d) * .35;
-      g.strokeStyle = s.c < .5 ? 'rgba(70,120,45,.85)' : 'rgba(96,150,60,.85)'; g.lineWidth = 1.2; g.beginPath();
+      g.strokeStyle = s.c < .5 ? TC[0] : TC[1]; g.lineWidth = 1.2; g.beginPath();
       for (const o of [-3, 0, 3]) { g.moveTo(s.x + o, s.y); g.quadraticCurveTo(s.x + o * .6 + bend * .4, s.y - s.h * .6, s.x + o * 1.2 + bend, s.y - s.h); }
       g.stroke();
     }
-    for (const f of flowers) {
-      if (!inView(f.x, f.y, 10)) continue;
+    // flowers: all of them in spring and summer, a few in autumn, none under the snow
+    for (let i = 0; i < flowers.length; i++) {
+      const f = flowers[i];
+      if (S === 3 || (S === 2 && i % 3) || !inView(f.x, f.y, 10)) continue;
       const b = Math.sin(t * 1.8 + f.ph) * 1.2;
       g.strokeStyle = '#5e9a3e'; g.lineWidth = 1; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x + b, f.y - 6 * f.s); g.stroke();
       for (let k = 0; k < 5; k++) { const a = k / 5 * TAU + f.ph; ell(g, f.x + b + Math.cos(a) * 1.8 * f.s, f.y - 6 * f.s + Math.sin(a) * 1.3 * f.s, 1.4 * f.s, 1.1 * f.s, f.c); }
       ell(g, f.x + b, f.y - 6 * f.s, .9 * f.s, .9 * f.s, '#f2c14e');
     }
-    for (const r of reeds) { if (!inView(r.x, r.y)) continue; const b = Math.sin(t * 1.2 + r.ph) * 2; line(g, [[r.x, r.y], [r.x + b * .5, r.y - r.h * .6], [r.x + b, r.y - r.h]], '#6b8f3a', 1.5, r.h); ell(g, r.x + b, r.y - r.h + 3, 1.6, 3.6, '#7a5536'); }
+    for (const r of reeds) { if (!inView(r.x, r.y)) continue; const b = Math.sin(t * 1.2 + r.ph) * 2; line(g, [[r.x, r.y], [r.x + b * .5, r.y - r.h * .6], [r.x + b, r.y - r.h]], S >= 2 ? '#9a8a4a' : '#6b8f3a', 1.5, r.h); ell(g, r.x + b, r.y - r.h + 3, 1.6, 3.6, '#7a5536'); }
     for (const o of [...props, ...trees, ...bushes]) if (inView(o.x, o.y, 170)) list.push({ y: o.y, draw: () => drawProp(g, o, t, night) });
-    list.push({ y: matthew.y, draw: () => drawPerson(g, matthew, t) }, { y: diana.y, draw: () => drawPerson(g, diana, t) });
+    list.push({ y: matthew.y, draw: () => drawPerson(g, matthew, t) });
+    if (diana.where === 'out') list.push({ y: diana.y, draw: () => drawPerson(g, diana, t) });
   }
   list.push({ y: ana.y + (ana.sit && !inside ? 6 : 0), draw: () => drawPerson(g, ana, t) }, { y: toby.y, draw: () => drawDog(g, toby, t) });
   list.sort((a, b) => a.y - b.y).forEach(o => o.draw());
   // a tree in front of her lets her show through a little
   if (!inside) for (const tr of trees) if (tr.y > ana.y + 4 && Math.abs(tr.x - ana.x) < 34 * tr.s && tr.y - ana.y < 90 * tr.s) { g.save(); g.globalAlpha = .5; drawPerson(g, ana, t); g.restore(); break; }
   if (!inside) {
-    for (const b of butterflies) { if (!inView(b.x, b.y)) continue; const f = Math.abs(Math.sin(b.ph)), y = b.y - 18 + Math.sin(b.ph * .2) * 4; ell(g, b.x, b.y, 2.5, 1, 'rgba(30,40,20,.15)'); ell(g, b.x - 2.5 * f, y, 2.6 * f + .4, 2.2, b.c, true); ell(g, b.x + 2.5 * f, y, 2.6 * f + .4, 2.2, b.c, true); }
+    if (S < 2) for (const b of butterflies) { if (!inView(b.x, b.y)) continue; const f = Math.abs(Math.sin(b.ph)), y = b.y - 18 + Math.sin(b.ph * .2) * 4; ell(g, b.x, b.y, 2.5, 1, 'rgba(30,40,20,.15)'); ell(g, b.x - 2.5 * f, y, 2.6 * f + .4, 2.2, b.c, true); ell(g, b.x + 2.5 * f, y, 2.6 * f + .4, 2.2, b.c, true); }
     for (const b of birds) { ell(g, b.x + 30, b.y + 60, 4, 1.5, 'rgba(30,40,20,.18)'); const f = Math.sin(b.ph) * 4; line(g, [[b.x - 6, b.y + f], [b.x - 2, b.y - 2], [b.x, b.y], [b.x + 2, b.y - 2], [b.x + 6, b.y + f]], '#4a4040', 1.4, 2); }
     for (const c of clouds) { if (!inView(c.x, c.y, c.r)) continue; const gr = g.createRadialGradient(c.x, c.y, c.r * .2, c.x, c.y, c.r); gr.addColorStop(0, `rgba(20,30,40,${.12 * (1 - night)})`); gr.addColorStop(1, 'rgba(20,30,40,0)'); g.fillStyle = gr; g.fillRect(c.x - c.r, c.y - c.r, c.r * 2, c.r * 2); }
   }
@@ -714,16 +918,24 @@ function render(){
   }
   // the light of the day (indoors a warm lamp at night)
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // snowflakes, falling leaves, petals
+  const nw = inside ? 0 : [22, 0, 30, 110][S];
+  for (let k = 0; k < nw; k++) {
+    const w = weather[k], x = w.x * W, y = w.y * H;
+    if (S === 3) ell(g, x, y, (.8 + w.s) * Math.min(Z, 2.2) * .7, (.8 + w.s) * Math.min(Z, 2.2) * .7, 'rgba(255,255,255,.9)');
+    else ell(g, x, y, 3.2 * w.s * Math.min(Z, 2), 1.5 * w.s * Math.min(Z, 2), S === 2 ? ['#c8583a', '#e08a3a', '#d4b240', '#a8432c'][w.c] : ['#fbdde3', '#f4c4cf', '#fffaf2', '#fbdde3'][w.c], true, w.ph);
+  }
   if (dusk > 0 && !inside) { g.fillStyle = `rgba(255,150,70,${.2 * dusk})`; g.fillRect(0, 0, W, H); }
   if (night > 0) {
     g.fillStyle = inside ? `rgba(60,35,20,${.35 * night})` : `rgba(18,26,60,${.6 * night})`; g.fillRect(0, 0, W, H);
     g.globalCompositeOperation = 'lighter';
     const sc = (x, y) => [(x - ox) * Z, (y - oy) * Z];
     const glow = (x, y, r, col, a) => { const [sx, sy] = sc(x, y), rr = r * Z, gr = g.createRadialGradient(sx, sy, 0, sx, sy, rr); gr.addColorStop(0, `rgba(${col},${a})`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(sx - rr, sy - rr, rr * 2, rr * 2); };
-    if (inside) glow(TABLE.x, TABLE.y - 40, 160, '255,190,110', .4 * night);
+    if (game.scene === 'gg') glow(TABLE.x, TABLE.y - 40, 160, '255,190,110', .4 * night);
+    else if (inside) glow(FIRE.x, FIRE.y - 20, 190, '255,170,90', (.45 + .05 * Math.sin(t * 7)) * night);
     else {
       for (const H of [GG, OS]) for (const wx of [-H.w / 2 + 46, H.w / 2 - 46]) glow(H.x + wx, H.y - 30, 90, '255,190,100', .42 * night);
-      for (const f of fireflies) { const fx_ = ox + ((f.x + cam.x - ox) % vw + vw) % vw, fy = oy + ((f.y + cam.y - oy) % vh + vh) % vh, a = Math.max(0, Math.sin(f.ph * 1.7)) * night; if (a > .05) glow(fx_, fy - 14, 7, '230,255,140', a); }
+      if (S === 1) for (const f of fireflies) { const fx_ = ox + ((f.x + cam.x - ox) % vw + vw) % vw, fy = oy + ((f.y + cam.y - oy) % vh + vh) % vh, a = Math.max(0, Math.sin(f.ph * 1.7)) * night; if (a > .05) glow(fx_, fy - 14, 7, '230,255,140', a); }
     }
     g.globalCompositeOperation = 'source-over';
   }
@@ -737,12 +949,80 @@ function render(){
   if (game.hasCan) bits.push('💧 ' + game.water + '/6');
   $('inv').textContent = bits.length ? bits.join('  ') : 'Ana · Tejas Verdes';
   const d = dayT % 1, hh = Math.floor((d * 24 + 6) % 24), mm = Math.floor(((d * 24 + 6) % 1) * 60);
-  $('clock').textContent = (night > .5 ? '☾ ' : '☀ ') + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  $('clock').textContent = SICON[S] + ' ' + SEASONS[S] + ' · ' + (night > .5 ? '☾ ' : '') + String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  if (game.map) drawMap();
   const pr = $('prompt'); pr.hidden = !here; if (here) pr.textContent = (matchMedia('(pointer:coarse)').matches ? '✋ ' : 'Espacio: ') + here.label;
   $('act').hidden = !here || !matchMedia('(pointer:coarse)').matches;
 }
+/* ---------- the map: Avonlea drawn on a sheet of paper, with where everyone is ---------- */
+let mapBase = null;
+function toggleMap(on = !game.map){
+  game.map = on; $('map').hidden = !on;
+  if (!on) return;
+  close();
+  const mc = $('mapcv'), dpr = devicePixelRatio || 1, aw = innerWidth - 44, ah = innerHeight - 130, k = Math.min(aw / WW, ah / WH);
+  mc.style.width = Math.round(WW * k) + 'px'; mc.style.height = Math.round(WH * k) + 'px';
+  mc.width = Math.round(WW * k * dpr); mc.height = Math.round(WH * k * dpr); mapBase = null;
+}
+function paintMapBase(w, h){
+  const cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
+  const c = cv2.getContext('2d'), k = w / WW, r = rng(31);
+  c.fillStyle = '#f1e2bf'; c.fillRect(0, 0, w, h);
+  c.setTransform(k, 0, 0, k, 0, 0);
+  // a pale wash of the season's colour, a darker one for the Haunted Wood
+  c.fillStyle = ['rgba(150,190,100,.25)', 'rgba(130,170,80,.28)', 'rgba(210,150,70,.25)', 'rgba(200,215,230,.35)'][S]; c.fillRect(60, 60, WW - 120, WH - 120);
+  c.fillStyle = 'rgba(60,90,50,.16)'; c.beginPath(); c.ellipse(9 * T, 40 * T, 12 * T, 9 * T, 0, 0, TAU); c.fill();
+  const stroke = (pts, wd, col) => { c.strokeStyle = col; c.lineWidth = wd; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath(); c.moveTo(...pts[0]); pts.slice(1).forEach(p => c.lineTo(...p)); c.stroke(); };
+  for (const p of paths) { stroke(p, 34, 'rgba(150,110,60,.5)'); stroke(p, 22, '#e3c99a'); }
+  stroke(brook, 30, S === 3 ? '#c9dde6' : '#7fb2c9');
+  ell(c, LAKE.x, LAKE.y, LAKE.rx, LAKE.ry, S === 3 ? '#d6e7ee' : '#8fbfd2', 'rgba(60,80,100,.8)');
+  ell(c, LAKE.x - 60, LAKE.y - 20, 70, 16, 'rgba(255,255,255,.35)');
+  // trees: little pencil crowns and pines
+  for (const t of trees) {
+    if (t.kind === 'pine') blob(c, [[t.x - 18, t.y], [t.x + 18, t.y], [t.x, t.y - 46]], S === 3 ? '#9fb5a6' : '#4a7d50');
+    else ell(c, t.x, t.y - 16, 22 * t.s, 19 * t.s, S === 3 ? '#cfc7bb' : S === 2 ? ['#d8873a', '#c8583a', '#d4b240'][Math.floor(t.ph / TAU * 3) % 3] : t.kind === 'blossom' && S === 0 ? '#f4c4cf' : '#7cb05a', true);
+  }
+  for (const b of bushes) ell(c, b.x, b.y - 6, 14, 10, S === 3 ? '#b8c2b4' : '#5b9a48', true);
+  for (const b of BEDS) ell(c, b.x, b.y, 18, 11, S === 3 ? '#eef2f4' : '#8a6440', true);
+  // houses: a front and a roof
+  const house = (x, y, w, roof, wall) => { blob(c, [[x - w / 2, y], [x + w / 2, y], [x + w / 2, y - 60], [x - w / 2, y - 60]], wall); blob(c, [[x - w / 2 - 14, y - 56], [x + w / 2 + 14, y - 56], [x + w / 2 - 8, y - 130], [x - w / 2 + 8, y - 130]], S === 3 ? '#f6f8fb' : roof); blob(c, [[x - 12, y], [x - 12, y - 32], [x + 12, y - 32], [x + 12, y]], '#7a4f32'); };
+  house(GG.x, GG.y, GG.w, '#5f9a58', '#f7f2e6'); house(OS.x, OS.y, OS.w, '#9a5a3c', '#efe0c8'); house(BARN.x, BARN.y, BARN.w, '#6f6a66', '#b5523c');
+  blob(c, [[BRIDGE.x - 44, BRIDGE.y - 16], [BRIDGE.x + 44, BRIDGE.y - 16], [BRIDGE.x + 44, BRIDGE.y + 14], [BRIDGE.x - 44, BRIDGE.y + 14]], '#a8814f');
+  // names, in ink
+  c.fillStyle = '#4a2f1c'; c.textAlign = 'center';
+  const label = (text, x, y, size = 46) => { c.font = `italic ${size}px Georgia, serif`; c.fillStyle = 'rgba(241,226,191,.75)'; const tw = c.measureText(text).width; c.fillRect(x - tw / 2 - 8, y - size * .85, tw + 16, size * 1.1); c.fillStyle = '#4a2f1c'; c.fillText(text, x, y); };
+  label('Tejas Verdes', GG.x, GG.y - 150); label('La Cuesta del Huerto', OS.x, OS.y - 150); label('Granero', BARN.x, BARN.y - 150, 38);
+  label('Lago de las Aguas Brillantes', LAKE.x, LAKE.y + LAKE.ry + 64); label('Bosque Encantado', 9 * T, 44 * T);
+  label('Camino Blanco de las Delicias', GG.x + 360, BRIDGE.y - 96, 38); label('Huerta', BEDS[1].x, BEDS[0].y - 34, 34); label('Arroyo', brook[2][0] + 90, brook[2][1] + 160, 34);
+  // a compass rose and a double border
+  const cx = WW - 150, cy = WH - 150;
+  blob(c, [[cx, cy - 70], [cx + 14, cy], [cx, cy + 70], [cx - 14, cy]], '#d9bf8f'); blob(c, [[cx - 70, cy], [cx, cy - 14], [cx + 70, cy], [cx, cy + 14]], '#d9bf8f');
+  c.font = 'bold 34px Georgia, serif'; c.fillStyle = '#4a2f1c'; c.fillText('N', cx, cy - 80);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  for (let n = 0; n < w * h / 60; n++) { c.fillStyle = r() < .5 ? `rgba(120,80,40,${r() * .1})` : `rgba(255,250,235,${r() * .2})`; c.fillRect(r() * w, r() * h, 1 + r(), 1 + r()); }
+  c.strokeStyle = 'rgba(90,60,35,.8)'; c.lineWidth = 2; c.strokeRect(5, 5, w - 10, h - 10); c.lineWidth = 1; c.strokeRect(10, 10, w - 20, h - 20);
+  const vg = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * .3, w / 2, h / 2, Math.max(w, h) * .7); vg.addColorStop(0, 'rgba(120,80,40,0)'); vg.addColorStop(1, 'rgba(120,80,40,.25)'); c.fillStyle = vg; c.fillRect(0, 0, w, h);
+  return { cv: cv2, s: S, w };
+}
+function drawMap(){
+  const mc = $('mapcv'), c = mc.getContext('2d'), w = mc.width, h = mc.height, k = w / WW, dpr = devicePixelRatio || 1;
+  if (!mapBase || mapBase.s !== S || mapBase.w !== w) mapBase = paintMapBase(w, h);
+  c.setTransform(1, 0, 0, 1, 0, 0); c.drawImage(mapBase.cv, 0, 0);
+  // where everyone is (someone indoors is shown at the door of the house)
+  const at = (where, x, y) => where === 'out' ? [x, y] : where === 'os' ? [OS.x, OS.y + 20] : [GG.x, GG.y + 20];
+  const mark = (who, [x, y], col, dx, big) => {
+    const sx = x * k + dx * dpr, sy = y * k, r = (big ? 6 + Math.sin(TT * 5) * 1.2 : 4.5) * dpr;
+    c.beginPath(); c.arc(sx, sy, r, 0, TAU); c.fillStyle = col; c.fill(); c.lineWidth = 1.4 * dpr; c.strokeStyle = 'rgba(60,35,20,.9)'; c.stroke();
+    c.font = `italic ${12 * dpr}px Georgia, serif`; c.textAlign = 'center'; c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(241,226,191,.95)'; const ly = big ? sy - r - 4 * dpr : sy + r + 12 * dpr; c.strokeText(who, sx, ly); c.fillStyle = '#4a2f1c'; c.fillText(who, sx, ly);
+  };
+  mark('Marilla', at('gg'), LOOKS.marilla.dress, 12, false);
+  mark('Matthew', [matthew.x, matthew.y], LOOKS.matthew.dress, 0, false);
+  mark('Diana', at(diana.where, diana.x, diana.y), LOOKS.diana.dress, diana.where === 'out' ? 0 : -12, false);
+  mark('Ana', at(game.scene, ana.x, ana.y), '#d9433b', 0, true);
+  $('maptitle').textContent = 'Avonlea · ' + SEASONS[S] + ', día ' + (Math.floor(dayT) % 2 + 1) + ' · ' + SICON[S];
+}
 function loop(now){ const dt = clamp((now - last) / 1000, 0, .05); last = now; update(dt); render(); requestAnimationFrame(loop); }
-window.__avonlea = { game, ana, matthew, diana, marilla, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, act: () => { actNow = true; }, setDay: v => { dayT = v; }, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
+window.__avonlea = { game, ana, matthew, diana, marilla, barry, toby, BEDS, PUMP, GG, OS, BENCH, STOVE, FIRE, SOFA, TEA, KDOOR, KIT, act: () => { actNow = true; }, setDay: v => { dayT = v; }, season: () => S, toggleMap, goIn, goOut, near: () => near() && near().label, step: s => { for (let k = 0; k < s * 60; k++) update(1 / 60); } };
 requestAnimationFrame(loop);
 })();
 </script>

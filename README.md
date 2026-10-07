@@ -116,9 +116,14 @@ Otra idea, en un archivo aparte, **`avonlea.html`**: un juego tranquilo de mundo
 - **Qué se puede hacer:** acariciar a **Toby**, el perro; tomar la regadera en la bomba y **regar la huerta** (cada cantero regado crece un poco y al final florece, y las flores se cortan para hacer ramos); recoger **bayas** de los arbustos y **manzanas** del huerto de Diana; **cocinar** en la cocina de Tejas Verdes (tarta de bayas, compota de manzana o té); **conversar y regalar** a Matthew, Marilla y Diana, que le van tomando cariño (♥); invitar a **Diana**, en **La Cuesta del Huerto** al otro lado del arroyo, a **pasear juntas**; sentarse en la banca del **Lago de las Aguas Brillantes**. También están el **Camino Blanco de las Delicias**, con cerezos en flor, y el **Bosque Encantado**.
 - **Estilo dibujo a mano:** líneas de lápiz que tiemblan un poco y "hierven" (se redibujan unas veces por segundo, como en la animación dibujada), colores de acuarela que no calzan del todo con la línea, sombreado con rayitas y textura de papel encima.
 - **Falso 3D:** vista desde arriba y de frente; todo se dibuja en el orden de sus pies, así que se pasa por detrás de los árboles y las casas. El pasto se aparta al pasar, hay mariposas, pájaros, sombras de nubes, y el día dura 8 minutos (de noche, ventanas encendidas y luciérnagas).
-- **Controles:** flechas o WASD para pasear, Espacio para hacer cosas (y 1, 2, 3 para elegir en las conversaciones); en el celular, arrastrar el dedo y tocar ✋. Lo que tiene, lo que creció y el cariño de cada uno quedan guardados en el navegador.
+- **Estaciones del año:** cada estación dura dos días. En **primavera**, los manzanos y cerezos en flor y pétalos en el aire; en **verano** hay bayas, manzanas y luciérnagas de noche; en **otoño** los árboles se ponen rojos y dorados, caen hojas y sale más humo de las chimeneas; en **invierno** nieva, el lago y el arroyo se congelan, los árboles quedan pelados con nieve, la huerta duerme bajo la nieve y todos andan con bufanda. Cada uno dice algo de la estación la primera vez que se le habla.
+- **La casa de Diana:** en **La Cuesta del Huerto** se puede entrar a la salita, con chimenea, sofá y la **Sra. Barry**. Diana está en su jardín de día y en casa al atardecer y todo el invierno; ahí se puede **tomar el té con Diana** en el sofá (con cordial de frambuesa, esta vez bien etiquetado) o **calentarse junto al fuego**. Si pasea con Ana, entra con ella a las casas.
+- **Mapa:** con **M** o el botón 🗺, Avonlea dibujado en una hoja, con la estación, el día y dónde está cada uno. Tiene un botón «Siguiente estación (prueba)» para ver las estaciones sin esperar.
+- **Controles:** flechas o WASD para pasear, Espacio para hacer cosas (y 1, 2, 3 para elegir en las conversaciones), M para el mapa; en el celular, arrastrar el dedo y tocar ✋. Lo que tiene, lo que creció y el cariño de cada uno quedan guardados en el navegador.
 
 ![Un día en Avonlea](docs/avonlea.png)
+
+![Las estaciones y la casa de Diana](docs/avonlea-estaciones.png)
 
 ## Boulder Dúo 3D (prueba de concepto)
 
