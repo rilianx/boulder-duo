@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Boulder Dúo 3D</title>
+<style>
+:root{--bg:#0c0b0e;--ink:#f4f1ea;--warn:#ffd24a;--p1:#5fb4ff;--line:#3a3640;--panel:#16141a}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'Courier New',monospace;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#cv{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+#hud{position:fixed;left:10px;top:8px;right:10px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font-weight:bold;font-size:17px;pointer-events:none;text-shadow:0 2px 0 #000}
+#hud .k{color:var(--warn)} #hud .keys{font-size:12px;opacity:.8;width:100%}
+#pad{position:fixed;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px}
+button{font:bold 14px 'Courier New',monospace;background:var(--panel);color:var(--ink);border:2px solid var(--line);padding:12px 14px;cursor:pointer;letter-spacing:.04em}
+button:active{border-color:var(--warn)}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.62)}
+#ov[hidden]{display:none}
+.card{background:var(--panel);border:2px solid var(--line);padding:20px 22px;max-width:520px;margin:16px;text-align:center}
+.card h2{color:var(--warn);margin:0 0 10px;letter-spacing:.08em} .card p{line-height:1.45;margin:8px 0}
+.card .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hud"><span>◆ <span id="hg">0/0</span></span><span>VIDAS <span id="hl">3</span></span><span class="k" id="hc">CUEVA 1</span><span>CAPA <span id="hy">4</span>/<span id="hn">4</span></span>
+  <span class="keys">W ↗ · A ↖ · S ↙ · D ↘ (o flechas) · Q sube · E baja · R gira · P pausa</span></div>
+<div id="pad"><button id="bup">▲ SUBIR</button><button id="bdn">▼ BAJAR</button><button id="brot">⟳ GIRAR</button></div>
+<div id="ov" hidden></div>
+<script>
+/* Boulder Dúo 3D: a proof of concept. Boulder Dash in a cube of blocks (4 x 4 x 4, or 6 x 6 x 6), drawn in
+   isometric view with chunky pixel textures, like a game made of blocks.
+   - The rules of the 2D game in 3D: dig through dirt, take diamonds, open the exit. Boulders and diamonds fall
+     down; resting on another boulder or diamond they roll off to any of the 4 sides that is free (and free
+     below); a falling one crushes the kid. Boulders are pushed sideways (not up), with a little effort.
+   - The view: the cube seen from one corner, turned a quarter at a time (R). What is above the kid's layer is not
+     drawn, except its boulders and diamonds, as see-through ghosts (so what may fall is never hidden); blocks of
+     the kid's layer that stand in front of it are see-through too. Beside it, the four layers as little maps.
+   - Moving: the four keys go along the diagonals of the screen as they look (W up-right, A up-left, S down-left,
+     D down-right), whichever way the cube is turned; Q and E go up and down. On a phone: swipe, and the buttons. */
+(() => {
+'use strict';
+const E = 0, DIRT = 1, STEEL = 2, ROCK = 3, GEM = 4, EXIT = 5, KID = 6, BOOM = 7;
+const TICK = 170;
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d'), lo = document.createElement('canvas'), g = lo.getContext('2d');
+let N = 4, grid, fall, moved, src, srcAt, aux, kid = null, start = [0, 0, 0], lives = 3, gems = 0, need = 1, level = 0, state = 'play';
+let rotV = 0, rotShown = 0, held = [], lastTick = 0, simT = 0, deadAt = -1e9, msg = null, pushN = 0, rollTurn = 0;
+const idx = (x, y, z) => (y * N + z) * N + x;
+const inb = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < N && y < N && z < N;
+const xyz = i => [i % N, (i / (N * N)) | 0, ((i / N) | 0) % N];
+const get = (x, y, z) => inb(x, y, z) ? grid[idx(x, y, z)] : STEEL;
+
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+/* ---------- caves ----------
+   Hand-made 4 x 4 x 4 caves: the layers from the top down, each four rows (going away from you) of four cells
+   ('.' dirt, ' ' space, 'o' boulder, '*' diamond, '#' steel, 'X' exit, 'P' the kid). After them, random caves. */
+const CAVES = [
+  { need: 4, layers: [
+    ['P..o', '....', '.*..', '...o'],
+    ['..o.', '....', '*.o.', '....'],
+    ['....', '.o*.', '....', 'o...'],
+    ['*...', '....', '.o..', '..*X'] ] },
+  { need: 5, layers: [
+    ['Po.o', '.o..', 'o.*.', '..o.'],
+    ['.*..', 'o  o', '. *.', 'o...'],
+    ['o..*', '.##.', '.#*.', '*..o'],
+    ['..o.', '*...', '..o.', 'o..X'] ] },
+  { need: 6, layers: [
+    ['P.oo', '.o*o', 'oo.o', 'o*oo'],
+    ['....', '.**.', '.**.', '....'],
+    ['o  o', ' oo ', ' oo ', 'o  o'],
+    ['*..*', '....', '....', '*..X'] ] },
+];
+function makeCave(n){
+  const c = CAVES[n];
+  if (c) {
+    N = 4; alloc();
+    c.layers.forEach((rows, k) => rows.forEach((row, z) => [...row].forEach((ch, x) => {
+      const y = N - 1 - k, i = idx(x, y, z);
+      grid[i] = { '.': DIRT, ' ': E, o: ROCK, '*': GEM, '#': STEEL, X: EXIT, P: E }[ch];
+      if (ch === 'P') start = [x, y, z];
+    })));
+    need = c.need; return;
+  }
+  // a random cave: bigger every other time; the kid at the top of one corner, the exit at the bottom of the other
+  N = n % 2 ? 6 : 4; alloc();
+  const R = rng(n * 7919 + 17);
+  let total = 0;
+  for (let i = 0; i < grid.length; i++) { const r = R(); grid[i] = r < .1 ? GEM : r < .32 ? ROCK : r < .38 ? E : DIRT; }
+  start = [0, N - 1, 0];
+  for (const [x, y, z] of [[0, N - 1, 0], [1, N - 1, 0], [0, N - 1, 1], [0, N - 2, 0]]) grid[idx(x, y, z)] = x + z + (N - 1 - y) ? DIRT : E;
+  for (let y = 0; y < N; y++) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) if (y > N - 3 && x + z < 2 && grid[idx(x, y, z)] === ROCK) grid[idx(x, y, z)] = DIRT;
+  grid[idx(N - 1, 0, N - 1)] = EXIT;
+  for (const v of grid) if (v === GEM) total++;
+  need = Math.max(1, Math.round(total * .6));
+}
+function alloc(){
+  grid = new Uint8Array(N * N * N); fall = new Uint8Array(N * N * N); moved = new Uint8Array(N * N * N);
+  aux = new Uint8Array(N * N * N); src = new Int16Array(N * N * N).fill(-1); srcAt = new Float64Array(N * N * N);
+}
+function startCave(n){
+  level = n; makeCave(n); gems = 0; held = []; pushN = 0;
+  kid = { x: start[0], y: start[1], z: start[2], alive: true, face: 0 };
+  grid[idx(...start)] = KID; state = 'play'; hideOv(); hud();
+}
+
+/* ---------- rules ---------- */
+function move(i, j){ grid[j] = grid[i]; fall[j] = fall[i]; grid[i] = E; fall[i] = 0; moved[j] = 1; src[j] = i; srcAt[j] = simT; src[i] = -1; }
+const exitOpen = () => gems >= need;
+function boom(i){ grid[i] = BOOM; aux[i] = 0; fall[i] = 0; src[i] = -1; }
+function killKid(){
+  if (!kid.alive) return;
+  kid.alive = false; boom(idx(kid.x, kid.y, kid.z)); deadAt = simT; lives--; sfx.boom(); say('¡OH NO!');
+  hud();
+}
+// the kid takes its step at the tick: dig, take, push, or go out
+function stepKid(){
+  if (!kid.alive || !held.length) { pushN = 0; return; }
+  const d = held[held.length - 1], [dx, dy, dz] = worldDir(d), nx = kid.x + dx, ny = kid.y + dy, nz = kid.z + dz;
+  if (!inb(nx, ny, nz)) return;
+  const i = idx(kid.x, kid.y, kid.z), j = idx(nx, ny, nz), t = grid[j];
+  const go = () => { move(i, j); kid.x = nx; kid.y = ny; kid.z = nz; pushN = 0; };
+  if (dx || dz) kid.face = d;
+  if (t === E || t === DIRT) { go(); if (t === DIRT) sfx.dig(); }
+  else if (t === GEM) { go(); gems++; sfx.gem(); if (gems === need) { sfx.open(); say('¡SALIDA ABIERTA!'); } hud(); }
+  else if (t === EXIT && exitOpen()) { go(); won(); }
+  else if (t === ROCK && !dy && !fall[j]) {
+    // a boulder goes sideways if there is room behind it, after a moment of pushing
+    const bx = nx + dx, bz = nz + dz;
+    if (get(bx, ny, bz) === E && ++pushN >= 2) { move(j, idx(bx, ny, bz)); go(); sfx.dig(); }
+  }
+}
+function tick(){
+  moved.fill(0);
+  stepKid();
+  if (state !== 'play') return;
+  rollTurn = (rollTurn + 1) % 4;
+  const sides = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  // from the top down, like the original
+  for (let y = N - 1; y >= 0; y--) for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+    const i = idx(x, y, z), t = grid[i];
+    if (moved[i]) continue;
+    if (t === BOOM) { if (++aux[i] >= 4) grid[i] = E; continue; }
+    if (t !== ROCK && t !== GEM) continue;
+    const b = get(x, y - 1, z);
+    if (b === E) { move(i, idx(x, y - 1, z)); fall[idx(x, y - 1, z)] = 1; continue; }
+    if (b === KID && fall[i]) { killKid(); fall[i] = 0; continue; }
+    if (b === ROCK || b === GEM || b === STEEL && y > 0) {
+      // roll off to a free side (free below it too), trying the sides in turn
+      let rolled = false;
+      for (let k = 0; k < 4 && !rolled; k++) {
+        const [sx, sz] = sides[(k + rollTurn) % 4];
+        if (get(x + sx, y, z + sz) === E && get(x + sx, y - 1, z + sz) === E) { move(i, idx(x + sx, y, z + sz)); fall[idx(x + sx, y, z + sz)] = 1; rolled = true; }
+      }
+      if (rolled) continue;
+    }
+    if (fall[i]) sfx.land();
+    fall[i] = 0;
+  }
+  // back after a death, at the start (or where nothing is in the way)
+  if (!kid.alive && lives > 0 && simT - deadAt > 1400) {
+    const i = idx(...start);
+    if (grid[i] === E || grid[i] === DIRT || grid[i] === GEM) { grid[i] = KID; Object.assign(kid, { x: start[0], y: start[1], z: start[2], alive: true }); src[i] = -1; }
+  }
+  if (!kid.alive && lives <= 0 && simT - deadAt > 1200 && state === 'play') over();
+}
+
+/* ---------- the view ----------
+   Turned by rotV quarters. The four direction keys follow the screen: (dX, dZ) on the turned cube, then back to
+   the world's own (dx, dz). */
+const DIRS = { up: [0, 0, -1], down: [0, 0, 1], left: [-1, 0, 0], right: [1, 0, 0], rise: [0, 1, 0], sink: [0, -1, 0] };
+function worldDir(d){
+  const [X, y, Z] = DIRS[d];
+  return [[X, y, Z], [-Z, y, X], [-X, y, -Z], [Z, y, -X]][rotV];   // the inverse of turn()
+}
+// a cell's place on the turned cube (continuous, so a turn can glide)
+function turn(x, z, r){
+  const c = N / 2, a = r * Math.PI / 2, dx = x - c, dz = z - c;
+  return [c + dx * Math.cos(a) + dz * Math.sin(a), c - dx * Math.sin(a) + dz * Math.cos(a)];
+}
+let A = 20, CX = 0, CY = 0;   // the iso unit (art pixels) and where the cube's middle goes
+const P = (x, y, z) => [CX + (x - z) * A, CY + (x + z) * A / 2 - y * A];
+
+/* ---------- pixel textures (16 x 16), made up once ---------- */
+function tex(fn, seed){ const c = document.createElement('canvas'); c.width = c.height = 16; const t = c.getContext('2d'), R = rng(seed); fn(t, R); return c; }
+const px = (t, x, y, col) => { t.fillStyle = col; t.fillRect(x, y, 1, 1); };
+const pick = (R, a) => a[Math.floor(R() * a.length)];
+const T_DIRT = tex((t, R) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, pick(R, ['#7a4a22', '#6b3f1c', '#8a5629', '#5c3416', '#7a4a22'])); }, 1);
+const T_GRASS = tex((t, R) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, pick(R, ['#5f9e35', '#4f8a2b', '#6cae3e', '#589632'])); }, 2);
+const T_GSIDE = tex((t, R) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, y < 3 + (R() < .5 ? 1 : 0) ? pick(R, ['#5f9e35', '#4f8a2b', '#6cae3e']) : pick(R, ['#7a4a22', '#6b3f1c', '#8a5629', '#5c3416'])); }, 3);
+const T_STEEL = tex((t, R) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, pick(R, ['#6d6f78', '#62646c', '#777983']));
+  t.fillStyle = '#3e4046'; t.fillRect(0, 0, 16, 1); t.fillRect(0, 0, 1, 16); t.fillStyle = '#9a9ca6'; t.fillRect(0, 15, 16, 1); t.fillRect(15, 0, 1, 16);
+  for (const [x, y] of [[3, 3], [12, 3], [3, 12], [12, 12]]) { px(t, x, y, '#b9bcc6'); px(t, x + 1, y + 1, '#3e4046'); }
+}, 4);
+const T_ROCK = tex((t, R) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, pick(R, ['#8d8d8d', '#7b7b7b', '#9e9e9e', '#6e6e6e']));
+  for (let k = 0; k < 7; k++) { const x = Math.floor(R() * 13), y = Math.floor(R() * 13); t.fillStyle = '#5a5a5a'; t.fillRect(x, y, 3, 1); t.fillRect(x, y, 1, 2); }
+  t.fillStyle = '#4a4a4a'; t.fillRect(0, 0, 16, 1); t.fillRect(0, 15, 16, 1); t.fillRect(0, 0, 1, 16); t.fillRect(15, 0, 1, 16);
+}, 5);
+const T_EXIT = [false, true].map(open => tex((t, R) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) px(t, x, y, open ? pick(R, ['#7b2fd0', '#9a48f0', '#5a1ea8', '#b46cff']) : pick(R, ['#4a3a20', '#3d3019', '#57452a']));
+  t.fillStyle = open ? '#2a0d55' : '#1f170b'; t.fillRect(0, 0, 16, 2); t.fillRect(0, 14, 16, 2); t.fillRect(0, 0, 2, 16); t.fillRect(14, 0, 2, 16);
+}, 6));
+const T_BOOM = tex((t, R) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (R() < .7) px(t, x, y, pick(R, ['#ffd24a', '#ff8a2a', '#fff3b0', '#e8443a'])); }, 7);
+// the diamond: a little pixel picture that floats and turns in its cell
+const GEM_PIC = ['....aa....', '...abba...', '..abbbba..', '.abbcbbba.', 'abbbbbbbba', '.dbbbbbbd.', '..dbbbbd..', '...dbbd...', '....dd....'];
+const GEM_COL = { a: '#e8fbff', b: '#5fe0ff', c: '#ffffff', d: '#1f8fb8' };
+
+/* ---------- drawing ---------- */
+// one face of a block: the 16 x 16 texture laid on the parallelogram o, o + u, o + v (art pixels), shaded
+function face(t, o, u, v, shade, alpha){
+  g.setTransform((u[0] - o[0]) / 16, (u[1] - o[1]) / 16, (v[0] - o[0]) / 16, (v[1] - o[1]) / 16, o[0], o[1]);
+  g.globalAlpha = alpha; g.drawImage(t, 0, 0);
+  if (shade) { g.fillStyle = `rgba(0,0,0,${shade})`; g.fillRect(0, 0, 16, 16); }
+  g.globalAlpha = 1; g.setTransform(1, 0, 0, 1, 0, 0);
+}
+// a block (or a smaller one, inset), at (X, y, Z) on the turned cube: top, its right side (+X) and its left side (+Z)
+function block(X, y, Z, top, side, alpha = 1, inset = 0, h = 1){
+  const a = X + inset, b = X + 1 - inset, c = Z + inset, d = Z + 1 - inset, y0 = y, y1 = y + h - inset * 2 * (h < 1 ? 0 : 1);
+  face(side, P(b, y1, c), P(b, y1, d), P(b, y0, c), .28, alpha);
+  face(side, P(a, y1, d), P(b, y1, d), P(a, y0, d), .45, alpha);
+  face(top, P(a, y1, c), P(b, y1, c), P(a, y1, d), 0, alpha);
+}
+function drawKid(X, y, Z, alpha){
+  // a blocky kid: legs, body and head, and a little shovel on the side it faces
+  const parts = [[.3, .7, 0, .35, '#2b4f9e'], [.25, .75, .35, .7, '#5fb4ff'], [.3, .7, .7, 1, '#f1c7a0']];
+  for (const [i0, i1, h0, h1, col] of parts) {
+    const a = X + i0, b = X + i1, c = Z + i0, d = Z + i1, top = P(a, y + h1, c);
+    g.globalAlpha = alpha;
+    const quad = (pts, f) => { g.beginPath(); pts.forEach((p, k) => k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fillStyle = f; g.fill(); };
+    quad([P(b, y + h1, c), P(b, y + h1, d), P(b, y + h0, d), P(b, y + h0, c)], shadeCol(col, .72));
+    quad([P(a, y + h1, d), P(b, y + h1, d), P(b, y + h0, d), P(a, y + h0, d)], shadeCol(col, .55));
+    quad([top, P(b, y + h1, c), P(b, y + h1, d), P(a, y + h1, d)], col);
+    g.globalAlpha = 1;
+  }
+  // eyes on the head's front faces
+  g.globalAlpha = alpha; g.fillStyle = '#24160f';
+  for (const e of [[X + .7, y + .88, Z + .42], [X + .7, y + .88, Z + .6], [X + .42, y + .88, Z + .7], [X + .6, y + .88, Z + .7]]) { const p = P(...e); g.fillRect(Math.round(p[0]) - 1, Math.round(p[1]) - 1, 2, 2); }
+  g.globalAlpha = 1;
+}
+function shadeCol(hex, k){ const n = parseInt(hex.slice(1), 16); return `rgb(${((n >> 16) & 255) * k | 0},${((n >> 8) & 255) * k | 0},${(n & 255) * k | 0})`; }
+function drawGem(X, y, Z, alpha){
+  const [cx, cy] = P(X + .5, y + .45 + Math.sin(simT / 300 + X + Z) * .06, Z + .5), s = Math.max(1, Math.round(A / 14));
+  const w = .65 + .35 * Math.abs(Math.cos(simT / 500 + y)), cols = GEM_PIC[0].length;
+  g.globalAlpha = alpha;
+  GEM_PIC.forEach((row, r) => [...row].forEach((ch, c) => {
+    if (ch === '.') return;
+    const xx = Math.round(cx + (c - cols / 2) * s * w), yy = Math.round(cy + (r - 6) * s);
+    g.fillStyle = GEM_COL[ch]; g.fillRect(xx, yy, Math.ceil(s * w), s);
+  }));
+  g.globalAlpha = 1;
+}
+// where a cell's thing is drawn now: gliding from where it was, over a tick
+function placeOf(i){
+  let [x, y, z] = xyz(i);
+  const s = src[i];
+  if (s >= 0) { const k = Math.min(1, (simT - srcAt[i]) / TICK); if (k < 1) { const [sx, sy, sz] = xyz(s); x = sx + (x - sx) * k; y = sy + (y - sy) * k; z = sz + (z - sz) * k; } }
+  return [x, y, z];
+}
+function render(){
+  const W = innerWidth, H = innerHeight, PIX = Math.max(2, Math.round(Math.min(W, H) / 260));
+  if (cv.width !== W * devicePixelRatio || cv.height !== H * devicePixelRatio) { cv.width = W * devicePixelRatio; cv.height = H * devicePixelRatio; }
+  const lw = Math.ceil(W / PIX), lh = Math.ceil(H / PIX);
+  if (lo.width !== lw || lo.height !== lh) { lo.width = lw; lo.height = lh; }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#0c0b0e'; g.fillRect(0, 0, lw, lh);
+  // the cube fits the screen, a little to the side of the layer maps
+  rotShown += (rotV - rotShown) * .2; if (Math.abs(rotV - rotShown) < .01) rotShown = rotV;
+  A = Math.floor(Math.min(lw * (lh > lw ? .86 : .62) / (2 * N), lh * .7 / (2 * N)));   // upright phone: most of the width
+  CX = lw * .55; CY = lh * .5 - N * A * .25;
+  const r = rotShown, ky = kid ? kid.y : N - 1;
+  // the floor under the cube, and its outline
+  const corner = (x, z, y) => { const [X, Z] = turn(x, z, r); return P(X, y, Z); };
+  g.beginPath(); [[0, 0], [N, 0], [N, N], [0, N]].forEach(([x, z], k) => { const p = corner(x, z, 0); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.closePath();
+  g.fillStyle = '#1d1a22'; g.fill(); g.strokeStyle = '#3a3640'; g.stroke();
+  // everything, back to front
+  const items = [];
+  for (let i = 0; i < grid.length; i++) {
+    const t = grid[i]; if (t === E) continue;
+    const [x, y, z] = placeOf(i), [X, Z] = turn(x + .5, z + .5, r);
+    items.push({ i, t, X: X - .5, y, Z: Z - .5, cy: xyz(i)[1] });
+  }
+  items.sort((a, b) => (a.X + a.Z) - (b.X + b.Z) || a.y - b.y);
+  const [KX, KZ] = kid ? turn(kid.x + .5, kid.z + .5, r).map(v => v - .5) : [0, 0];
+  for (const it of items) {
+    const { t, X, y, Z } = it, above = it.cy > ky;
+    // above the kid's layer: only boulders and diamonds, as ghosts; in front of the kid on its layer, see-through
+    if (above && t !== ROCK && t !== GEM && t !== KID) continue;
+    let alpha = above ? .28 : 1;
+    if (!above && it.cy === ky && kid && kid.alive && X + Z > KX + KZ + .5 && Math.abs((X - Z) - (KX - KZ)) < 2.2) alpha = .35;
+    if (t === DIRT) block(X, y, Z, it.cy === N - 1 ? T_GRASS : T_DIRT, it.cy === N - 1 ? T_GSIDE : T_DIRT, alpha);
+    else if (t === STEEL) block(X, y, Z, T_STEEL, T_STEEL, alpha);
+    else if (t === ROCK) block(X, y, Z, T_ROCK, T_ROCK, alpha, .08);
+    else if (t === EXIT) block(X, y, Z, T_EXIT[exitOpen() ? 1 : 0], T_EXIT[exitOpen() ? 1 : 0], alpha);
+    else if (t === GEM) drawGem(X, y, Z, alpha);
+    else if (t === BOOM) block(X, y, Z, T_BOOM, T_BOOM, .9, .1 + (simT % 200) / 2000);
+    else if (t === KID) drawKid(X, y, Z, 1);
+  }
+  // the kid's layer: a thin frame around it, so you can tell how high you are
+  g.strokeStyle = 'rgba(95,180,255,.55)'; g.beginPath();
+  [[0, 0], [N, 0], [N, N], [0, N], [0, 0]].forEach(([x, z], k) => { const p = corner(x, z, ky); k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke();
+  drawLayers(lw, lh);
+  if (msg && simT - msg.at < 1400) {
+    g.font = `bold ${Math.max(8, Math.round(A * .5))}px monospace`; g.textAlign = 'center';
+    g.fillStyle = '#000'; g.fillText(msg.text, lw / 2 + 1, lh * .18 + 1); g.fillStyle = '#ffd24a'; g.fillText(msg.text, lw / 2, lh * .18);
+  }
+  ctx.imageSmoothingEnabled = false;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(lo, 0, 0, lw * PIX * devicePixelRatio, lh * PIX * devicePixelRatio);
+}
+// the four layers as little maps, top one first, turned like the cube; the kid's one marked
+function drawLayers(lw, lh){
+  const gap = 3, x0 = 6, y0 = Math.round(lh * .14), s = Math.max(2, Math.floor(Math.min((lh * .82 - y0 - N * gap) / (N * N), lw * .09 / N)));
+  const col = { [DIRT]: '#7a4a22', [STEEL]: '#6d6f78', [ROCK]: '#9e9e9e', [GEM]: '#5fe0ff', [EXIT]: exitOpen() ? '#b46cff' : '#57452a', [KID]: '#5fb4ff', [BOOM]: '#ffd24a', [E]: '#0c0b0e' };
+  for (let k = 0; k < N; k++) {
+    const y = N - 1 - k, oy = y0 + k * (N * s + gap);
+    g.fillStyle = kid && y === kid.y ? '#5fb4ff' : '#3a3640'; g.fillRect(x0 - 1, oy - 1, N * s + 2, N * s + 2);
+    for (let z = 0; z < N; z++) for (let x = 0; x < N; x++) {
+      const [X, Z] = turn(x + .5, z + .5, rotV).map(v => Math.floor(v));
+      g.fillStyle = col[grid[idx(x, y, z)]] || '#000'; g.fillRect(x0 + X * s, oy + Z * s, s, s);
+    }
+  }
+}
+
+/* ---------- screens and the score ---------- */
+function hud(){ $('hg').textContent = gems + '/' + need; $('hl').textContent = Math.max(0, lives); $('hc').textContent = 'CUEVA ' + (level + 1) + (level >= CAVES.length ? ' · AL AZAR ' + N + '³' : ''); $('hy').textContent = kid ? kid.y + 1 : '-'; $('hn').textContent = N; }
+function say(text){ msg = { text, at: simT }; }
+function showOv(html){ const o = $('ov'); o.innerHTML = html; o.hidden = false; const b = o.querySelector('button'); if (b) b.focus(); }
+function hideOv(){ $('ov').hidden = true; }
+function won(){
+  state = 'won'; sfx.open();
+  showOv(`<div class="card"><h2>¡CUEVA ${level + 1} SUPERADA!</h2><p>Diamantes: ${gems} de ${need} que pedía.</p><div class="row"><button id="bnext" class="b1">SIGUIENTE CUEVA</button></div></div>`);
+  $('bnext').onclick = () => startCave(level + 1);
+}
+function over(){
+  state = 'over';
+  showOv(`<div class="card"><h2>SIN VIDAS</h2><p>La cueva ${level + 1} se quedó con el minero.</p><div class="row"><button id="bagain">OTRA VEZ</button><button id="bfirst">DESDE LA PRIMERA</button></div></div>`);
+  $('bagain').onclick = () => { lives = 3; startCave(level); }; $('bfirst').onclick = () => { lives = 3; startCave(0); };
+}
+function intro(){
+  showOv(`<div class="card"><h2>BOULDER DÚO 3D</h2>
+    <p>Una prueba de concepto: Boulder Dash en un cubo de bloques. Cava, junta los diamantes y llega a la salida morada. Las rocas caen y ruedan hacia cualquiera de los cuatro lados; si te cae una encima, pierdes una vida.</p>
+    <p>Se ve la capa donde estás y las de abajo. De las capas de arriba solo se ven sus rocas y diamantes, transparentes: así ves lo que te puede caer. A la izquierda, las capas en chico.</p>
+    <p><b>Teclado:</b> W ↗ · A ↖ · S ↙ · D ↘ (o las flechas) para moverte en tu capa, Q para subir, E para bajar, R para girar el cubo. <b>Celular:</b> desliza el dedo hacia donde quieras ir y usa los botones.</p>
+    <div class="row"><button id="bgo">JUGAR</button></div></div>`);
+  $('bgo').onclick = () => { audioOn(); startCave(0); };
+}
+
+/* ---------- sound (a few beeps) ---------- */
+let AC = null;
+function audioOn(){ if (!AC) try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+function beep(f, d, type = 'square', vol = .04, slide = 0){
+  if (!AC) return; const o = AC.createOscillator(), v = AC.createGain(), t = AC.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f, t); if (slide) o.frequency.linearRampToValueAtTime(f + slide, t + d);
+  v.gain.setValueAtTime(vol, t); v.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(v); v.connect(AC.destination); o.start(t); o.stop(t + d);
+}
+const sfx = { dig: () => beep(140, .05, 'triangle', .03), gem: () => { beep(880, .08); beep(1320, .1, 'square', .03); }, land: () => beep(70, .08, 'sine', .05),
+  boom: () => beep(90, .4, 'sawtooth', .06, -50), open: () => { beep(523, .1); beep(784, .16, 'square', .04); } };
+
+/* ---------- input ---------- */
+const KEYS = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyQ: 'rise', KeyE: 'sink' };
+const hold = d => { held = held.filter(h => h !== d); held.push(d); };
+const unhold = d => { held = held.filter(h => h !== d); };
+addEventListener('keydown', e => {
+  audioOn();
+  if (KEYS[e.code]) { e.preventDefault(); hold(KEYS[e.code]); }
+  else if (e.code === 'KeyR') rotV = (rotV + 1) % 4, rotShown = rotShown > rotV ? rotShown - 4 : rotShown;
+  else if (e.code === 'KeyP' || e.code === 'Escape') { if (state === 'play') { state = 'pause'; showOv('<div class="card"><h2>PAUSA</h2><div class="row"><button id="bres">SEGUIR</button></div></div>'); $('bres').onclick = () => { state = 'play'; hideOv(); }; } else if (state === 'pause') { state = 'play'; hideOv(); } }
+  else if (e.code === 'Enter' && !$('ov').hidden) { const b = $('ov').querySelector('button'); if (b) b.click(); }
+});
+addEventListener('keyup', e => { if (KEYS[e.code]) unhold(KEYS[e.code]); });
+// swipes go to the nearest diagonal of the screen; the finger held keeps walking
+let sw = null;
+cv.addEventListener('pointerdown', e => { audioOn(); sw = { x: e.clientX, y: e.clientY, d: null }; });
+addEventListener('pointermove', e => {
+  if (!sw) return; const dx = e.clientX - sw.x, dy = e.clientY - sw.y; if (Math.hypot(dx, dy) < 18) return;
+  const d = dx > 0 ? (dy > 0 ? 'right' : 'up') : (dy > 0 ? 'down' : 'left');
+  if (d !== sw.d) { if (sw.d) unhold(sw.d); hold(d); sw.d = d; }
+});
+const swEnd = () => { if (sw && sw.d) unhold(sw.d); sw = null; };
+addEventListener('pointerup', swEnd); addEventListener('pointercancel', swEnd);
+const btn = (id, d) => { const b = $(id); b.addEventListener('pointerdown', e => { e.stopPropagation(); audioOn(); hold(d); }); b.addEventListener('pointerup', () => unhold(d)); b.addEventListener('pointerleave', () => unhold(d)); };
+btn('bup', 'rise'); btn('bdn', 'sink');
+$('brot').addEventListener('click', () => { rotV = (rotV + 1) % 4; if (rotShown > rotV) rotShown -= 4; });
+
+/* ---------- the loop ---------- */
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(250, now - last); last = now;
+  if (state === 'play') { simT += dt; while (simT - lastTick >= TICK && state === 'play') { lastTick += TICK; tick(); } hud(); }
+  else lastTick = simT;
+  render();
+  requestAnimationFrame(loop);
+}
+startCave(0); state = 'menu'; intro();
+window.__bd3d = { put: (x, y, z, t) => { grid[idx(x, y, z)] = t; fall[idx(x, y, z)] = 0; }, kidTo: (x, y, z) => { grid[idx(kid.x, kid.y, kid.z)] = E; Object.assign(kid, { x, y, z }); grid[idx(x, y, z)] = KID; },
+  setGems: n => { gems = n; }, T: { E, DIRT, STEEL, ROCK, GEM, EXIT, KID }, get state(){ return { N, kid: kid && { ...kid }, gems, need, lives, state, level, rotV, grid: Array.from(grid) }; }, startCave, tick: () => tick(), hold, unhold, idx };
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

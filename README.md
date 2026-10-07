@@ -109,6 +109,16 @@ Con el botón **INFINITA ALEATORIA** del menú se juega otra cueva sin fin, que 
 
 ![Los primeros tramos: partida, A, A+B, B, B+C, C, C+D, D, D+E, E, E+F](docs/infinita-aleatoria.png)
 
+## Boulder Dúo 3D (prueba de concepto)
+
+En un archivo aparte, **`bd3d.html`**: Boulder Dash en un cubo de bloques con texturas pixeladas, en vista isométrica, al estilo de los juegos de bloques. Se cava, se juntan los diamantes y se llega a la salida morada; las rocas y diamantes caen hacia abajo y, sobre otra roca, ruedan hacia cualquiera de los **cuatro lados** libres; si te cae una encima pierdes una vida. Las rocas se empujan de lado.
+
+- **La vista:** el cubo visto desde una esquina; con **R** (o GIRAR) se gira de a un cuarto. No se dibuja lo que está sobre la capa del niño, salvo sus rocas y diamantes, transparentes, para ver lo que puede caer; los bloques de su capa que quedan delante de él también se ven transparentes. A la izquierda, cada capa en chico (la del niño marcada).
+- **Moverse:** W ↗, A ↖, S ↙ y D ↘ (o las flechas) según se ve la pantalla, gire como gire el cubo; **Q** sube y **E** baja. En el celular, deslizar el dedo y los botones SUBIR, BAJAR y GIRAR.
+- **Cuevas:** tres de 4 × 4 × 4 hechas a mano y después al azar, de 4 × 4 × 4 y de 6 × 6 × 6.
+
+![Boulder Dúo 3D](docs/bd3d.png)
+
 ## Extras
 
 - **PC: EXPERTO / APRENDIZ** (botón del menú). El **experto** es el A\* con costos de peligro de `rl/boulder/policy.py`, portado al juego y con los costos ajustados con CEM (`rl/tune_astar.py`); en el juego además puede empujar rocas. El **aprendiz** es el Q(λ) que aprende paso a paso.
