@@ -1,8 +1,8 @@
 # 10 cuevas nuevas (propuestas)
 
-Ideas para cuevas con desafíos que no están en Boulder Dash 1 ni 2. Cada una toma algo de otro juego del género (o vecino) y lo adapta a este, que se juega solo o **de a dos**. Son propuestas: todavía no están en el juego.
+Ideas para cuevas con desafíos que no están en Boulder Dash 1 ni 2. Cada una toma algo de otro juego del género (o vecino) y lo adapta a este, que se juega solo o **de a dos**. **Ya se pueden jugar:** en el menú, botón **CUEVAS NUEVAS** (también con VISTA 3D y con dos celulares). Al entrar a cada una aparece una pista corta.
 
-Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de acero), igual que en el [catálogo](catalogo-cuevas.md). Para cada cueva: de dónde sale la idea, qué hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia con dos jugadores y qué haría falta en el juego. Los números (diamantes, rocas) son los del mapa; los tiempos son una primera propuesta, para ajustar jugando.
+Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de acero), igual que en el [catálogo](catalogo-cuevas.md). Para cada cueva: de dónde sale la idea, qué hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia con dos jugadores y cómo quedó en el juego. Los números (diamantes, rocas) son los del mapa; los tiempos son una primera propuesta, para ajustar jugando.
 
 **Mapas:** `#` acero · `W` ladrillo · `.` tierra · ` ` vacío · `o` roca · `*` diamante · `X` salida · `F` luciérnaga · `B` mariposa · `1` `2` los niños, más las letras nuevas de cada cueva.
 
@@ -73,7 +73,7 @@ Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de ace
 
 **Con dos jugadores:** uno suelta la roca y el otro espera para tomar el diamante antes de que ruede. Desde arriba uno puede guiar al otro: «un cuadro más a la izquierda».
 
-**Qué haría falta:** un tipo de celda nuevo con la física de la roca, y una regla en la caída: roca sobre nuez = diamante. Es fácil.
+**En el juego:** la nuez es una celda con la física de la roca (cae, rueda y se empuja). Una roca que cae sobre ella la vuelve diamante.
 
 ---
 
@@ -123,7 +123,7 @@ Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de ace
 
 **Con dos jugadores:** las llaves son del equipo, pero cada una la lleva quien la recogió. Hay que ponerse de acuerdo sobre qué puerta abre cada uno.
 
-**Qué haría falta:** dos tipos de celda (llave y puerta), un contador de llaves por niño, y que la puerta deje pasar solo a quien tiene una llave (y se la quite). Es fácil.
+**En el juego:** cada niño lleva sus llaves (🔑 en el marcador). Una puerta se abre solo para quien tiene una, y se la gasta; la puerta abierta queda como un hueco.
 
 ---
 
@@ -184,7 +184,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** cada uno puede tomar una rama distinta y juntar los diamantes que el otro deja atrás: entre los dos sobran. Pero el que va adelante no puede volver a ayudar.
 
-**Qué haría falta:** un tipo de celda con dirección, y que el paso de un niño mire esa dirección (y salte al otro lado). Es fácil.
+**En el juego:** la flecha se cruza solo hacia donde apunta: el niño salta al cuadro siguiente, y si ahí hay tierra la cava. En sentido contrario es una pared.
 
 ---
 
@@ -236,7 +236,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** uno empuja el barril y el otro, desde lejos, cava el último cuadro del pozo. Nadie debe estar a menos de un cuadro.
 
-**Qué haría falta:** un tipo de celda con física de roca que llame a la explosión que ya existe cuando cae o recibe un golpe. Es fácil.
+**En el juego:** el barril tiene la física de la roca. Estalla (3 × 3) si cae, si le cae algo encima o si lo alcanza otra explosión, así que los barriles juntos estallan en cadena.
 
 ---
 
@@ -292,7 +292,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** uno empuja desde arriba y el otro, en la sala de abajo, distrae a la luciérnaga o empuja.
 
-**Qué haría falta:** la placa como celda sólida, y que la salida mire si todas tienen una roca encima, en vez de contar diamantes. Es fácil.
+**En el juego:** la placa es sólida. La salida se abre cuando todas las placas tienen una roca encima; esta cueva no pide diamantes.
 
 ---
 
@@ -339,7 +339,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** uno va adelante abriendo camino y el otro limpia el piso. Si uno se queda bajo el agua, el otro puede abrirle una salida hacia arriba.
 
-**Qué haría falta:** una fila de agua que sube con el tiempo, una barra de aire por niño, y que el agua no mueva nada. Es mediano.
+**En el juego:** el agua sube una fila cada 7,5 segundos (menos en los niveles altos). Bajo el agua un niño tiene 4 segundos de aire (una barra sobre su cabeza), que se recupera al salir. Las rocas y los diamantes siguen cayendo igual.
 
 ---
 
@@ -386,7 +386,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** uno distrae al comelón (lo hace dar la vuelta cruzándose a lo lejos) mientras el otro suelta la roca.
 
-**Qué haría falta:** un enemigo nuevo que se mueve en línea recta, con un contador de diamantes comidos y una explosión que los devuelve. Es mediano.
+**En el juego:** el comelón avanza en línea recta por el vacío, se come los diamantes de su camino y da la vuelta al chocar. Si toca a un niño, el niño muere (solo él). Aplastado por una roca o un barril, suelta todo lo que comió más uno.
 
 ---
 
@@ -433,7 +433,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **Con dos jugadores:** uno hace de cebo cavando y el otro mantiene abierto un túnel paralelo para escapar.
 
-**Qué haría falta:** un tipo de tierra que recuerde cuándo se cavó y vuelva a crecer. El juego ya guarda el momento en que se cava cada cuadro, para la animación. Es fácil o mediano.
+**En el juego:** la tierra viva se cava como la normal y vuelve a crecer a los 6 segundos. Si hay una luciérnaga o una mariposa, la aplasta (la mariposa deja diamantes); si hay un niño o una roca, espera.
 
 ---
 
@@ -493,7 +493,7 @@ Antes de cada giro, mirar qué más se va a mover: las rocas de arriba y de abaj
 
 **Con dos jugadores:** el giro afecta a los dos, así que quien pisa el interruptor avisa o espera a que el otro esté a salvo.
 
-**Qué haría falta:** casi nada: el juego ya sabe girar la gravedad. Falta la celda del interruptor y una flecha en pantalla que muestre hacia dónde cae todo.
+**En el juego:** al pisar el interruptor la gravedad gira un cuarto de vuelta (abajo → izquierda → arriba → derecha → abajo), con un aviso en pantalla. Al salir de la cueva vuelve a ser normal.
 
 ---
 
@@ -550,7 +550,7 @@ En 1 jugador se puede igual, pero es largo: hay que empujar la roca de cada plac
 
 **Con dos jugadores:** es el centro de la cueva, pensada para cooperativo: hay que hablar y coordinarse. En versus se puede usar al revés: soltar la placa en el momento justo para encerrar al otro.
 
-**Qué haría falta:** placa y compuerta como celdas nuevas, una lista de qué placa abre qué compuerta, y que la compuerta no se cierre sobre un niño ni sobre una roca.
+**En el juego:** cada placa abre su compuerta mientras haya algo encima (un niño, una roca, una nuez, un barril o un diamante) y la cierra al quedar libre, pero nunca sobre algo.
 
 ---
 
