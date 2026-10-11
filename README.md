@@ -179,8 +179,11 @@ En un archivo aparte, **`bd3d.html`**: Boulder Dash en un cubo de bloques con te
 ## Modos
 
 - **1 jugador:** solo J1, con un único tablero más grande.
-- **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta.
+- **Cooperativo:** los dos juntan gemas para el equipo y salen por la puerta. Cada uno ve en su barra el total del equipo y, más chico, cuántas juntó él (**TÚ n**).
 - **Versus:** cada uno junta sus gemas y gana el primero en salir.
+- **Al morir (cooperativo o versus), las gemas se dispersan:** las que llevaba quien murió salen volando a lugares cercanos a los que se puede llegar (por túneles o cavando), fuera de la explosión y separadas entre sí, primero donde no se caen. Hay que volver a juntarlas, y si la cuenta baja de lo necesario la salida se cierra otra vez.
+
+  ![Gemas dispersas en cooperativo](docs/coop-gemas.png)
 - **Contra PC:** el rival aprende con Q(λ) mientras juegas.
 - **Entrenar PC:** el PC juega solo. Se puede acelerar (x1, x10, x100 y MÁX) o usar **TURBO SIN PANTALLA**, que entrena sin dibujar y muestra solo parámetros y curvas de aprendizaje.
 
@@ -189,6 +192,9 @@ En un archivo aparte, **`bd3d.html`**: Boulder Dash en un cubo de bloques con te
 | Jugador 1 | Jugador 2 | Partida |
 |---|---|---|
 | `W` `A` `S` `D` | Flechas | `Enter` seguir · `P` pausa · `R` reiniciar · `M` sonido · `C` CRT |
+
+- **Cavar sin avanzar** (como el botón de disparo del original): una dirección y enseguida la contraria, rápido. El niño rompe la tierra (o toma el diamante) de ese lado sin moverse, y mientras se mantenga la contraria tampoco camina hacia allá. Un toque solo, o mantener la tecla, es un paso normal.
+- **Diagonal en zigzag:** dos direcciones a la vez (dos teclas, o deslizar el dedo en diagonal) avanzan en zigzag, un paso para cada lado por turnos. Con teclas va mitad y mitad, partiendo por la tecla más nueva, así que el zigzag va por arriba o por abajo de la diagonal según cuál se apretó al final. Con el dedo sigue el ángulo: un poco más inclinado hacia un lado da más pasos hacia ese lado (el anillo muestra ◤◥◢◣). Si un lado está bloqueado, toma el otro.
 
 ## El agente
 
