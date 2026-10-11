@@ -2,53 +2,82 @@
 
 Ideas para cuevas con desafíos que no están en Boulder Dash 1 ni 2. Cada una toma algo de otro juego del género (o vecino) y lo adapta a este, que se juega solo o **de a dos**. Son propuestas: todavía no están en el juego.
 
-Para cada cueva: **de dónde sale la idea**, **qué hay de nuevo**, un **boceto** del mapa, **el desafío**, **cómo se pasa**, **con dos jugadores** y **qué haría falta** en el motor.
+Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de acero), igual que en el [catálogo](catalogo-cuevas.md). Para cada cueva: de dónde sale la idea, qué hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia con dos jugadores y qué haría falta en el juego. Los números (diamantes, rocas) son los del mapa; los tiempos son una primera propuesta, para ajustar jugando.
 
-Bocetos: misma notación que el [catálogo](catalogo-cuevas.md) (`#` acero · `W` ladrillo · `.` tierra · ` ` vacío · `o` roca · `*` diamante · `X` salida · `F` luciérnaga · `B` mariposa · `1` `2` los niños), más las letras nuevas que se explican en cada cueva. Los bocetos son más chicos que una cueva real: muestran la idea, no el mapa final.
+**Mapas:** `#` acero · `W` ladrillo · `.` tierra · ` ` vacío · `o` roca · `*` diamante · `X` salida · `F` luciérnaga · `B` mariposa · `1` `2` los niños, más las letras nuevas de cada cueva.
 
-| # | Cueva | Idea de | Desafío |
-|---|---|---|---|
-| 1 | [Nueces](#1-nueces) | Emerald Mine | Romper nueces dejándoles caer una roca encima |
-| 2 | [Llaves que se gastan](#2-llaves-que-se-gastan) | Emerald Mine, Zelda | Decidir qué puertas abrir con pocas llaves |
-| 3 | [Pasos de un sentido](#3-pasos-de-un-sentido) | Supaplex | Planear el orden: no hay vuelta atrás |
-| 4 | [Barriles](#4-barriles) | Supaplex, Emerald Mine | Llevar explosivos que estallan al caer |
-| 5 | [Placas](#5-placas) | Sokoban | Hacer caer rocas justo sobre las placas |
-| 6 | [Inundación](#6-inundación) | Mr. Driller | Subir antes de que suba el agua |
-| 7 | [El comelón](#7-el-comelón) | Emerald Mine, Rocks'n'Diamonds | Dejarlo comer y aplastarlo en el momento justo |
-| 8 | [Tierra viva](#8-tierra-viva) | Lode Runner | Túneles que se cierran solos: trampas |
-| 9 | [Cueva giratoria](#9-cueva-giratoria) | Supaplex, la gravedad oculta de este juego | Girar la gravedad para vaciar bolsillos |
-| 10 | [Dos llaves, una puerta](#10-dos-llaves-una-puerta) | Fireboy & Watergirl, Portal 2 | Turnarse en las placas para abrirse paso |
+| # | Cueva | Idea de | Diamantes necesarios | Desafío |
+|---|---|---|---|---|
+| 1 | [Nueces](#1-nueces) | Emerald Mine | 12 | Romper nueces dejándoles caer una roca |
+| 2 | [Llaves que se gastan](#2-llaves-que-se-gastan) | Emerald Mine, Zelda | 12 | Elegir qué puertas abrir con pocas llaves |
+| 3 | [Pasos de un sentido](#3-pasos-de-un-sentido) | Supaplex | 22 | Planear el orden: no hay vuelta atrás |
+| 4 | [Barriles](#4-barriles) | Supaplex, Emerald Mine | 16 | Llevar explosivos que estallan al caer |
+| 5 | [Placas](#5-placas) | Sokoban | — (placas) | Hacer caer rocas justo sobre las placas |
+| 6 | [Inundación](#6-inundación) | Mr. Driller | 16 | Subir antes de que suba el agua |
+| 7 | [El comelón](#7-el-comelón) | Emerald Mine, Rocks'n'Diamonds | 30 | Dejarlo comer y aplastarlo en el momento justo |
+| 8 | [Tierra viva](#8-tierra-viva) | Lode Runner | 20 | Túneles que se cierran solos: trampas |
+| 9 | [Cueva giratoria](#9-cueva-giratoria) | Supaplex y la gravedad oculta de este juego | 24 | Girar la gravedad para vaciar bolsillos |
+| 10 | [Dos llaves, una puerta](#10-dos-llaves-una-puerta) | Fireboy & Watergirl, Portal 2 | 8 | Turnarse en las placas para abrirse paso |
 
 ---
+
+<a id="1-nueces"></a>
 
 ## 1. Nueces
 
-**De dónde sale:** las nueces de *Emerald Mine* (1987), que se rompen dejándoles caer una roca y sueltan una esmeralda.
+**De dónde sale:** las nueces de *Emerald Mine* (1987), que se rompen dejándoles caer una roca encima y sueltan una esmeralda.
 
-**Qué hay de nuevo:** la **nuez** (`n`). Se comporta como una roca: cae, rueda y se empuja. Si le cae una roca encima se rompe y deja un diamante. Si cae sobre algo, no le pasa nada.
+**Qué hay de nuevo:** la **nuez** (`n`). Se comporta como una roca: cae, rueda y se empuja. Si le cae una roca se rompe y deja un diamante. Si cae sobre algo, o le cae otra nuez, no le pasa nada.
+
+**Necesarios:** 12 diamantes · **diamantes en el mapa:** 0 · **rocas:** 17 · **tiempo:** 150 s
 
 ```
-##############################
-#12......o.....o.....o.......#
-#........n.....n.....n.......#
-#WWWWWW..W.....W.....W..WWWWW#
-#......o.......o.............#
-#....o.n.....o.n..B...o......#
-#....WWWW....WWWW.....WWWW...#
-#............................#
-#..n.n.n.......F.......n.n.n.X
-##############################
+########################################
+#12....o.......o.......o.......o.......#
+#......................................#
+#......n.......n.......n.......n.......#
+#WWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWW#
+#......................................#
+#..o...o...o...o......o...o...o...o....#
+#......................................#
+#                                      #
+#    F                                 #
+#                                      #
+#    n     n        n      n      n    #
+#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW...W#
+#...o.....o.....o.........o.....o......#
+#......................................#
+#...n.....n.....n.........n.....n......#
+#...n...........n...............n......#
+#........   ...........................#
+#........ B ...........................#
+#........   ...........................#
+#....................................X.#
+########################################
 ```
 
-**El desafío:** no hay diamantes sueltos, solo nueces. Algunas tienen una roca encima, lista para caer. Otras están en el suelo, lejos de cualquier roca, y hay que llevarles una.
+**Qué hay:** Tres pisos y ningún diamante suelto, solo 17 nueces:
+  - Arriba, cuatro nueces sobre una repisa de ladrillo, cada una con una roca dos cuadros más arriba y tierra en medio.
+  - Al medio, una sala vacía con una luciérnaga y cinco nueces en el suelo. Sobre la sala hay una capa de tierra con ocho rocas, y solo dos de ellas están justo sobre una nuez.
+  - Abajo, nueces con una roca a la espera dos cuadros más arriba, y tres de ellas con otra nuez debajo. Además hay una mariposa encerrada.
 
-**Cómo se pasa:** cavar debajo de las nueces que tienen roca encima para que caigan juntas y la roca rompa la nuez. Para las del suelo, empujar rocas por las repisas y dejarlas caer justo encima. Las rocas son contadas: una que cae al lado de la nuez se pierde.
+**El desafío:** Se necesitan 12 diamantes y cada uno sale de una nuez rota. En la sala, solo dos nueces tienen una roca justo encima: a las otras tres hay que llevársela. En las pilas de dos nueces, la segunda necesita otra roca.
 
-**Con dos jugadores:** uno deja caer la roca y el otro recoge el diamante antes de que ruede a otra parte.
+**Cómo se pasa:**
 
-**Qué haría falta:** un tipo de celda nuevo que use la física de la roca, y una regla en la caída: roca sobre nuez = diamante. Es fácil.
+- **Arriba:** cavar la tierra entre roca y nuez. La roca cae y la rompe: cuatro diamantes fáciles.
+- **En la sala:** empujar las rocas de la capa de tierra (de lado, cavando delante) hasta quedar justo sobre la columna de una nuez, y cavar debajo para que caiga a través de la sala. Si una roca cae en el lugar equivocado, se pierde.
+- **Abajo:** lo mismo, y una roca que se cae a un lado puede empujarse de nuevo.
+- **La mariposa:** aplastada da 9 diamantes, por si faltan.
+- **Salida:** abajo a la derecha, por el hueco del suelo de la sala.
+
+**Con dos jugadores:** uno suelta la roca y el otro espera para tomar el diamante antes de que ruede. Desde arriba uno puede guiar al otro: «un cuadro más a la izquierda».
+
+**Qué haría falta:** un tipo de celda nuevo con la física de la roca, y una regla en la caída: roca sobre nuez = diamante. Es fácil.
 
 ---
+
+<a id="2-llaves-que-se-gastan"></a>
 
 ## 2. Llaves que se gastan
 
@@ -56,164 +85,312 @@ Bocetos: misma notación que el [catálogo](catalogo-cuevas.md) (`#` acero · `W
 
 **Qué hay de nuevo:** la **llave** (`a`) y la **puerta** (`A`). La llave se recoge como un diamante (se ve en la barra) y se gasta al abrir una puerta.
 
+**Necesarios:** 12 diamantes · **diamantes en el mapa:** 18 · **rocas:** 38 · **tiempo:** 150 s
+
 ```
 ########################################
-#12...o....a.....o.....a..........o....#
-#..o.....o.....o.....o.....o.....o.....#
-#WWWWWAWWWWWWWWWWAWWWWWWWWWWWAWWWWWWWWW#
-#..*.*.*.#..o.o.o.o..#...*...........X.#
-#.*.*.*..#.o*o*o*o*..#..F...*....F.....#
-#..*.*.*.#..o.o.o.o..#.......*.........#
+#12..o.....o.....o......o.....o....o...#
+#.........a....................a.......#
+#..o....o.....o....o......o.....o....o.#
+#......................................#
+#....o.......o..........o........o.....#
+#......................................#
+#WWWWWWAWWWWWWWWWWWWAWWWWWWWWWWWWAWWWWW#
+#............Wo.o.o.o.o.o.W            #
+#.*..*..*..*.W.*o*o*o*o*o.W            #
+#............W.o.o.o.o.o..W  F         #
+#..*..*..*...W............W            #
+#............W.....*......W            #
+#.*.....*....W............W            #
+#............W............W            #
+#............W..o.........W        F   #
+#...o........W............W            #
+#........o...W........o...W            #
+#............W............W            #
+#.....o......W............W            #
+#............W............W *   *   * X#
 ########################################
 ```
 
-**El desafío:** hay tres puertas y solo dos llaves. Detrás de una están la salida y dos luciérnagas; detrás de las otras, diamantes. Una sala los tiene fáciles de tomar; en la otra están entre rocas que se derrumban. Hay que elegir bien.
+**Qué hay:** Arriba hay una franja de tierra con rocas y dos llaves. Debajo, separadas por un muro de ladrillo con tres puertas, hay tres salas:
+  1. Nueve diamantes fáciles en tierra.
+  2. Seis diamantes entre rocas, que se derrumban al sacarlos.
+  3. Una sala vacía con dos luciérnagas, tres diamantes en el suelo y la salida.
 
-**Cómo se pasa:** mirar antes de abrir. La sala de la salida es obligatoria, y de las otras dos conviene la que da los diamantes que faltan con menos riesgo. En una versión más difícil, una roca mal soltada tapa una puerta y la llave ya no sirve.
+**El desafío:** Tres puertas y solo dos llaves. La sala 3 es obligatoria (tiene la salida) y se necesitan 12 diamantes: la sala 1 más la 3 dan 12 justos; la 2 más la 3 dan solo 9.
 
-**Con dos jugadores:** las llaves son del equipo, pero cada una la lleva quien la recogió. Hay que ponerse de acuerdo sobre quién abre qué.
+**Cómo se pasa:** Mirar las salas antes de abrir: con la sala 1 y la 3 se pasa. Al abrir la puerta de la sala 3, las luciérnagas pueden subir por los túneles de arriba, así que conviene abrirla al final, con los nueve diamantes de la sala 1 ya juntos, y bajar rápido por los del suelo.
 
-**Qué haría falta:** dos tipos de celda (llave y puerta), un contador de llaves por niño y que la puerta deje pasar solo a quien tiene una llave.
+**Con dos jugadores:** las llaves son del equipo, pero cada una la lleva quien la recogió. Hay que ponerse de acuerdo sobre qué puerta abre cada uno.
+
+**Qué haría falta:** dos tipos de celda (llave y puerta), un contador de llaves por niño, y que la puerta deje pasar solo a quien tiene una llave (y se la quite). Es fácil.
 
 ---
+
+<a id="3-pasos-de-un-sentido"></a>
 
 ## 3. Pasos de un sentido
 
 **De dónde sale:** los puertos de *Supaplex* (1991), pasos que se cruzan solo en una dirección.
 
-**Qué hay de nuevo:** el **paso** (`>` `<` `^` `v`), una celda que el niño cruza solo en el sentido de la flecha. Las rocas y los enemigos no pueden atravesarlo.
+**Qué hay de nuevo:** el **paso** (`>` `<` `v`), una celda que el niño cruza solo en el sentido de la flecha, saltando al otro lado. Las rocas y los enemigos no la atraviesan.
+
+**Necesarios:** 22 diamantes · **diamantes en el mapa:** 26 · **rocas:** 11 · **tiempo:** 180 s
 
 ```
-##############################
-#12......>.........v.........#
-#WWWWWWWWWWWWWWWWW.WWWWWWWWWW#
-#..*..o..<....*....>...*..o..#
-#WWWW^WWWWWWWWWWWWWWWWWWW.WWW#
-#..*....o....>..*.....<...*..#
-#WWWWWWWWWWWW.WWWWWWWWWWWWWWW#
-#...*...>....*.....*.....<..X#
-##############################
+########################################
+#12...o.*....W....o...*...W.....o..*...#
+#...*........>..*.........>...*........#
+#............W............W............#
+#WWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWvWWWW#
+#......*..W...*.o...........W.......*..#
+#..*......<.................<..*.......#
+#.........W............*....W......o...#
+#WWWWvWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWW#
+#........*..o......W...*...o...........#
+#...*..............>.............*.....#
+#..............*...W...................#
+#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWvWWWWWWWW#
+#.......o...W.........*..W....*..o.....#
+#...........<....*.......<.............#
+#.....*.....W............W.........*...#
+#WWWvWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#
+#..........o........W.....*..o.........#
+#.......*...........W..................#
+#...................>...........*......#
+#.............*.....W................X.#
+########################################
 ```
 
-**El desafío:** hay diamantes en todos los pisos, y una vez que se cruza un paso no se puede volver por ahí. En el orden equivocado uno queda del lado malo con diamantes sin tomar.
+**Qué hay:** Cinco pisos separados por ladrillo:
+  - Cada piso está dividido en tramos por pasos horizontales y baja al siguiente por pasos hacia abajo.
+  - Hay 26 diamantes, dos o tres por tramo, y algunas rocas.
+  - Se parte arriba a la izquierda y la salida está abajo a la derecha.
 
-**Cómo se pasa:** antes de moverse, seguir con la vista las flechas hasta la salida. En cada piso, tomar todo lo que queda a este lado de un paso antes de cruzarlo. Es una cueva de pensar más que de reflejos.
+**El desafío:** Se necesitan 22 diamantes, o sea, se pueden perder solo 4. Los caminos se bifurcan:
+  - En el piso 1, el paso hacia abajo del tramo del medio deja atrás el tramo de la derecha.
+  - En el piso 2, el paso del tramo del medio lleva directo al lado derecho del piso 3 y deja atrás 5 diamantes: el tramo izquierdo del piso 2 y el del piso 3. Con esos 5 perdidos ya no alcanza.
 
-**Con dos jugadores:** cada uno puede ir por un camino distinto, porque los caminos no se juntan hasta abajo. Al repartirse los pisos, un niño que se queda atrás no puede alcanzar al otro.
+**Cómo se pasa:**
 
-**Qué haría falta:** un tipo de celda con dirección, y que el paso de un niño mire esa dirección. Es fácil.
+Seguir con la vista las flechas antes de moverse. Hay un camino que pasa por todos los tramos:
+  - En el piso 1, todo hacia la derecha y bajar por el último paso.
+  - En el piso 2, de derecha a izquierda, bajando por el paso del extremo izquierdo.
+  - En el piso 3, hacia la derecha.
+  - En el piso 4, hacia la izquierda.
+  - En el piso 5, hacia la derecha hasta la salida.
+
+Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar más que de reflejos.
+
+**Con dos jugadores:** cada uno puede tomar una rama distinta y juntar los diamantes que el otro deja atrás: entre los dos sobran. Pero el que va adelante no puede volver a ayudar.
+
+**Qué haría falta:** un tipo de celda con dirección, y que el paso de un niño mire esa dirección (y salte al otro lado). Es fácil.
 
 ---
+
+<a id="4-barriles"></a>
 
 ## 4. Barriles
 
 **De dónde sale:** los discos naranjos de *Supaplex*, que explotan al caer, y las bombas de *Emerald Mine*.
 
-**Qué hay de nuevo:** el **barril** (`Q`). Se empuja como una roca. Si cae o le cae algo encima, explota en 3×3 como una luciérnaga: rompe ladrillo, tierra y diamantes, y mata.
+**Qué hay de nuevo:** el **barril** (`%`). Se empuja como una roca. Si cae, o le cae algo encima, explota en 3×3 como una luciérnaga: rompe ladrillo, tierra y diamantes, y mata.
+
+**Necesarios:** 16 diamantes · **diamantes en el mapa:** 19 · **rocas:** 17 · **tiempo:** 180 s
 
 ```
 ########################################
-#12..Q....WWWW..*.*.*..WWWW....Q.......#
-#.........W..WWWWWWWWWWWW..W...........#
-#..o..o...W..*.......*...W..o....o.....#
-#.........WWWWWWWWWWWWWWWW.............#
-#..WWWWWW......o....o.......WWWWWWW....#
-#..W*.*W....F...............W*.*.*W....#
-#..WWWWWW...................WWWWWWW...X#
+#12.........o...........o..............#
+#...o...............o.......o......o...#
+#.......%.......o..............%.......#
+#......................................#
+#.....o...........o.......o..........o.#
+#.............o........................#
+#......................................#
+#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#
+#..W       W.W        W....W       W...#
+#..W * * * W.W * * * *W....W * * * W...#
+#..W       W.W        W....W       W...#
+#..W * * * W.W  * * * W....W * * * W...#
+#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#
+#......................................#
+#......................................#
+#....o...........   .....o.............#
+#................ F ................o..#
+#.........o......   ...................#
+#.............................o........#
+#....................................X.#
 ########################################
 ```
 
-**El desafío:** los diamantes están en salas de ladrillo cerradas, y solo hay dos barriles para abrir tres salas. Hay que llevarlos sin que caigan antes de tiempo: un barril empujado sobre un hueco cae y explota ahí mismo.
+**Qué hay:** Arriba hay tierra con rocas y dos barriles. Al medio, tres salas de ladrillo cerradas con 19 diamantes en total; entre las dos primeras queda una sola columna de tierra. Abajo hay una luciérnaga encerrada en un huequito.
 
-**Cómo se pasa:** dejar cada barril junto a una pared de modo que una explosión abra dos salas a la vez, y hacerlo estallar dejándole caer una roca encima desde lejos. La luciérnaga también sirve como tercera explosión, si se la atrae con cuidado.
+**El desafío:** Se necesitan 16, más de lo que tienen las dos primeras salas juntas (13), así que hay que abrir las tres. Hay dos barriles y una luciérnaga para tres salas.
 
-**Con dos jugadores:** uno empuja el barril y el otro, desde lejos, suelta la roca encima. Ninguno debe estar a menos de un cuadro.
+**Cómo se pasa:**
 
-**Qué haría falta:** un tipo de celda con física de roca que llame a la explosión que ya existe al caer o al recibir un golpe. Es fácil.
+- **Las dos primeras salas:** cavar un pozo en la columna de tierra que las separa, empujar un barril sobre el pozo y apartarse. Al caer explota contra el fondo del pozo y abre las dos salas de un golpe. El pozo no debe llegar hasta abajo, o el barril pasa de largo.
+- **La tercera sala:** dejar caer el otro barril sobre su techo.
+- **La luciérnaga:** sirve de repuesto si un barril explota antes de tiempo.
+- **Salida:** abajo a la derecha.
+
+**Con dos jugadores:** uno empuja el barril y el otro, desde lejos, cava el último cuadro del pozo. Nadie debe estar a menos de un cuadro.
+
+**Qué haría falta:** un tipo de celda con física de roca que llame a la explosión que ya existe cuando cae o recibe un golpe. Es fácil.
 
 ---
+
+<a id="5-placas"></a>
 
 ## 5. Placas
 
 **De dónde sale:** *Sokoban*, pero con gravedad: aquí las rocas no se dejan donde uno quiere, caen.
 
-**Qué hay de nuevo:** la **placa** (`_`), una celda de suelo. Cuando hay una roca encima se ilumina. Con todas encendidas se abre la salida, y en esta cueva no hay diamantes que juntar.
+**Qué hay de nuevo:** la **placa** (`_`), una celda del suelo que se ilumina cuando tiene una roca encima. Con todas encendidas se abre la salida: en esta cueva no hay diamantes que juntar.
+
+**Para abrir la salida:** las 5 placas con roca · **diamantes en el mapa:** 0 · **rocas:** 7 · **tiempo:** 200 s
 
 ```
-##############################
-#12.......................X..#
-#.....o.....o.....o..........#
-#WWW..WWWWW..WWWW..WWWWWW....#
-#                            #
-#   o                        #
-#WWWW_WWWWWW_WWWWWWWWW_WWWWWW#
-##############################
+########################################
+#12...................................X#
+#......................................#
+#......................................#
+#....o......o.......o......o...........#
+#......................................#
+#......................................#
+#                                      #
+#                                      #
+#                                      #
+#                                      #
+#WWWWWWWW_WWWWWWWW_WWWWWWWWWWW_WWWWW..W#
+#......................................#
+#                                      #
+#            o                         #
+#           WWW                    F   #
+#                                      #
+#                           o    o     #
+#WWWWWW_WWWWWWWWWWWWWW_WWWWWWWWWWWWWWWW#
+#......................................#
+#......................................#
+########################################
 ```
 
-**El desafío:** las rocas solo se empujan de lado y, al quedar sobre un hueco, caen y ruedan si caen sobre otra roca. Hay que hacerlas caer exactamente sobre las placas.
+**Qué hay:** Dos salas vacías una sobre otra:
+  - **Arriba**, el suelo tiene tres placas y encima de la sala hay una capa de tierra con cuatro rocas que no están sobre las placas.
+  - **Abajo**, el suelo tiene dos placas, y hay tres rocas (una sobre un saliente de ladrillo) y una luciérnaga.
+  - Se parte arriba a la izquierda, y la salida está arriba a la derecha.
 
-**Cómo se pasa:** contar las celdas: empujar cada roca hasta quedar justo sobre la columna de la placa y entonces dejarla caer. Si una roca queda mal, cavar o empujarla de nuevo, siempre que no haya caído en un rincón del que no sale. Hay una roca de sobra para un error.
+**El desafío:** Llevar una roca a cada una de las cinco placas.
+  - En la sala de arriba, las rocas tienen que *caer* exactamente sobre la placa. Si caen sobre otra roca, ruedan.
+  - En la de abajo se pueden empujar por el suelo, pero con la luciérnaga dando vueltas.
 
-**Con dos jugadores:** uno empuja desde arriba y el otro, desde el pasillo de abajo, empuja la roca que cayó mal hacia su placa.
+**Cómo se pasa:**
+
+- **Arriba:** cavar delante de cada roca para empujarla de lado hasta la columna de una placa, y después cavar la tierra que la sostiene. Cae a través de la sala justo sobre la placa. Hay una roca de sobra para un error.
+- **Abajo:** bajar por el hueco del suelo de la derecha, empujar la roca del saliente para que caiga y llevarla por el suelo a su placa, y lo mismo con una de las del suelo.
+- **Salida:** volver arriba.
+
+**Con dos jugadores:** uno empuja desde arriba y el otro, en la sala de abajo, distrae a la luciérnaga o empuja.
 
 **Qué haría falta:** la placa como celda sólida, y que la salida mire si todas tienen una roca encima, en vez de contar diamantes. Es fácil.
 
 ---
 
+<a id="6-inundación"></a>
+
 ## 6. Inundación
 
-**De dónde sale:** el aire que se acaba de *Mr. Driller* y el agua que sube de tantos juegos de plataformas.
+**De dónde sale:** el aire que se acaba en *Mr. Driller* y el agua que sube de tantos juegos de plataformas.
 
-**Qué hay de nuevo:** el **agua** (`~`). Sube una fila cada algunos segundos desde abajo. Las rocas y los diamantes se hunden en ella. Un niño bajo el agua aguanta unos segundos (se ve una barra de aire) y después se ahoga.
+**Qué hay de nuevo:** el **agua** (`~`). Sube una fila cada algunos segundos desde abajo, y las rocas y los diamantes se hunden en ella. Un niño bajo el agua aguanta unos segundos (se ve una barra de aire) y después se ahoga.
+
+**Necesarios:** 16 diamantes · **diamantes en el mapa:** 20 · **rocas:** 15 · **tiempo:** 150 s
 
 ```
 ########################################
-#............X.........................#
-#..o..*..o.....o...*...o.....*...o.....#
-#.WWWW....WWWWWWW.....WWWW.....WWWWW...#
-#....*..o.....*.....o....*..o......*...#
-#..o.....WWWW....o.....WWWWWW....o.....#
-#....*........*.......*.......*........#
-#.12..o...o.....o..o.....o....o....o...#
+#........o...X.............o.......*...#
+#....*..............o..................#
+#.............................*........#
+#WWWWWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWW#
+#..o..............*...........o........#
+#.........*...o.....................*..#
+#.........................*............#
+#WWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWW#
+#..........o....*........o.............#
+#.......*....................*......o..#
+#.....................*................#
+#WWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWWW#
+#......o....*...............o..........#
+#...*............o...............*.....#
+#.......................*..............#
+#WWWWWWW..WWWWWWWWWWWWWWWWWWWW..WWWWWWW#
+#.........o...*........o...........*...#
+#.....*....................*.....o.....#
+#.12................*..................#
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 ########################################
 ```
 
-**El desafío:** se parte abajo y la salida está arriba. Los diamantes están repartidos por todos los pisos, y el agua no deja volver a buscar los que quedaron abajo.
+**Qué hay:** Cinco pisos de ladrillo, cada uno con huecos en lugares distintos para subir al siguiente. Hay unos cuatro diamantes por piso (20 en total) y rocas. Se parte abajo, junto al agua, y la salida está arriba.
 
-**Cómo se pasa:** juntar los diamantes de cada piso antes de subir, sin perder tiempo cavando de más. Cavar hacia arriba bajo una roca es peligroso (cae), así que hay que subir por los lados. Mirar el ritmo del agua y no quedarse atrás.
+**El desafío:** Se necesitan 16 diamantes, mientras el agua no deja volver a buscar los que quedaron abajo.
 
-**Con dos jugadores:** uno va adelante abriendo camino y el otro limpia el piso. Si uno se queda bajo el agua, el otro puede cavarle una salida hacia arriba.
+**Cómo se pasa:** Juntar los diamantes de cada piso antes de subir, sin cavar de más. Los huecos de un piso y del siguiente no están alineados, así que hay que cruzar cada piso de lado a lado. No cavar hacia arriba bajo una roca. Mirar el ritmo del agua y no quedarse atrás.
 
-**Qué haría falta:** una fila de agua que sube con el tiempo, una barra de aire por niño y que el agua no mueva nada. Es mediano.
+**Con dos jugadores:** uno va adelante abriendo camino y el otro limpia el piso. Si uno se queda bajo el agua, el otro puede abrirle una salida hacia arriba.
+
+**Qué haría falta:** una fila de agua que sube con el tiempo, una barra de aire por niño, y que el agua no mueva nada. Es mediano.
 
 ---
+
+<a id="7-el-comelón"></a>
 
 ## 7. El comelón
 
 **De dónde sale:** el *Yam-Yam* de *Emerald Mine* y *Rocks'n'Diamonds*, una bestia que se come lo que encuentra y explota soltando lo que tenía adentro.
 
-**Qué hay de nuevo:** el **comelón** (`Y`). Avanza en línea recta por el espacio vacío y dobla al chocar. Se come los diamantes que encuentra y mata al tocar. Si le cae una roca encima explota, y deja **todos** los diamantes que se comió (más uno de propina) en los cuadros de alrededor.
+**Qué hay de nuevo:** el **comelón** (`Y`). Avanza en línea recta por el espacio vacío y da la vuelta al chocar. Se come los diamantes que encuentra y mata al tocar. Si le cae una roca encima explota y deja **todos** los diamantes que se comió, más uno de propina, alrededor.
+
+**Necesarios:** 30 diamantes · **diamantes en el mapa:** 41 · **rocas:** 11 · **tiempo:** 150 s
 
 ```
-##############################
-#12.....*.*.*.*.*.*.*.*....X.#
-#                            #
-#..Y.......o......o......Y...#
-#......WWWWWWWWWWWWWW........#
-#..*.*.*.*.........*.*.*.*...#
-##############################
+########################################
+#.......o.......o.......o.......o......#
+#......................................#
+#.Y                                   .#
+#.  * * * * * * * * * * * * * * * *   .#
+#......................................#
+#.12...................................#
+#......................................#
+#.....o.......o.......o.......o........#
+#......................................#
+#.                                   Y.#
+#.   *   *   *   *   *   *   *   *    .#
+#......................................#
+#......................................#
+#......................................#
+#.........o.........o.......o..........#
+#......................................#
+#.                                    .#
+#. * * * * * * * * * * * * * * * * *  .#
+#......................................#
+#....................................X.#
+########################################
 ```
 
-**El desafío:** dos comelones recorren los pasillos llenos de diamantes. Si uno los toma primero, quedan pocos para pasar. Si se deja que los comelones coman, se llenan, y aplastados devuelven todo junto.
+**Qué hay:** Tres pasillos vacíos, uno sobre otro, con 41 diamantes en fila en el suelo. Hay un comelón en el de arriba y otro en el del medio. Sobre cada pasillo, con un cuadro de tierra en medio, esperan algunas rocas. Se parte entre el pasillo de arriba y el del medio.
 
-**Cómo se pasa:** dejarlos comer un rato y aplastarlos bajo las dos rocas del medio cuando pasen. Hay que medir el tiempo: muy pronto dan poco, y muy tarde se acaba el reloj o uno se cruza en su camino.
+**El desafío:** Se necesitan 30. Si uno se apura a juntar, compite con los comelones; si los deja comer, se llenan, y aplastados devuelven todo junto.
 
-**Con dos jugadores:** uno distrae al comelón (se desvía para perseguirlo) mientras el otro suelta la roca.
+**Cómo se pasa:** Juntar primero el pasillo de abajo, donde no hay comelón. Dejar que los otros dos coman un rato y, cuando pasen bajo una roca, cavar el cuadro de tierra que la sostiene. Hay que medir el tiempo: muy pronto dan poco, y muy tarde se acaba el reloj o uno se cruza en su camino. Salida abajo a la derecha.
+
+**Con dos jugadores:** uno distrae al comelón (lo hace dar la vuelta cruzándose a lo lejos) mientras el otro suelta la roca.
 
 **Qué haría falta:** un enemigo nuevo que se mueve en línea recta, con un contador de diamantes comidos y una explosión que los devuelve. Es mediano.
 
 ---
+
+<a id="8-tierra-viva"></a>
 
 ## 8. Tierra viva
 
@@ -221,79 +398,159 @@ Bocetos: misma notación que el [catálogo](catalogo-cuevas.md) (`#` acero · `W
 
 **Qué hay de nuevo:** la **tierra viva** (`:`). Se cava como la normal, pero el hoyo se vuelve a llenar a los 6 segundos. Si al llenarse hay un enemigo adentro, lo aplasta: una mariposa deja 9 diamantes y una luciérnaga nada. Nunca se cierra sobre un niño, pero sí puede dejarlo encerrado (basta con volver a cavar).
 
+**Necesarios:** 20 diamantes · **diamantes en el mapa:** 8 · **rocas:** 4 · **tiempo:** 150 s
+
 ```
-##############################
-#12:::::::::::::::::::::::::X#
-#::B::::::::::*::::::::::B:::#
-#:::::::*::::::::::*:::::::::#
-#::*::::::::::F:::::::::::*::#
-##############################
+########################################
+#12::::::::::::::::::::::::::::::::::::#
+#:::::::::::::*::::::::::::::::::::::::#
+#::::::::::::::::::::::::*:::::::::::::#
+#:::::B::::::::::::::::::::::::::B:::::#
+#::::::::::::::::::::::::::::::::::::::#
+#:::::::::::::::::::F::::::::::::::::::#
+#:::::::::::::::::::::::::::::::::::*::#
+#:::*::::::::::::::::::::::::::::::::::#
+#::::::::::::::::::::::::::::::::::::::#
+#.......o.........o........o.......o...#
+#......................................#
+#::::::::::::::::::::::::::::::::::::::#
+#::::::::::::::::::::::::::::::*:::::::#
+#::::::::*:::::::::::::::::::::::::::::#
+#::::::::::::::::::::::::::::::::::::::#
+#:::::::::::B:::::::::::::::B::::::::::#
+#:::::::::::::::::::F::::::::::::::::::#
+#::::::::::::::::::::::::::::::::::::::#
+#::::::::::::::::*:::::::::::::::::::::#
+#:::::::::::::::::::::::*:::::::::::::X#
+########################################
 ```
 
-**El desafío:** las mariposas solo se mueven por el espacio vacío, así que salen únicamente por los túneles que uno abre, y esos túneles se cierran detrás. Se necesitan los diamantes de dos mariposas.
+**Qué hay:** Casi toda la cueva es tierra viva. Hay cuatro mariposas y dos luciérnagas enterradas en ella, sin espacio para moverse, y 8 diamantes sueltos. Por la mitad cruza una franja de tierra normal, con algunas rocas.
 
-**Cómo se pasa:** abrir un túnel hasta una mariposa, dejar que lo siga y alejarse. Cuando la tierra se cierre con la mariposa adentro, explota en diamantes. La luciérnaga del centro hay que evitarla, o atraparla igual para que deje de estorbar.
+**El desafío:** Se necesitan 20: los 8 diamantes más los de al menos dos mariposas. Los enemigos solo pueden moverse por los túneles que uno abre, y esos túneles se cierran detrás.
+
+**Cómo se pasa:** Abrir un túnel hasta una mariposa, dejar que lo siga y alejarse. Cuando la tierra se cierre con la mariposa adentro, explota en diamantes. Volver por la franja de tierra normal, que no se cierra. A las luciérnagas no conviene abrirles camino.
 
 **Con dos jugadores:** uno hace de cebo cavando y el otro mantiene abierto un túnel paralelo para escapar.
 
-**Qué haría falta:** un tipo de tierra que recuerde cuándo se cavó y vuelva a crecer. Ya existe el momento en que se cava cada cuadro, para la animación. Es fácil o mediano.
+**Qué haría falta:** un tipo de tierra que recuerde cuándo se cavó y vuelva a crecer. El juego ya guarda el momento en que se cava cada cuadro, para la animación. Es fácil o mediano.
 
 ---
+
+<a id="9-cueva-giratoria"></a>
 
 ## 9. Cueva giratoria
 
 **De dónde sale:** los puertos de gravedad de *Supaplex* y la opción de gravedad oculta de este mismo juego (la tecla G).
 
-**Qué hay de nuevo:** el **interruptor de gravedad** (`G`). Al pisarlo, la gravedad de toda la cueva gira un cuarto de vuelta: rocas y diamantes pasan a caer hacia la izquierda, hacia arriba o hacia la derecha.
+**Qué hay de nuevo:** el **interruptor de gravedad** (`G`). Al pisarlo, la gravedad de toda la cueva gira un cuarto de vuelta: rocas y diamantes pasan a caer hacia la izquierda, hacia arriba o hacia la derecha. Los niños, como siempre, no caen.
+
+**Necesarios:** 24 diamantes · **diamantes en el mapa:** 40 · **rocas:** 64 · **tiempo:** 180 s
 
 ```
 ########################################
-#12.....o.o.o.o.....W.....*.*.*.*......#
-#.......o.o.o.o.....W.....*.*.*.*......#
-#...G...............W...........G......#
-#WWWWWWWWWWWW..WWWWWWWWWWW..WWWWWWWWWWW#
-#.....*.*.*.*.......G......o.o.o.o....X#
+#12....................................#
+#...........G..............G...........#
+#..WWWWWWW.......o....o.......WWWWWWW..#
+#..Wooooo.....................W*****W..#
+#..Wooooo.....................W*****W..#
+#..Wooooo.....            ....WoooooW..#
+#..W*****.....            ....WoooooW..#
+#..W*****.....  B         ....WoooooW..#
+#..WWWWWWW....            ....W.....W..#
+#.............            .............#
+#.............            .............#
+#..W.....W....            ....WWWWWWW..#
+#..WoooooW....         B  .....oooooW..#
+#..WoooooW....            .....oooooW..#
+#..WoooooW....            .....oooooW..#
+#..W*****W.....................*****W..#
+#..W*****W.....................*****W..#
+#..WWWWWWW........o..o........WWWWWWW..#
+#...........G..............G...........#
+#....................................X.#
 ########################################
 ```
 
-**El desafío:** los diamantes están en bolsillos donde la gravedad normal los deja atrapados, o tapados por rocas que caen sobre el camino. Cada giro mueve todo, también las rocas que están junto a uno.
+**Qué hay:** En el centro hay una sala vacía con dos mariposas, y en cada esquina un bolsillo de ladrillo con 10 diamantes y 15 rocas. Cada bolsillo tiene la boca de un lado distinto:
+  - arriba a la izquierda, a la derecha (rocas encima, diamantes abajo);
+  - arriba a la derecha, por abajo (diamantes encima de las rocas);
+  - abajo a la izquierda, por arriba (diamantes al fondo, bajo las rocas);
+  - abajo a la derecha, a la izquierda.
 
-**Cómo se pasa:** antes de pisar un interruptor, mirar hacia dónde va a caer cada cosa y ponerse a salvo. Usar los giros para que los diamantes salgan de sus bolsillos hacia el pasillo, y las rocas hacia donde no estorban (o sobre una mariposa que pase por ahí).
+Hay cuatro interruptores alrededor de la sala.
 
-**Con dos jugadores:** el giro afecta a los dos, así que el que pisa el interruptor avisa (o espera a que el otro esté a salvo).
+**El desafío:** Se necesitan 24, de al menos tres bolsillos. Con la gravedad normal solo se vacía uno: el que tiene la boca abajo, cavándola desde un lado mientras caen primero las rocas. Los demás necesitan que la gravedad apunte hacia su boca, y cada giro mueve también las rocas de los otros bolsillos.
 
-**Qué haría falta:** casi nada: el juego ya sabe girar la gravedad. Solo falta la celda del interruptor y una flecha en pantalla que muestre hacia dónde cae todo.
+**Cómo se pasa:**
+
+Para cada bolsillo:
+  1. Cavar un canal desde su boca.
+  2. Ponerse fuera del camino.
+  3. Girar la gravedad hacia la boca: salen primero las rocas y después los diamantes.
+
+Antes de cada giro, mirar qué más se va a mover: las rocas de arriba y de abajo de la sala pueden caer sobre una mariposa (9 diamantes más) o sobre uno.
+
+**Con dos jugadores:** el giro afecta a los dos, así que quien pisa el interruptor avisa o espera a que el otro esté a salvo.
+
+**Qué haría falta:** casi nada: el juego ya sabe girar la gravedad. Falta la celda del interruptor y una flecha en pantalla que muestre hacia dónde cae todo.
 
 ---
 
+<a id="10-dos-llaves-una-puerta"></a>
+
 ## 10. Dos llaves, una puerta
 
-**De dónde sale:** los botones de *Fireboy & Watergirl* y *Portal 2*, donde dos jugadores se turnan para abrirse puertas.
+**De dónde sale:** los botones de *Fireboy & Watergirl* y *Portal 2*, donde dos jugadores se turnan para abrirse paso.
 
-**Qué hay de nuevo:** la **placa** (`_`) y la **compuerta** (`D`). La compuerta está abierta mientras alguien (un niño o una roca) está sobre su placa, y se cierra al soltarla.
+**Qué hay de nuevo:** la **placa** (`p` `q` `r` `s` `t` `u`) y su **compuerta** (`P` `Q` `R` `S` `T` `U`). La compuerta está abierta mientras alguien (un niño o una roca) está sobre su placa, y se cierra al soltarla, pero nunca sobre alguien.
+
+**Necesarios:** 8 diamantes · **diamantes en el mapa:** 10 · **rocas:** 6 · **tiempo:** 240 s
 
 ```
-##############################
-#1...._.......D..........*..X#
-#WWWWWWWWWWWWWDWWWWWWWDWWW...#
-#..*....o.....D...*...D......#
-#WWWWWWWWDWWWWWWWWWWWWWWW....#
-#2..*....D......_..*......_..#
-##############################
+########################################
+#.1.......W.........W.........W........#
+#.........W....r.o..W....t.o..W........#
+#.........W.........W.........W..*.....#
+#...*.....W.........W.........W........#
+#.........Q.........S.........U........#
+#.........W...*.....W.........W........#
+#.........W.........W...*.....W........#
+#.....p.o.W.........W.........W........#
+#.........W..*......W.........W........#
+#.........#####################....X...#
+#.........#####################........#
+#.........W.........W.........W........#
+#.........W.........W.....*...W........#
+#......*..W......*..W.........W........#
+#.........W.........W.........W........#
+#.........P.........R.........T........#
+#.........W.........W.........W....u.o.#
+#.........W.........W.......*.W........#
+#.........W....q.o..W....s.o..W........#
+#.2.......W.........W.........W.....*..#
+########################################
 ```
 
-**El desafío:** cada niño parte en su propio piso. Las compuertas de un piso se abren con placas del otro, así que ninguno puede avanzar solo: tienen que turnarse.
+**Qué hay:** Dos pisos largos separados por acero, unidos solo en los extremos. Cada piso está dividido en tramos por compuertas, y la placa de cada compuerta está **en el otro piso**. Junto a cada placa hay una roca, y hay diamantes en los tramos. J1 parte arriba, J2 abajo; la salida está en el extremo derecho, donde se juntan los dos pisos.
+
+**El desafío:** Ninguno puede avanzar solo: cada compuerta se abre desde el piso del otro. Se necesitan 8 diamantes de los 10.
 
 **Cómo se pasa:**
-1. J1 pisa su placa y abre la compuerta del piso de J2.
-2. J2 pasa y se para en una placa que le abre el paso a J1.
-3. Así se avanza hasta juntarse en la salida.
 
-En 1 jugador, el truco es empujar una roca sobre la placa para que la sostenga mientras uno pasa.
+La cadena va así:
+  1. J1 pisa `p` y J2 cruza `P`.
+  2. J2 pisa `q` y J1 cruza `Q`.
+  3. J1 pisa `r` y J2 cruza `R`.
+  4. J2 pisa `s` y J1 cruza `S`.
+  5. J1 pisa `t` y J2 cruza `T` al extremo derecho.
+  6. Allí J2 pisa `u` y J1 cruza `U`.
 
-**Con dos jugadores:** es el centro de la cueva, pensada para cooperativo, porque hay que hablar y coordinarse. En versus se puede usar al revés: soltar la placa en el momento justo para encerrar al otro.
+En 1 jugador se puede igual, pero es largo: hay que empujar la roca de cada placa sobre ella para que la sostenga, y cruzar de un piso al otro por el extremo izquierdo.
 
-**Qué haría falta:** placa y compuerta como celdas nuevas, y una lista de qué placa abre qué compuerta. La compuerta no debe cerrarse sobre un niño ni sobre una roca.
+**Con dos jugadores:** es el centro de la cueva, pensada para cooperativo: hay que hablar y coordinarse. En versus se puede usar al revés: soltar la placa en el momento justo para encerrar al otro.
+
+**Qué haría falta:** placa y compuerta como celdas nuevas, una lista de qué placa abre qué compuerta, y que la compuerta no se cierre sobre un niño ni sobre una roca.
 
 ---
 
@@ -310,17 +567,17 @@ En 1 jugador, el truco es empujar una roca sobre la placa para que la sostenga m
 
 ## Orden sugerido para implementarlas
 
-De lo más simple a lo más trabajoso, aprovechando lo que el motor ya tiene:
+De lo más simple a lo más trabajoso, aprovechando lo que el juego ya tiene:
 
-1. **Cueva giratoria:** la gravedad ya gira.
-2. **Pasos de un sentido.**
-3. **Nueces.**
-4. **Barriles:** usan la explosión que ya existe.
-5. **Placas.**
-6. **Tierra viva.**
-7. **Dos llaves, una puerta:** comparte las placas con la 5.
-8. **Llaves que se gastan.**
-9. **El comelón.**
-10. **Inundación.**
+1. **Cueva giratoria**: la gravedad ya gira.
+2. **Pasos de un sentido**.
+3. **Nueces**.
+4. **Barriles**: usan la explosión que ya existe.
+5. **Placas**.
+6. **Tierra viva**.
+7. **Dos llaves, una puerta**: comparte las placas con la 5.
+8. **Llaves que se gastan**.
+9. **El comelón**.
+10. **Inundación**.
 
 Todas son reglas de las cuevas originales, así que no tocan las cuevas aleatorias de entrenamiento ni su copia en Python. Las de dos jugadores se juegan igual en dos celulares, porque el juego ya sincroniza todo lo que pasa en la cueva.
