@@ -24,6 +24,8 @@ Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**
 
 ![Las 16 cuevas](docs/cuevas.png)
 
+**[Catálogo de cuevas de BD1 y BD2 (nivel 1)](docs/catalogo-cuevas.md):** cada una de las 41 cuevas con su mapa, qué hay, el desafío y cómo pasarla.
+
 Empujar una roca no cuesta siempre lo mismo: en cada tick que empujas se mueve con probabilidad 1/2, así que en promedio tarda dos ticks (lo que tarda una roca en empezar a caer y bajar una casilla); con suerte se mueve de inmediato, incluso si va cayendo junto a ti. En Entrenar PC se mantiene la regla fija de dos ticks.
 
 Cada jugador tiene su propio reloj: el paso empieza apenas aprietas (si el anterior ya terminó), sin esperar el tick de la cueva. Las rocas, diamantes y enemigos siguen el reloj de la cueva, así que el minero y el mundo no se mueven en el mismo instante. Un paso dura lo mismo que un tick. Las reglas no cambian; por ejemplo, la roca que se queda sin piso sigue esperando su tick antes de caer. En Entrenar PC todo sigue avanzando en ticks.
