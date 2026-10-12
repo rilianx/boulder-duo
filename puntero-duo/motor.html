@@ -1725,6 +1725,8 @@ function noteCur() {   // índice en PROG de la línea actual al viajar o al ver
 function drawCodeNote() {
   NOTE.rect = NOTE.up = NOTE.down = null;
   if (!PROG.length) return;
+  // abajo, sobre la línea que se arma; cuando aparecen las opciones (o un aviso) se oculta
+  if ((!REPLAY && $('chips').children.length) || !$('fb').hidden) return;   // al viajar en el tiempo sí se ve: muestra la línea actual
   const cvr = cv.getBoundingClientRect(), dr = $('dock').getBoundingClientRect();
   if (!cvr.height) return;
   const bottom = Math.min(LH - 8, (dr.top - cvr.top) / cvr.height * LH - 6);
@@ -1745,12 +1747,13 @@ function drawCodeNote() {
     const num = e.before || e.cls === 'err' ? visibleLine(k) : '';
     ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#b6b0a6'; ctx.textAlign = 'right';
     if (num) ctx.fillText(String(num), x0 + 12, y);
-    ctx.font = '700 18px Caveat, "Patrick Hand", cursive'; ctx.textAlign = 'left';
+    ctx.font = '16px "Patrick Hand", "Comic Sans MS", sans-serif'; ctx.textAlign = 'left';
     ctx.fillStyle = e.cls === 'err' ? '#c23a32' : e.cls === 'leak' ? '#b7791f' : e.cls === 'out' ? '#2f6b45' : k === cur ? '#2350b8' : e.cls === 'new' ? '#2350b8' : '#2e2c2a';
     let t = e.text; const max = w - 34;
     while (ctx.measureText(t).width > max && t.length > 4) t = t.slice(0, -2);
     if (t !== e.text) t = t.slice(0, -1) + '…';
-    ctx.fillText(t, x0 + 18, y + 1);
+    ctx.save(); ctx.translate(x0 + 18, y + 1 + hash(k * 13 + 5) * 0.8); ctx.rotate(hash(k * 7 + 3) * 0.006);   // apenas desalineada, como a mano
+    ctx.fillText(t, 0, 0); ctx.restore();
     if (k === cur) { ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.6; rLine(x0 + 16, y + 8, x0 + 20 + ctx.measureText(t).width, y + 8, 960 + k, 0.5, 1); }
   }
   ctx.font = '13px "Patrick Hand", sans-serif'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'center';
@@ -2077,7 +2080,6 @@ M = newMem();
 setView('board'); renderCode(); renderBuilder(); fit();
 if (FINE) $('cmd').focus();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
-try { document.fonts.load('700 18px Caveat'); } catch (e) {}   // la letra a mano del fragmento de código (el título que la usa se oculta en el celular)
 requestAnimationFrame(frame);
 // para pruebas y para el futuro modo teclado: ejecutar una línea escrita
 window.ejecutar = run;
