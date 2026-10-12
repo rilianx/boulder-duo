@@ -3,7 +3,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Patrick+Hand&family=Cutive+Mono&display=swap">
 <style>
-/* Cuaderno apaisado: arriba el dibujo (margen = stack, hoja = heap), debajo el programa en C y abajo el armador de líneas. Un solo look de papel, a propósito. */
+/* El cuaderno ocupa la pantalla (margen = stack, hoja = heap); abajo una tira con la línea que se arma y la bandeja de piezas.
+   El programa completo vive en otra pestaña; en pantallas anchas, las dos vistas van lado a lado. Un solo look de papel, a propósito. */
 :root{
   color-scheme: light;
   --paper:#fbf8ef;
@@ -28,10 +29,14 @@
 html,body{height:100%}
 body{margin:0;background:var(--paper);color:var(--graphite);font-family:var(--body);font-size:17px;line-height:1.25;
   padding-inline:16px;padding-block:8px;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.app{height:100%;max-width:980px;margin:0 auto;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}
+.app{height:100%;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:6px}
 
 header{display:flex;align-items:center;gap:5px;border-bottom:2px solid var(--margin);padding-bottom:4px;min-width:0}
-h1{font-family:var(--display);font-size:27px;margin:0;line-height:1;white-space:nowrap;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+h1{font-family:var(--display);font-size:27px;margin:0;line-height:1;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.vtabs{display:flex;gap:2px;flex:1;min-width:0}
+.vtab{font-family:var(--body);font-size:17px;padding:4px 10px 3px;border:none;border-bottom:3px solid transparent;background:transparent;color:var(--soft);cursor:pointer}
+.vtab.on{color:var(--graphite);border-bottom-color:var(--ink)}
+@media (max-width:480px){ h1{display:none} }
 h1 span{color:var(--ink)}
 h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:400}
 @media (max-width:430px){ h1 small{display:none} }
@@ -39,8 +44,35 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
   border-radius:10px 4px 10px 4px / 4px 10px 4px 10px;cursor:pointer;flex:none;padding:0}
 .mini:disabled{opacity:.35}
 
-.main{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(64px,1fr);gap:8px;min-height:0;overflow:hidden}
-.boardcell{position:relative;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+.views{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.vboard,.vcode{min-height:0;min-width:0;display:flex;flex-direction:column;gap:6px}
+.boardcell{position:relative;flex:1;min-height:0;min-width:0;display:flex;align-items:flex-start;justify-content:center}
+.vcode .code{flex:1}
+.codebar{display:flex;gap:6px;flex-wrap:wrap}
+.codebar button{font-family:var(--body);font-size:16px;padding:4px 12px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);border-radius:10px 4px 10px 4px;cursor:pointer}
+/* teléfono: una vista a la vez, con pestañas */
+body[data-view="board"] .vcode, body[data-view="code"] .vboard, body[data-view="code"] .build{display:none}
+/* pantalla ancha: cuaderno y código lado a lado, sin pestañas */
+@media (min-width:900px){
+  .views{grid-template-columns:minmax(0,1fr) 340px}
+  body[data-view] .vcode, body[data-view] .vboard{display:flex}
+  body[data-view="code"] .build{display:flex}
+  .vtabs{visibility:hidden}
+}
+/* la tira: la última línea escrita y la que se está armando */
+.strip{font-family:var(--code);font-size:clamp(13.5px,3.7vw,16px);border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;background:#fffdf6;padding:4px 8px;display:flex;flex-direction:column;gap:1px}
+.strip .ln{white-space:pre-wrap;overflow-wrap:anywhere}
+.strip .prev{color:var(--soft)}
+.strip .now{border:1.5px dashed var(--ink);border-radius:4px;background:#f6f9ff;padding:1px 4px}
+.strip .idle{font-family:var(--body);color:var(--soft);font-size:15px}
+.strip .cur{background:#dfe8ff;box-shadow:inset 3px 0 0 var(--ink);padding-left:4px}
+.strip .err{color:var(--bad)}
+.strip .leak{color:var(--warn)}
+.strip .out{color:var(--ok)}
+.strip{cursor:pointer}
+.strip .num{color:var(--lock);font-size:.85em;margin-right:6px}
+/* avisos: globos sobre el dibujo */
+.boardcell .fb{position:absolute;left:6px;right:6px;bottom:6px;z-index:3;box-shadow:3px 4px 0 rgba(46,44,42,.15)}
 canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
@@ -71,7 +103,9 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 @media (prefers-reduced-motion:reduce){ .hole.cur{animation:none} }
 .line .hint{font-family:var(--body);color:var(--soft);font-size:15px}
 .line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
-.chips{display:flex;flex-direction:column;gap:5px;max-height:36vh;overflow-y:auto}
+.chips{display:flex;flex-direction:column;gap:5px;max-height:42vh;overflow-y:auto}
+.chips:empty{display:none}
+.line .plus{font-size:17px;border:2px solid var(--ink);color:var(--ink);background:#fffdf6;border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;padding:3px 12px}
 .grp{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1.5px solid var(--lock)}
 .tab{font-family:var(--body);font-size:clamp(14px,3.9vw,16px);padding:3px 5px 2px;border:none;background:transparent;color:var(--soft);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1.5px}
@@ -104,7 +138,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
 .exbar .go{font-family:var(--body);font-size:15px;padding:2px 10px;border:2px solid var(--ok);background:var(--ok);color:#fff;border-radius:8px;cursor:pointer;margin-left:auto}
 .card .exlist{display:flex;flex-direction:column;gap:6px}
 .card .exlist button{text-align:left}
-.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.88);padding:6px;z-index:2}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;background:rgba(251,248,239,.88);padding:6px;z-index:10}
 .card{background:#fffdf6;border:2.5px solid var(--graphite);border-radius:18px 6px 16px 8px / 8px 16px 6px 18px;padding:14px 16px;max-width:460px;width:100%;
   display:flex;flex-direction:column;gap:9px;box-shadow:4px 5px 0 rgba(46,44,42,.18);max-height:100%;overflow-y:auto}
 .card h2{font-family:var(--display);font-size:32px;margin:0;line-height:1;text-wrap:balance}
@@ -120,32 +154,44 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
 
 <div class="app">
   <header>
-    <h1>Puntero <span>C</span> <small>motor</small></h1>
+    <h1>Puntero <span>C</span></h1>
+    <div class="vtabs" role="tablist">
+      <button class="vtab on" id="tabboard" role="tab">Cuaderno</button>
+      <button class="vtab" id="tabcode" role="tab">Código</button>
+    </div>
     <button class="mini" id="bundo" aria-label="Deshacer la última línea">↶</button>
     <button class="mini" id="bsort" aria-label="Ordenar el dibujo">⇅</button>
-    <button class="mini" id="bexport" aria-label="Ver el programa completo en C">{ }</button>
-    <button class="mini" id="breset" aria-label="Empezar de cero">⟲</button>
     <button class="mini" id="bhelp" aria-label="Menú: ejercicios y ayuda">☰</button>
   </header>
+  <div class="exbar" id="exbar" hidden></div>
 
-  <div class="main">
-    <div class="boardcell" id="cell">
-      <canvas id="cv" aria-label="Memoria: variables en el margen, nodos en la hoja"></canvas>
-      <div class="overlay" id="ov" hidden></div>
-    </div>
-    <div class="code" id="code" aria-live="polite"></div>
+  <div class="views">
+    <section class="vboard">
+      <div class="boardcell" id="cell">
+        <canvas id="cv" aria-label="Memoria: variables en el margen, nodos en la hoja"></canvas>
+        <div class="fb" id="fb" hidden>
+          <code id="fbcode"></code>
+          <p id="fbwhy"></p>
+          <div class="row" id="fbrow"></div>
+        </div>
+      </div>
+      <div class="strip" id="strip"></div>
+    </section>
+    <section class="vcode">
+      <div class="code" id="code" aria-live="polite"></div>
+      <div class="codebar">
+        <button id="bexport">Programa en C</button>
+        <button id="breport">Registro para consultas</button>
+        <button id="breset">⟲ Empezar de cero</button>
+      </div>
+    </section>
   </div>
 
   <div class="build">
-    <div class="exbar" id="exbar" hidden></div>
     <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
     <div class="chips" id="chips"></div>
-    <div class="fb" id="fb" hidden>
-      <code id="fbcode"></code>
-      <p id="fbwhy"></p>
-      <div class="row" id="fbrow"></div>
-    </div>
   </div>
+  <div class="overlay" id="ov" hidden></div>
 </div>
 
 <script>
@@ -420,7 +466,7 @@ function checkLeaks() {
 let PROG = [], UNDO = [], BUSY = false;
 async function run(text) {
   if (BUSY) return;
-  BUSY = true; hideFb(); renderBuilder();
+  BUSY = true; DRAWER_OPEN = false; hideFb(); renderBuilder();
   const snap = JSON.stringify(M);
   const entry = { text, src: text, sub: [], cls: 'new' };
   PROG.push(entry); renderCode();
@@ -504,6 +550,7 @@ function travel(path) {
   const top = +path.split('.')[0];
   const e = PROG[top];
   if (!e || !e.before) return;
+  setView('board');
   if (REPLAY) { REPLAY.abort = true; REPLAY.next = path; if (REPLAY.gate) REPLAY.gate(); return; }
   if (BUSY) return;
   replayFrom(top, path);
@@ -752,6 +799,7 @@ function leaveExercise() {
    §ptr cualquier valor puntero · §num número
    ════════════════════════════════════════════════════════════════════ */
 let BUILD = null, TAB = 'Variables';
+let DRAWER_OPEN = false;   // bandeja de piezas: se abre con ＋ línea o al armar una línea; se cierra al ejecutar
 const HOLE = /§(\w+)/;
 const STMTS = [
   ['Variables', [['Nodo *§new = §ptr;', 'decl'], ['§var = §ptr;', '']]],
@@ -813,7 +861,12 @@ function renderBuilder() {
   if (REPLAY) { PATH = null; renderReplayBar(box); return; }
   if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
   if (!BUILD) {
-    $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = true;
+    if (!PATH && !DRAWER_OPEN) {   // bandeja cerrada: el cuaderno se queda con la pantalla
+      $('ltxt').innerHTML = `<button class="plus" id="bplus">＋ línea</button> <span class="hint">${anyVars() ? 'o toca un post-it del dibujo' : 'para empezar'}</span>`;
+      $('bx').hidden = true; $('bplus').onclick = () => { DRAWER_OPEN = true; renderBuilder(); };
+      return;
+    }
+    $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = false;
     if (PATH) { renderPathBar(box); return; }
     const empty = !anyVars();
     if (empty) TAB = 'Variables';
@@ -869,7 +922,7 @@ function renderBuilder() {
     }
     return;
   }
-  $('ltxt').innerHTML = '<span class="hint">Completando la línea en el cuaderno ↑</span>'; $('bx').hidden = false;
+  $('ltxt').innerHTML = '<span class="hint">Completa la línea de arriba ↑</span>'; $('bx').hidden = false;
   if (PATH) renderPathBar(box);
   const ht = HOLE.exec(BUILD)[1];
   if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num' || ht === 'list') {
@@ -900,7 +953,7 @@ function guardRun(line) {
     [['Escribirla igual', () => { hideFb(); run(line); }], ['Cancelar', () => { hideFb(); renderBuilder(); }]]);
   renderBuilder();
 }
-$('bx').onclick = () => { BUILD = null; PATH = null; renderBuilder(); };
+$('bx').onclick = () => { BUILD = null; PATH = null; DRAWER_OPEN = false; renderBuilder(); };
 function lockedHint(fn) {
   if (SHORTCUTS[fn]) { showFb('info', '🔒 atajo ' + SHORTCUTS[fn].title, 'Se desbloquea así: ' + SHORTCUTS[fn].unlock, [['Entendido', hideFb]]); return; }
   showFb('info', '🔒 ' + FUNCS[fn].sig, 'Se desbloquea cuando lo haces a mano: ' + FUNCS[fn].unlock, [['Entendido', hideFb]]);
@@ -951,16 +1004,47 @@ function renderCode() {
   });
   el.querySelectorAll('.ln.jump').forEach(d => d.onclick = () => travel(d.dataset.path));
   PROG.forEach(e => { if (e.cls === 'new') setTimeout(() => { if (e.cls === 'new') e.cls = ''; }, 1600); });
+  renderStrip();
   const c = el.querySelector('.ln.cur');
   if (c) c.scrollIntoView({ block: 'nearest' }); else if (!REPLAY && !VIEW) { el.scrollTop = el.scrollHeight; const d = el.querySelector('.ln.draft'); if (d && EX) d.scrollIntoView({ block: 'nearest' }); }
 }
+// La tira bajo el dibujo: la última línea escrita y la que se está armando (o, al viajar en el tiempo, la anterior, la próxima y la siguiente).
+function renderStrip() {
+  const code = $('code'), out = [];
+  const row = (cls, num, html) => `<div class="ln ${cls}">${num ? `<span class="num">${num}</span>` : ''}${html}</div>`;
+  const numOf = path => { if (!path || path.includes('.')) return ''; const k = +path, e = PROG[k]; return e && (e.before || e.cls === 'err') ? visibleLine(k) : ''; };
+  const cur = code.querySelector('.ln.cur');
+  if (cur) {
+    const all = [...code.querySelectorAll('.ln[data-path]')], i = all.indexOf(cur);
+    for (const [d, cls] of [[-1, 'prev'], [0, 'cur'], [1, 'prev']]) {
+      const e = all[i + d]; if (!e) continue;
+      out.push(row(cls, numOf(e.dataset.path), esc(e.textContent.replace(/^[▾▸]/, '').trim())));
+    }
+  } else {
+    const k = PROG.length - 1, last = PROG[k];
+    if (last) out.push(row('prev ' + (last.cls === 'new' ? '' : last.cls || ''), numOf(String(k)), esc(last.text)));
+    const d = code.querySelector('.ln.draft');
+    if (d) out.push(`<div class="ln now">${d.innerHTML.trim()}</div>`);
+    else if (!last) out.push(`<div class="idle">Aquí aparece la línea que vas escribiendo. El programa completo está en «Código».</div>`);
+  }
+  $('strip').innerHTML = out.join('');
+}
+$('strip').onclick = () => { if (!BUILD && !PATH && !REPLAY && matchMedia('(max-width: 899px)').matches) setView('code'); };
+function setView(v) {
+  document.body.dataset.view = v;
+  $('tabboard').classList.toggle('on', v === 'board'); $('tabcode').classList.toggle('on', v === 'code');
+  $('tabboard').setAttribute('aria-selected', v === 'board'); $('tabcode').setAttribute('aria-selected', v === 'code');
+  if (v === 'code') renderCode();
+}
+$('tabboard').onclick = () => setView('board');
+$('tabcode').onclick = () => setView('code');
 function showFb(kind, code, why, buttons) {
-  const fb = $('fb'); fb.hidden = false; $('chips').hidden = true; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
+  const fb = $('fb'); fb.hidden = false; fb.className = 'fb' + (kind === 'warn' ? ' warn' : kind === 'info' ? ' info' : '');
   $('fbcode').textContent = code; $('fbwhy').textContent = why;
   const row = $('fbrow'); row.innerHTML = '';
   for (const [t, f] of buttons) { const b = document.createElement('button'); b.textContent = t; b.onclick = f; row.appendChild(b); }
 }
-function hideFb() { $('fb').hidden = true; $('chips').hidden = false; }
+function hideFb() { $('fb').hidden = true; }
 function showCard(html, onReady) {
   const ov = $('ov'); ov.hidden = false; ov.innerHTML = `<div class="card">${html}</div>`;
   if (onReady) onReady();
@@ -1045,6 +1129,7 @@ function showReport() {
   $('cother').textContent = 'Ver programa en C'; $('cother').onclick = showProgram;
 }
 $('bexport').onclick = showProgram;
+$('breport').onclick = showReport;
 function selectPre() { const r = document.createRange(); r.selectNodeContents($('expre')); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $('ccopy').textContent = 'Seleccionado: copia con el menú'; }
 $('bhelp').onclick = () => {
   const ex = EXERCISES.map((d, i) => `<button class="${EX && EX.def === d ? '' : 'sec'}" data-ex="${i}">${DONE.has(d.id) ? '✅' : '✎'} ${i + 1}. ${esc(d.title)} · <code>${esc(d.fn)}</code></button>`).join('');
@@ -1060,7 +1145,7 @@ $('bhelp').onclick = () => {
 function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
-    <p>Abajo eliges una línea y llenas sus huecos tocando piezas. La línea se ejecuta y se anima. A la derecha queda el programa.</p>
+    <p>Con <b>＋ línea</b> eliges qué escribir y llenas sus huecos tocando piezas (o siguiendo flechas desde un post-it). La línea se ejecuta y se anima. Bajo el dibujo ves la última línea; el programa completo está en la pestaña <b>Código</b>.</p>
     <ul>
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
@@ -1068,7 +1153,7 @@ function showHelp() {
       <li><code>crearNodo</code> y el atajo <code>p = p->next;</code> se desbloquean haciéndolos a mano. Las <b>operaciones de lista</b> (<code>insertarInicio</code>…) se desbloquean al completar su <b>ejercicio</b> (menú ☰). Al usar una función, toca su línea para ver los pasos por dentro.</li>
       <li>Si una línea usa dos o más <code>->next</code> seguidos, aparece una advertencia antes de ejecutarla.</li>
     </ul>
-    <p>⇅ ordena el dibujo · { } muestra el programa completo · ↶ deshace.</p>
+    <p>⇅ ordena el dibujo · ↶ deshace · las cajitas se pueden arrastrar.</p>
     <p>Desbloqueado: ${ALL_UNLOCKS.filter(f => UNLOCKED.has(f)).map(f => `<code>${esc(SHORTCUTS[f] ? SHORTCUTS[f].title : f + '()')}</code>`).join(', ') || 'nada todavía'}.</p>
     <div class="row"><button id="cg">Seguir</button><button class="sec" id="call">Desbloquear todas (profesor)</button><button class="sec" id="cnone">Volver a bloquear</button></div>`, () => {
     $('cg').onclick = closeCard;
@@ -1079,7 +1164,7 @@ function showHelp() {
 $('bundo').onclick = undo;
 $('breset').onclick = async () => {
   if (BUSY || REPLAY) return;
-  BUILD = null; PATH = null; hideFb();
+  BUILD = null; PATH = null; DRAWER_OPEN = false; hideFb(); setView('board');
   clearDrag();
   if (EX) { PROG = []; EX.results = []; await rebuildEdit(); renderExbar(); }
   else { M = newMem(); PROG = []; UNDO = []; for (const k in POS) delete POS[k]; }
@@ -1090,11 +1175,13 @@ $('bsort').onclick = () => { if (!BUSY) { clearDrag(); sortDrawing(); } };
 /* ════════════════════════════════════════════════════════════════════
    7. DIBUJO A MANO
    ════════════════════════════════════════════════════════════════════ */
-const LW = 400, LH = 250;
+const LW = 400;
+let LH = 250;   // el alto del cuaderno se adapta a la pantalla (con la bandeja cerrada)
 const MX = 70;
 const NW = 62, NH = 30, DW = 40;
 const PW = 60, PH = 24;
-const COLS = [116, 198, 280, 362], ROWS = 3;
+const COLS = [116, 198, 280, 362];
+let ROWS = 3;
 const Y = i => 86 + i * 66;   // filas de nodos, bajo el nivel de las listas
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -1413,12 +1500,21 @@ function beep(f, d = 0.08, type = 'triangle', v = 0.05, slide = 0) {
 function vibrate(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
 
 function fit() {
-  const cell = $('cell').getBoundingClientRect();
-  // el dibujo usa a lo más el 42 % del alto, y menos si el menú de abajo crece: el código siempre conserva unas líneas
-  const free = innerHeight - document.querySelector('header').offsetHeight - document.querySelector('.build').offsetHeight - 110;
-  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, Math.min(innerHeight * (EX ? 0.34 : 0.4), free) / LH));
+  const cellEl = $('cell');
+  if (!cellEl.offsetWidth) return;   // en el teléfono, con la pestaña de código abierta
+  const cell = cellEl.getBoundingClientRect();
+  // con la bandeja cerrada, el cuaderno toma todo el alto disponible; al abrirla solo se achica (no cambia de forma)
+  if (!$('chips').children.length) {
+    const lh = Math.round(Math.max(250, Math.min(760, (cell.height - 4) * LW / Math.max(1, cell.width - 4))));
+    if (lh < LH || lh - LH > 12) {
+      LH = lh; ROWS = Math.max(3, Math.floor((LH - 50) / 66));
+      if (M) for (const n of Object.values(M.nodes)) n.y = Math.min(n.y, LH - NH / 2 - 10);
+      paper = null;
+    }
+  }
+  const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (cell.height - 4) / LH));
   DPR = Math.min(3, window.devicePixelRatio || 1);
-  if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR)) {
+  if (Math.abs(s - SC) > 0.001 || cv.width !== Math.round(LW * s * DPR) || cv.height !== Math.round(LH * s * DPR)) {
     SC = s;
     cv.style.width = LW * SC + 'px'; cv.style.height = LH * SC + 'px';
     cv.width = Math.round(LW * SC * DPR); cv.height = Math.round(LH * SC * DPR);
@@ -1427,7 +1523,6 @@ function fit() {
 }
 new ResizeObserver(fit).observe($('cell'));
 addEventListener('resize', fit);
-new ResizeObserver(fit).observe(document.querySelector('.build'));
 
 /* ════════════════════════════════════════════════════════════════════
    9. TOCAR EL DIBUJO
@@ -1632,7 +1727,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 M = newMem();
-fit(); renderCode(); renderBuilder();
+setView('board'); renderCode(); renderBuilder(); fit();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
 requestAnimationFrame(frame);
 // para pruebas y para el futuro modo teclado: ejecutar una línea escrita
