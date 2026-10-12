@@ -824,6 +824,7 @@ let HELP_OPEN = false;
 try { HELP_OPEN = localStorage.getItem('punteroC.help') === '1'; } catch (e) {}
 let CUR = { s: 0, e: 0 };       // cursor del campo (se recuerda aunque el campo pierda el foco)
 let TYPED = null;
+let TAPPED = false;             // el campo recibió algo tocando el dibujo: se sugiere qué hacer con eso aunque la ayuda esté cerrada
 const FINE = matchMedia('(pointer: fine)').matches;   // con mouse y teclado físico, el campo queda con el foco               // la última línea escrita a mano: si falla, vuelve al campo para corregirla
 const HOLE = /§(\w+)/;
 const STMTS = [
@@ -899,10 +900,11 @@ function fillChips(box, typing) {
     $('bx').hidden = true;
     if (PATH && !PATH.ins) { renderPathBar(box); return; }
     if (PATH && PATH.ins) {
+      renderCompletions(box);
       if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `${PATH.expr} se escribe en la línea. En el nodo marcado: su casilla next sigue la flecha y su casilla value termina en ${PATH.expr}->value.`; box.appendChild(t); }
       return;
     }
-    if (!HELP_OPEN) return;   // sin ayuda: solo el campo de texto
+    if (!HELP_OPEN && !(TAPPED && $('cmd').value.trim())) return;   // sin ayuda: solo el campo (salvo justo después de tocar el dibujo)
     if ($('cmd').value.trim()) { renderCompletions(box); return; }
     const empty = !anyVars();
     if (empty) TAB = 'Variables';
@@ -977,11 +979,13 @@ function fillChips(box, typing) {
 /* ── Escribir con el teclado ── */
 function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; }
 function insertCmd(t) {   // escribe t donde está el cursor del campo
+  TAPPED = true;
   const el = $('cmd'), v = el.value, e = CUR.s + t.length;
   el.value = v.slice(0, CUR.s) + t + v.slice(CUR.e); CUR = { s: e, e, mine: true };
   try { el.setSelectionRange(e, e); } catch (er) {}
 }
 function syncPathInput() {   // la expresión que se va siguiendo en el dibujo se escribe en el campo
+  TAPPED = true;
   const el = $('cmd'), v = el.value, ins = PATH.ins;
   el.value = v.slice(0, ins.s) + PATH.expr + v.slice(ins.e);
   ins.e = ins.s + PATH.expr.length; CUR = { s: ins.e, e: ins.e, mine: true };
@@ -1018,7 +1022,7 @@ function submitCmd() {
   const t = normalizeC(raw);
   const ny = notYet(t);
   if (ny) { showFb('info', ny[0], ny[1], [['Entendido', hideFb]]); return; }
-  PATH = null; setCmd(''); TYPED = t;
+  PATH = null; setCmd(''); TYPED = t; TAPPED = false;
   guardRun(t);
 }
 // Sugerencias (con la ayuda desplegada): líneas completas que calzan con lo escrito, sin importar espacios ni mayúsculas.
@@ -1027,7 +1031,10 @@ function candidateLines() {
   const ptrVals = ['NULL', 'malloc(sizeof(Nodo))'];
   for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev') && !ptrVals.includes(pc.text)) ptrVals.push(pc.text);
   const nums = scope().filter(v => v.kind === 'int').map(v => v.name).concat(piecesFor('num').filter(pc => pc.text.endsWith('->value')).map(pc => pc.text));
-  const exprs = piecesFor('lv').filter(pc => !pc.text.endsWith('->prev')).map(pc => pc.text);
+
+  const isNode = t => t !== undefined && t !== null && t !== G && typeof t !== 'object' && nodeOf(t) && !nodeOf(t).freed;
+  const exprs = piecesFor('lv').map(pc => pc.text).filter(e => isNode(pathValue(e)));   // solo caminos que llegan a un nodo
+  const other = e => nums.filter(nv => !(nv.endsWith('->value') && pathValue(nv.slice(0, -7)) === pathValue(e)));   // sin «x->value = x->value»
   const out = [];
   const stem = (t, vals, close) => { out.push(t); for (const v of vals) if (t.slice(0, -3) !== v) out.push(t + v + close); };   // sin «p = p;»
   const ptrStem = t => { stem(t, ptrVals, ';'); if (UNLOCKED.has('crearNodo')) out.push(t + 'crearNodo('); };
@@ -1037,8 +1044,8 @@ function candidateLines() {
   for (const l of listVars()) ptrStem(l.name + '->head = ');
   for (const e of exprs) {
     ptrStem(e + '->next = ');
-    stem(e + '->value = ', nums, ';');
-    stem('if (' + e + '->value == ', nums, ')');
+    stem(e + '->value = ', other(e), ';');
+    stem('if (' + e + '->value == ', other(e), ')');
     out.push(`printf("%d", ${e}->value);`);
   }
   for (const e of ['NULL'].concat(exprs).slice(1)) { out.push(`free(${e});`); out.push(`if (${e} == NULL)`); }
@@ -1049,7 +1056,12 @@ const compact = t => t.replace(/\s+/g, '').toLowerCase();
 function completions() {
   const left = $('cmd').value.slice(0, CUR.e), k = compact(left);
   if (!k) return [];
-  const hits = candidateLines().filter(c => { const cc = compact(c); return cc.startsWith(k) && cc !== k; });
+  const bare = /^[\w>\-]+$/.test(k);   // una expresión sola (p, head->value…): también las líneas que la usan
+  const uses = cc => bare && ['(', ',', '='].some(pre => {   // la expresión completa (no un pedazo: p->n no es p->next)
+    for (let i = cc.indexOf(pre + k); i >= 0; i = cc.indexOf(pre + k, i + 1)) if (!/[\w>-]/.test(cc[i + pre.length + k.length] || '')) return true;
+    return false;
+  });
+  const hits = candidateLines().filter(c => { const cc = compact(c); return (cc.startsWith(k) || uses(cc)) && cc !== k; });
   // de a un paso: si hay comienzos de línea por completar («p->next = »), solo esos; al tocar uno aparecen sus valores
   const isStem = c => c.endsWith(' ') || (c.endsWith('(') && !c.includes(' = '));
   const stems = hits.filter(isStem);
@@ -1077,7 +1089,7 @@ function renderCompletions(box) {
 {
   const el = $('cmd');
   const track = () => { CUR = { s: el.selectionStart ?? el.value.length, e: el.selectionEnd ?? el.value.length }; };
-  el.addEventListener('input', () => { track(); const had = !!PATH; PATH = null; if (HELP_OPEN || had) renderBuilder(); });
+  el.addEventListener('input', () => { track(); const had = !!PATH || TAPPED; PATH = null; TAPPED = false; if (HELP_OPEN || had) renderBuilder(); });
   for (const ev of ['keyup', 'click', 'select']) el.addEventListener(ev, track);
   el.addEventListener('focus', () => { if (!CUR.mine) return; CUR.mine = false; try { el.setSelectionRange(Math.min(CUR.s, el.value.length), Math.min(CUR.e, el.value.length)); } catch (e) {} });   // vuelve donde se iba escribiendo (un toque en el campo lo mueve después)
   el.addEventListener('keydown', e => {
@@ -1757,7 +1769,7 @@ function pickValue(h, expr) {
   }
   tapFx(h);
   if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
-  PATH = null; setCmd(expr); renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
+  PATH = null; setCmd(expr); TAPPED = true; renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
 }
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
@@ -1786,7 +1798,8 @@ function tapComponent(h, comp) {
       if (comp === 'next') { PATH = { expr, ins: { s: CUR.s, e: CUR.e } }; renderBuilder(); return; }   // se puede seguir la flecha desde ahí
       PATH = null; insertCmd(expr); renderBuilder(); return;
     }
-    PATH = { expr: comp === 'next' ? expr : name }; renderBuilder();   // con la ayuda: las líneas posibles para ese nodo
+    if (comp === 'value') { PATH = null; setCmd(expr); TAPPED = true; renderBuilder(); return; }
+    PATH = { expr }; renderBuilder();   // con la ayuda: las líneas posibles para p->next
   };
   if (names.length === 1) { go(names[0]); return; }
   showFb('info', '¿Por cuál puntero?', `${names.join(' y ')} apuntan a este nodo. Hoy da lo mismo, pero el código queda distinto: si después mueves uno, ya no.`,
