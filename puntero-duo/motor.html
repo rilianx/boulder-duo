@@ -1045,6 +1045,7 @@ function submitCmd() {
 }
 // Sugerencias (con la ayuda desplegada): líneas completas que calzan con lo escrito, sin importar espacios ni mayúsculas.
 // «Nodo*» propone «Nodo *p = », «Nodo *p = malloc(sizeof(Nodo));»…; «p->n» propone «p->next = », «p->next = NULL;»…
+const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 function candidateLines() {
   const ptrVals = ['NULL', 'malloc(sizeof(Nodo))'];
   for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev') && !ptrVals.includes(pc.text)) ptrVals.push(pc.text);
@@ -1062,8 +1063,8 @@ function candidateLines() {
   for (const l of listVars()) ptrStem(l.name + '->head = ');
   for (const e of exprs) {
     ptrStem(e + '->next = ');
-    stem(e + '->value = ', other(e), ';');
-    stem('if (' + e + '->value == ', other(e), ')');
+    stem(e + '->value = ', other(e).concat(DIGITS), ';');
+    stem('if (' + e + '->value == ', other(e).concat(DIGITS), ')');
     out.push(`printf("%d", ${e}->value);`);
   }
   for (const e of ['NULL'].concat(exprs).slice(1)) { out.push(`free(${e});`); out.push(`if (${e} == NULL)`); }
@@ -1084,14 +1085,16 @@ function completions() {
   const isStem = c => c.endsWith(' ') || (c.endsWith('(') && !c.includes(' = '));
   const stems = hits.filter(isStem);
   const shown = hits.filter(c => isStem(c) || !stems.some(st => c.startsWith(st)));
-  return shown.sort((a, b) => isStem(b) - isStem(a) || a.length - b.length).slice(0, 12);
+  const lit = c => /[ (]\d[;)]$/.test(c);   // los números al final, después de las expresiones
+  return shown.sort((a, b) => isStem(b) - isStem(a) || lit(a) - lit(b) || a.length - b.length).slice(0, 16);
 }
 // «＝» pasa de la izquierda a la derecha (en un if, «==»)
 function sideStep() {
   const t = normalizeC($('cmd').value);
   let m;
-  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return { label: '== →', text: `if (${m[1]} == ` };
-  if (/^[\w>-]+$/.test(t)) return { label: '＝ →', text: t + ' = ' };
+  const known = e => scope().some(v => v.kind === 'int' && v.name === e) || (/^\w+(->(next|head))*(->value)?$/.test(e) && pathValue(e.replace(/->value$/, '')) !== undefined);   // una expresión completa y real
+  if ((m = /^if \(([\w>-]+)\)?$/.exec(t)) && known(m[1])) return { label: '== →', text: `if (${m[1]} == ` };
+  if (/^[\w>-]+$/.test(t) && known(t) && !scope().some(v => v.kind === 'int' && v.name === t)) return { label: '＝ →', text: t + ' = ' };
   return null;
 }
 function renderCompletions(box) {
@@ -1105,7 +1108,10 @@ function renderCompletions(box) {
   const list = completions().filter(x => !st || x !== st.text);
   const g = document.createElement('div'); g.className = 'grp';
   for (const x of list) {
-    const b = mkChip(x, '', () => {
+    const raw = $('cmd').value.slice(0, CUR.e), typed = normalizeC(raw).replace(/;$/, '');
+    // solo lo que falta, si lo escrito termina en un corte (espacio, =, (, *): «…0;» en vez de «head->value = 0;»
+    const label = /[\s=(,*]$/.test(raw) && typed.length > 3 && x.startsWith(typed) && x.length > typed.length + 1 ? '…' + x.slice(typed.length).trimStart() : x;
+    const b = mkChip(label, '', () => {
       const el = $('cmd'), rest = el.value.slice(CUR.e);
       el.value = x + rest; CUR = { s: x.length, e: x.length, mine: true }; LASTTAP = null;
       try { el.setSelectionRange(CUR.e, CUR.e); } catch (e) {}
