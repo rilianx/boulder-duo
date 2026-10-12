@@ -94,7 +94,7 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 @keyframes fade{to{background:transparent}}
 
 .build{display:flex;flex-direction:column;gap:6px;min-height:0;pointer-events:auto;background:rgba(251,248,239,.95);border:1.5px dashed var(--soft);border-radius:10px 4px 10px 6px;padding:5px 7px;box-shadow:0 -3px 10px rgba(251,248,239,.9)}
-.build.closed{align-self:flex-start;border-style:solid;border-color:transparent;background:rgba(251,248,239,.85);box-shadow:none;padding:3px 5px}
+.build.closed{border-style:solid;border-color:transparent;background:rgba(251,248,239,.85);box-shadow:none;padding:3px 5px}
 .build.closed .line{border-bottom:none;min-height:0;padding:0}
 .line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
   border-bottom:1.5px dashed var(--soft);padding:2px 2px 4px}
@@ -108,7 +108,13 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 .line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
 .chips{display:flex;flex-direction:column;gap:5px;min-height:0;overflow-y:auto}
 .chips:empty{display:none}
-.line .plus{font-size:17px;border:2px solid var(--ink);color:var(--ink);background:#fffdf6;border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;padding:3px 12px}
+.line input{flex:1;min-width:0;font-family:var(--code);font-size:max(16px,clamp(14px,3.8vw,17px));color:var(--graphite);background:#fffdf6;border:2px solid var(--ink);
+  border-radius:8px 3px 8px 3px;padding:4px 7px;outline:none;-webkit-user-select:text;user-select:text}
+.line input:focus{box-shadow:0 0 0 3px #d3e0ff}
+.line input:disabled{opacity:.5}
+.line #bgo{border-color:var(--ink);color:var(--ink);background:#fffdf6}
+.line #bhelpd{padding:2px 7px}
+.line #bhelpd[aria-pressed="true"]{border-color:var(--ink);background:#eef3ff}
 .grp{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1.5px solid var(--lock)}
 .tab{font-family:var(--body);font-size:clamp(14px,3.9vw,16px);padding:3px 5px 2px;border:none;background:transparent;color:var(--soft);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1.5px}
@@ -180,7 +186,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
           </div>
           <div class="strip" id="strip"></div>
           <div class="build">
-            <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
+            <div class="line"><span class="txt" id="ltxt" hidden></span><input id="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="escribe una línea en C…" aria-label="Línea de C"><button id="bgo" aria-label="Ejecutar la línea">⏎</button><button id="bhelpd" aria-pressed="false" aria-label="Mostrar u ocultar la ayuda">🧩</button><button id="bx" hidden>✕</button></div>
             <div class="chips" id="chips"></div>
           </div>
         </div>
@@ -471,7 +477,7 @@ function checkLeaks() {
 let PROG = [], UNDO = [], BUSY = false;
 async function run(text) {
   if (BUSY) return;
-  BUSY = true; DRAWER_OPEN = false; hideFb(); renderBuilder();
+  BUSY = true; hideFb(); renderBuilder();
   const snap = JSON.stringify(M);
   const entry = { text, src: text, sub: [], cls: 'new' };
   PROG.push(entry); renderCode();
@@ -486,8 +492,10 @@ async function run(text) {
     renderCode(); shake();
     showFb('bad', '✗ ' + text, e.msg, [['Entendido', hideFb]]);
     beep(160, 0.12, 'square', 0.03); setTimeout(() => beep(120, 0.15, 'square', 0.03), 90); vibrate([30, 40, 30]);
+    if (TYPED === text) { setCmd(TYPED); TYPED = null; }
     BUSY = false; renderBuilder(); return;
   }
+  TYPED = null;
   UNDO.push({ mem: snap, prog: PROG.indexOf(entry) });
   entry.before = snap;
   if (entry.sub.length) entry.open = false;   // las funciones quedan plegadas; se abren tocándolas
@@ -508,6 +516,7 @@ async function run(text) {
   if (Object.values(M.nodes).some(n => n.mallocd && n.initV && n.initN)) unlock('crearNodo');
   renderCode();
   BUSY = false; renderBuilder();
+  if (FINE && !REPLAY && document.body.dataset.view !== 'code') $('cmd').focus();
   if (PENDING_UNLOCK.length) showUnlock(PENDING_UNLOCK.shift());
 }
 function undo() {
@@ -804,7 +813,12 @@ function leaveExercise() {
    §ptr cualquier valor puntero · §num número
    ════════════════════════════════════════════════════════════════════ */
 let BUILD = null, TAB = 'Variables';
-let DRAWER_OPEN = false;   // bandeja de piezas: se abre con ＋ línea o al armar una línea; se cierra al ejecutar
+// Por defecto se escribe la línea con el teclado. 🧩 despliega la ayuda: las piezas y, mientras se escribe, sugerencias para completar.
+let HELP_OPEN = false;
+try { HELP_OPEN = localStorage.getItem('punteroC.help') === '1'; } catch (e) {}
+let CUR = { s: 0, e: 0 };       // cursor del campo (se recuerda aunque el campo pierda el foco)
+let TYPED = null;
+const FINE = matchMedia('(pointer: fine)').matches;   // con mouse y teclado físico, el campo queda con el foco               // la última línea escrita a mano: si falla, vuelve al campo para corregirla
 const HOLE = /§(\w+)/;
 const STMTS = [
   ['Variables', [['Nodo *§new = §ptr;', 'decl'], ['§var = §ptr;', '']]],
@@ -862,19 +876,27 @@ function mkChip(label, cls, onclick) {
 function renderBuilder() {
   renderCode();   // el cuaderno muestra la línea en construcción (o deja de mostrarla)
   const box = $('chips'); box.innerHTML = '';
-  document.querySelector('.build').classList.remove('closed');
   $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
+  const typing = !REPLAY && !BUILD;   // el campo de texto: se escribe ahí salvo al armar con piezas o al viajar en el tiempo
+  for (const id of ['cmd', 'bgo', 'bhelpd']) $(id).hidden = !typing;
+  $('ltxt').hidden = typing; $('cmd').disabled = $('bgo').disabled = BUSY;
+  $('bhelpd').setAttribute('aria-pressed', HELP_OPEN);
+  if (PATH && PATH.ins) syncPathInput();
+  fillChips(box, typing);
+  document.querySelector('.build').classList.toggle('closed', !box.children.length);
+}
+function fillChips(box, typing) {
   if (REPLAY) { PATH = null; renderReplayBar(box); return; }
-  if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
+  if (BUSY) { if (!typing) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; } $('bx').hidden = true; return; }
   if (!BUILD) {
-    if (!PATH && !DRAWER_OPEN) {   // bandeja cerrada: el cuaderno se queda con la pantalla
-      $('ltxt').innerHTML = `<button class="plus" id="bplus">＋ línea</button> <span class="hint">${anyVars() ? 'o toca un post-it del dibujo' : 'para empezar'}</span>`;
-      $('bx').hidden = true; $('bplus').onclick = () => { DRAWER_OPEN = true; renderBuilder(); };
-      document.querySelector('.build').classList.add('closed');
+    $('bx').hidden = true;
+    if (PATH && !PATH.ins) { renderPathBar(box); return; }
+    if (PATH && PATH.ins) {
+      if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `Sigue las flechas tocando la casilla next del nodo marcado: ${PATH.expr} se escribe en la línea.`; box.appendChild(t); }
       return;
     }
-    $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = false;
-    if (PATH) { renderPathBar(box); return; }
+    if (!HELP_OPEN) return;   // sin ayuda: solo el campo de texto
+    if ($('cmd').value.trim()) { renderCompletions(box); return; }
     const empty = !anyVars();
     if (empty) TAB = 'Variables';
     const tabs = document.createElement('div'); tabs.className = 'tabs';
@@ -929,7 +951,7 @@ function renderBuilder() {
     }
     return;
   }
-  $('ltxt').innerHTML = '<span class="hint">Completa la línea de arriba ↑</span>'; $('bx').hidden = false;
+  $('ltxt').innerHTML = '<span class="hint">Completa la línea de arriba ↑ con las piezas</span>'; $('bx').hidden = false;
   if (PATH) renderPathBar(box);
   const ht = HOLE.exec(BUILD)[1];
   if (ht === 'ptr' || ht === 'lv' || ht === 'var' || ht === 'num' || ht === 'list') {
@@ -945,6 +967,101 @@ function renderBuilder() {
   }
   box.appendChild(g);
 }
+/* ── Escribir con el teclado ── */
+function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; }
+function syncPathInput() {   // la expresión que se va siguiendo en el dibujo se escribe en el campo
+  const el = $('cmd'), v = el.value, ins = PATH.ins;
+  el.value = v.slice(0, ins.s) + PATH.expr + v.slice(ins.e);
+  ins.e = ins.s + PATH.expr.length; CUR = { s: ins.e, e: ins.e, mine: true };
+  try { el.setSelectionRange(ins.e, ins.e); } catch (e) {}
+}
+// Tolerante con los espacios: «p=p -> next» se lee como «p = p->next;» se escribe igual que en el código.
+function normalizeC(t) {
+  t = t.replace(/\s+/g, ' ').trim();
+  t = t.replace(/\bstruct (Nodo|Lista)\b/g, '$1');
+  t = t.replace(/\s*->\s*/g, '->').replace(/\s*\(\s*/g, '(').replace(/\s*\)/g, ')').replace(/\s*,\s*/g, ', ');
+  t = t.replace(/\s*(==|!=)\s*/g, ' $1 ').replace(/\s*(?<![=!<>])=(?!=)\s*/g, ' = ');
+  t = t.replace(/\b(Nodo|Lista)\s*\*\s*/g, '$1 *');
+  t = t.replace(/^if\(/, 'if (').replace(/\s*;$/, ';');
+  t = t.replace(/^printf\("%d(?:\\n| )?", /, 'printf("%d", ');
+  t = t.replace(/sizeof\(\s*(Nodo)\s*\)/, 'sizeof($1)');
+  return t;
+}
+// Lo que es C válido pero el motor todavía no entiende (o un error típico) se explica antes de ejecutar, sin anotarlo en el programa.
+function notYet(t) {
+  if (/^(while|for|do)\b/.test(t)) return ['Bucles: todavía no', 'Los bucles todavía no están en el motor. Por ahora escribe cada paso, por ejemplo p = p->next; varias veces.'];
+  if (/^else\b/.test(t)) return ['else: todavía no', 'Por ahora un if solo responde verdadero o falso en el código; el else llegará con los bloques.'];
+  if (/[{}]/.test(t)) return ['Bloques { }: todavía no', 'Por ahora cada línea va sola, sin llaves.'];
+  if (/^int\b/.test(t)) return ['Variables int: todavía no', 'Por ahora se declaran punteros: Nodo *p = …; o Lista *l = crearLista();'];
+  if (/\(\*\s*\w+\)\./.test(t)) return ['Se escribe con ->', 'En C (*p).next es lo mismo que p->next. Este motor usa solo la forma p->next.'];
+  if (/\bnull\b|\bNull\b/.test(t)) return ['NULL va con mayúsculas', 'En C el puntero nulo se escribe NULL.'];
+  if (/^\w+(->\w+)*\.(next|value|head)\b|[^\w]\w+\.(next|value|head)\b/.test(t)) return ['Con un puntero se usa ->', 'p es un puntero: a su campo se llega con p->next, no con p.next.'];
+  if (!/^if \(/.test(t) && !t.endsWith(';')) return ['Falta el ;', 'En C cada instrucción termina con punto y coma: ' + t + ';'];
+  if (/^if \(.*\);$/.test(t)) return ['El if va sin ;', 'Con un ; después del if, el if quedaría vacío. Escríbelo sin ;, por ejemplo if (p == NULL)'];
+  return null;
+}
+function submitCmd() {
+  if (BUSY || REPLAY || BUILD) return;
+  const raw = $('cmd').value; if (!raw.trim()) return;
+  const t = normalizeC(raw);
+  const ny = notYet(t);
+  if (ny) { showFb('info', ny[0], ny[1], [['Entendido', hideFb]]); return; }
+  PATH = null; setCmd(''); TYPED = t;
+  guardRun(t);
+}
+// Sugerencias para completar la palabra que se está escribiendo (solo con la ayuda desplegada)
+function completions() {
+  const el = $('cmd'), left = el.value.slice(0, CUR.e);
+  const tok = (/[\w>*\-]*$/.exec(left) || [''])[0].replace(/^\*/, '');
+  const atStart = !left.slice(0, left.length - tok.length).trim();
+  const c = new Set();
+  if (atStart) {
+    for (const n of NAMES) if (!lookup(n)) c.add('Nodo *' + n + ' = ');
+    if (!EX && !lookup('l')) c.add('Lista *l = crearLista();');
+    c.add('free('); c.add('if ('); c.add('printf("%d", ');
+    for (const f of FUNC_ORDER) if (UNLOCKED.has(f) && FUNCS[f] && !FUNCS[f].returns && !(EX && f === EX.def.fn)) c.add(f + '(');
+  }
+  for (const l of listVars()) { c.add(l.name); c.add(l.name + '->head'); }
+  for (const v of declaredPtrs()) { c.add(v.name); c.add(v.name + '->next'); c.add(v.name + '->value'); }
+  for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev')) c.add(pc.text);
+  c.add('NULL');
+  if (UNLOCKED.has('crearNodo')) c.add('crearNodo(');
+  for (const iv of scope().filter(v => v.kind === 'int')) c.add(iv.name);
+  return { tok, list: [...c].filter(x => x !== tok && x.toLowerCase().startsWith(tok.toLowerCase()) && (tok || !atStart || x.length < 30)).slice(0, 12) };
+}
+function renderCompletions(box) {
+  const { tok, list } = completions();
+  const g = document.createElement('div'); g.className = 'grp';
+  for (const x of list) {
+    const b = mkChip(x, '', () => {
+      const el = $('cmd'), v = el.value, end = CUR.e, st = end - tok.length;
+      el.value = v.slice(0, st) + x + v.slice(end); CUR = { s: st + x.length, e: st + x.length, mine: true };
+      try { el.setSelectionRange(CUR.e, CUR.e); } catch (e) {}
+      renderBuilder();
+    });
+    b.addEventListener('pointerdown', e => e.preventDefault());   // no le quita el foco al campo (el teclado no se cierra)
+    g.appendChild(b);
+  }
+  if (g.children.length) box.appendChild(g);
+  const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
+  tip.textContent = list.length ? 'Toca una sugerencia para completar. ⏎ ejecuta la línea.' : 'Sin sugerencias para lo que escribes. ⏎ ejecuta la línea.';
+  box.appendChild(tip);
+}
+{
+  const el = $('cmd');
+  const track = () => { CUR = { s: el.selectionStart ?? el.value.length, e: el.selectionEnd ?? el.value.length }; };
+  el.addEventListener('input', () => { track(); const had = !!PATH; PATH = null; if (HELP_OPEN || had) renderBuilder(); });
+  for (const ev of ['keyup', 'click', 'select']) el.addEventListener(ev, track);
+  el.addEventListener('focus', () => { if (!CUR.mine) return; CUR.mine = false; try { el.setSelectionRange(Math.min(CUR.s, el.value.length), Math.min(CUR.e, el.value.length)); } catch (e) {} });   // vuelve donde se iba escribiendo (un toque en el campo lo mueve después)
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); submitCmd(); }
+    else if (e.key === 'ArrowUp' && !el.value) {   // repetir la última línea escrita
+      const last = [...PROG].reverse().find(x => x.src); if (last) { e.preventDefault(); setCmd(last.src); }
+    } else if (e.key === 'Escape') { PATH = null; renderBuilder(); }
+  });
+  $('bgo').onclick = submitCmd;
+  $('bhelpd').onclick = () => { HELP_OPEN = !HELP_OPEN; try { localStorage.setItem('punteroC.help', HELP_OPEN ? '1' : '0'); } catch (e) {} if (!HELP_OPEN && PATH && !PATH.ins) PATH = null; renderBuilder(); };
+}
 function fill(piece) {
   PATH = null;
   BUILD = BUILD.replace(HOLE, piece);
@@ -957,10 +1074,10 @@ function guardRun(line) {
   if (!m) { run(line); return; }
   const n = m[2].split('->next').length - 1;
   showFb('warn', '⚠ ' + line, `Para llegar a ese nodo usas ${n} ->next seguidos (${m[1] + m[2]}). Es fácil perderse contando saltos: lo usual es acercar un puntero primero, por ejemplo avanzando p con p = p->next.`,
-    [['Escribirla igual', () => { hideFb(); run(line); }], ['Cancelar', () => { hideFb(); renderBuilder(); }]]);
+    [['Escribirla igual', () => { hideFb(); run(line); }], ['Cancelar', () => { hideFb(); if (TYPED === line) { setCmd(line); TYPED = null; } renderBuilder(); }]]);
   renderBuilder();
 }
-$('bx').onclick = () => { BUILD = null; PATH = null; DRAWER_OPEN = false; renderBuilder(); };
+$('bx').onclick = () => { BUILD = null; PATH = null; renderBuilder(); };
 function lockedHint(fn) {
   if (SHORTCUTS[fn]) { showFb('info', '🔒 atajo ' + SHORTCUTS[fn].title, 'Se desbloquea así: ' + SHORTCUTS[fn].unlock, [['Entendido', hideFb]]); return; }
   showFb('info', '🔒 ' + FUNCS[fn].sig, 'Se desbloquea cuando lo haces a mano: ' + FUNCS[fn].unlock, [['Entendido', hideFb]]);
@@ -1000,7 +1117,7 @@ function renderCode() {
     let h = holeHTML(BUILD);
     if (PATH) h = h.replace(/<span class="hole cur">[^<]*<\/span>/, `<span class="hole cur">${esc(PATH.expr)}</span>`);
     lines.push(`<div class="ln draft">  ${h}</div>`);
-  } else if (PATH && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr)}</span> …</div>`);
+  } else if (PATH && !PATH.ins && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr)}</span> …</div>`);
   if (EX && EX.def) lines.push('<div class="ln dim">}</div>', `<div class="ln dim">// main: insertarInicio(lista, ${EX.def.v});</div>`);
   el.innerHTML = lines.join('');
   el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
@@ -1032,7 +1149,7 @@ function renderStrip() {
     if (last) out.push(row('prev ' + (last.cls === 'new' ? '' : last.cls || ''), numOf(String(k)), esc(last.text)));
     const d = code.querySelector('.ln.draft');
     if (d) out.push(`<div class="ln now">${d.innerHTML.trim()}</div>`);
-    else if (!last) out.push(`<div class="idle">Aquí aparece la línea que vas escribiendo. El programa completo está en «Código».</div>`);
+    else if (!last) out.push(`<div class="idle">Escribe abajo una línea en C, por ejemplo Lista *l = crearLista(); · 🧩 abre la ayuda</div>`);
   }
   $('strip').innerHTML = out.join('');
 }
@@ -1152,7 +1269,7 @@ $('bhelp').onclick = () => {
 function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
-    <p>Con <b>＋ línea</b> eliges qué escribir y llenas sus huecos tocando piezas (o siguiendo flechas desde un post-it). La línea se ejecuta y se anima. Bajo el dibujo ves la última línea; el programa completo está en la pestaña <b>Código</b>.</p>
+    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
     <ul>
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
@@ -1171,7 +1288,7 @@ function showHelp() {
 $('bundo').onclick = undo;
 $('breset').onclick = async () => {
   if (BUSY || REPLAY) return;
-  BUILD = null; PATH = null; DRAWER_OPEN = false; hideFb(); setView('board');
+  BUILD = null; PATH = null; setCmd(''); hideFb(); setView('board');
   clearDrag();
   if (EX) { PROG = []; EX.results = []; await rebuildEdit(); renderExbar(); }
   else { M = newMem(); PROG = []; UNDO = []; for (const k in POS) delete POS[k]; }
@@ -1589,7 +1706,7 @@ function tapBoard(e) {
     if (BUILD && type === 'num') return;
     tapFx(h);
     if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
-    PATH = { expr: h.v.name }; renderBuilder(); return;
+    PATH = { expr: h.v.name }; if (!BUILD && (!HELP_OPEN || $('cmd').value.trim())) PATH.ins = { s: CUR.s, e: CUR.e }; renderBuilder(); return;
   }
   if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
     if (BUILD && (type === 'var' || type === 'num')) return;
@@ -1736,6 +1853,7 @@ function frame(now) {
 }
 M = newMem();
 setView('board'); renderCode(); renderBuilder(); fit();
+if (FINE) $('cmd').focus();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
 requestAnimationFrame(frame);
 // para pruebas y para el futuro modo teclado: ejecutar una línea escrita
