@@ -1396,6 +1396,9 @@ let LH = 250;   // el alto del cuaderno se adapta a la pantalla (con la bandeja 
 const MX = 70;
 const NW = 62, NH = 30, DW = 40;
 const PW = 60, PH = 24;
+// La caja Lista: un rectángulo más grande con «Lista» adentro y solo la casilla del puntero head, con (l->head) arriba
+const LBW = 80, LBH = 34, LCW = 26;
+const listBox = L => { const l = L.x - LBW / 2, Tp = L.y - LBH / 2, cl = l + LBW - LCW - 5, ct = L.y - LCW / 2; return { l, Tp, cl, ct, cx: cl + LCW / 2, cy: L.y }; };
 const COLS = [116, 198, 280, 362];
 let ROWS = 3;
 const Y = i => 86 + i * 66;   // filas de nodos, bajo el nivel de las listas
@@ -1462,7 +1465,8 @@ function arrowGeo(a, n, opts) {
     const b = { x: mid + opts.lane, y: n.y - NH / 2 - 1 };
     return { a, b, c1: { x: a.x + 40, y: Math.min(a.y, b.y - 22) }, c2: { x: b.x, y: b.y - 22 } };
   }
-  if (opts.fromVar) { const b = { x: L - 1, y: n.y + opts.lane }; return { a, b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } }; }
+  if (opts.fromVar) { const b = { x: n.x - LBW / 2 - 1, y: n.y + opts.lane };   // a la caja Lista, por su izquierda
+ return { a, b, c1: { x: a.x + Math.min(36, (b.x - a.x) * 0.5), y: a.y }, c2: { x: b.x - 24, y: b.y } }; }
   if (opts.self) { const b = { x: mid, y: n.y - NH / 2 - 1 }; return { a, b, c1: { x: a.x + 42, y: a.y - 4 }, c2: { x: mid + 4, y: b.y - 46 } }; }
   const dy = n.y - a.y;
   // otra fila: sale del punto hacia abajo (o arriba), cruza por el pasillo entre filas y entra al medio del nodo
@@ -1581,14 +1585,16 @@ function drawVar(it) {
 }
 // caja Lista: [head | •], con su título encima
 function drawList(L) {
-  const x = L.x, y = L.y, l = x - NW / 2, Tp = y - NH / 2;
-  ctx.fillStyle = '#f1f6ef'; ctx.fillRect(l, Tp, NW, NH);
-  ctx.strokeStyle = '#2f6b45'; ctx.lineWidth = 1.8; rRect(l, Tp, NW, NH, 911);
-  rLine(l + DW, Tp, l + DW, Tp + NH, 913, 0.6, 1);
-  ctx.fillStyle = '#2f6b45'; ctx.font = '15px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('head', l + DW / 2, y + 1);
-  ctx.font = '11px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Lista', l, Tp - 7);
-  if (L.head === null) { ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.4; rLine(l + DW + 3, Tp + NH - 4, l + NW - 3, Tp + 4, 917, 0.5, 1); }
+  const B = listBox(L);
+  ctx.fillStyle = '#f1f6ef'; ctx.fillRect(B.l, B.Tp, LBW, LBH);
+  ctx.strokeStyle = '#2f6b45'; ctx.lineWidth = 1.8; rRect(B.l, B.Tp, LBW, LBH, 911);
+  ctx.fillStyle = '#2f6b45'; ctx.font = '15px "Patrick Hand", sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('Lista', B.l + 6, L.y + 1);
+  ctx.fillStyle = '#fffdf6'; ctx.fillRect(B.cl, B.ct, LCW, LCW);   // la casilla del puntero head
+  ctx.strokeStyle = '#2f6b45'; ctx.lineWidth = 1.5; rRect(B.cl, B.ct, LCW, LCW, 913, 0.6);
+  const nm = listVars().filter(v => v.t === L.id).map(v => v.name + '->head');   // su nombre en chico, arriba de la casilla
+  if (nm.length) { ctx.fillStyle = '#2350b8'; ctx.font = '11px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('(' + nm.join(', ') + ')', B.cx, B.Tp - 6); }
+  if (L.head === null) { ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.4; rLine(B.cl + 3, B.ct + LCW - 3, B.cl + LCW - 3, B.ct + 3, 917, 0.5, 1); }
 }
 function drawNode(n) {
   const P = POS[n.id], x = P.x, y = P.y, L = x - NW / 2, Tp = y - NH / 2;
@@ -1609,7 +1615,7 @@ function drawNode(n) {
   if (n.next === null) { ctx.lineWidth = 1.4; rLine(L + DW + 3, Tp + NH - 4, L + NW - 3, Tp + 4, n.id * 5 + 1, 0.5, 1); }
   else { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, 7); ctx.fill(); }
   // debajo: su referencia en chico a la izquierda, (p) · (p, q) · (l->head), y su dirección a la derecha
-  const nm = n.dead ? [] : namesOf(n.id);
+  const nm = n.dead ? [] : namesOf(n.id).filter(x => !x.includes('->'));   // (l->head) ya se ve sobre la casilla de la Lista
   let addrY = Tp + NH + 8;
   if (nm.length) {
     ctx.font = '11px "Patrick Hand", sans-serif'; ctx.fillStyle = '#2350b8'; ctx.textAlign = 'left';
@@ -1660,7 +1666,7 @@ function draw(dt) {
   }
   // head de cada lista
   for (const L of Object.values(M.lists)) {
-    const a = { x: L.x + NW / 2 - (NW - DW) / 2, y: L.y }, key = 'l' + L.id;
+    const a = { x: listBox(L).cx, y: L.y }, key = 'l' + L.id;
     if (L.head === null || L.head === G || !nodeOf(L.head)) continue;
     seenKeys.add(key);
     AR[key] = lerpGeo(AR[key] || arrowGeo(a, { x: a.x, y: a.y }, {}), nextGeo(a, key, L.head), k * 1.2);
@@ -1706,7 +1712,7 @@ function draw(dt) {
   ctx.fillStyle = '#2e2c2a';
   for (const id of liveIds()) { const n = nodeOf(id); if (n.next !== null && !n.dead) { const P = POS[id]; ctx.beginPath(); ctx.arc(P.x + NW / 2 - (NW - DW) / 2, P.y, 3, 0, 7); ctx.fill(); } }
   for (const it of layout) if (it.v && (it.v.kind === 'ptr' || it.v.kind === 'list')) { ctx.beginPath(); ctx.arc(it.x + PW - 5, it.y + PH / 2, 2.6, 0, 7); ctx.fill(); }
-  for (const L of Object.values(M.lists)) if (L.head !== null) { ctx.beginPath(); ctx.arc(L.x + NW / 2 - (NW - DW) / 2, L.y, 3, 0, 7); ctx.fill(); }
+  for (const L of Object.values(M.lists)) if (L.head !== null) { ctx.beginPath(); ctx.arc(listBox(L).cx, L.y, 3, 0, 7); ctx.fill(); }
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -1759,8 +1765,8 @@ addEventListener('resize', fit);
 function hitTest(pt) {
   for (const it of varLayout()) if (it.v && (!it.frame || it.frame === M.frames.at(-1)) && pt.x >= it.x - 2 && pt.x <= it.x + PW + 4 && pt.y >= it.y - 4 && pt.y <= it.y + PH + 4) return { kind: 'var', v: it.v };
   for (const L of Object.values(M.lists)) {
-    const l = L.x - NW / 2, Tp = L.y - NH / 2;
-    if (pt.y >= Tp - 6 && pt.y <= Tp + NH + 6 && pt.x >= l - 4 && pt.x <= l + NW + 6) return { kind: pt.x >= l + DW - 2 ? 'lhead' : 'list', lid: L.id };
+    const B = listBox(L);
+    if (pt.y >= B.Tp - 6 && pt.y <= B.Tp + LBH + 6 && pt.x >= B.l - 4 && pt.x <= B.l + LBW + 8) return { kind: pt.x >= B.cl - 6 ? 'lhead' : 'list', lid: L.id };
   }
   const ids = liveIds().reverse();
   for (const id of ids) {
@@ -1944,7 +1950,8 @@ cv.addEventListener('pointermove', e => {
   const pt = toBoard(e);
   if (!DRAG.moved && Math.hypot(pt.x - DRAG.start.x, pt.y - DRAG.start.y) < 7) return;
   if (!DRAG.moved) { DRAG.moved = true; try { cv.setPointerCapture(e.pointerId); } catch (er) {} }
-  const x = Math.max(MX + NW / 2 + 4, Math.min(LW - NW / 2 - 2, pt.x + DRAG.dx));
+  const hw = DRAG.key.startsWith('L') ? LBW / 2 : NW / 2;   // media anchura: la caja Lista es más ancha
+  const x = Math.max(MX + hw + 4, Math.min(LW - hw - 2, pt.x + DRAG.dx));
   const y = Math.max(NH / 2 + 8, Math.min(LH - NH / 2 - 10, pt.y + DRAG.dy));
   DRAG.o.x = x; DRAG.o.y = y;
   const P = DRAG.key.startsWith('L') ? null : POS[DRAG.key];
@@ -1968,9 +1975,9 @@ function drawTapHints(layout) {
   if (PATH && !BUSY) {   // el nodo al que llega el camino, con su casilla next lista para seguir
     const id = pathValue(PATH.expr);
     if (id && id.list) {
-      const L = listOf(id.list), l = L.x - NW / 2, Tp = L.y - NH / 2;
-      ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(l - 4, Tp - 4, NW + 8, NH + 8, 448, 0.7); ctx.restore();
-      glow(l + DW, Tp, NW - DW, NH, a + 0.15);
+      const B = listBox(listOf(id.list));
+      ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(B.l - 4, B.Tp - 4, LBW + 8, LBH + 8, 448, 0.7); ctx.restore();
+      glow(B.cl, B.ct, LCW, LCW, a + 0.15);
     } else if (id !== null && id !== undefined && id !== G && POS[id]) {
       const P = POS[id], L = P.x - NW / 2, Tp = P.y - NH / 2;
       ctx.save(); ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.6; rRect(L - 4, Tp - 4, NW + 8, NH + 8, 447, 0.7); ctx.restore();
@@ -1989,7 +1996,7 @@ function drawTapHints(layout) {
     TAP.t -= 0.05;
     ctx.save(); ctx.globalAlpha = TAP.t; ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.5;
     if (TAP.kind === 'var') { const it = layout.find(o => o.v === TAP.v); if (it) rRect(it.x - 3, it.y - 3, PW + 6, PH + 6, 444, 0.6); }
-    else if (TAP.lid && listOf(TAP.lid)) { const L = listOf(TAP.lid); rRect(L.x - NW / 2 + DW - 2, L.y - NH / 2 - 3, NW - DW + 5, NH + 6, 449, 0.6); }
+    else if (TAP.lid && listOf(TAP.lid)) { const B = listBox(listOf(TAP.lid)); rRect(B.cl - 3, B.ct - 3, LCW + 6, LCW + 6, 449, 0.6); }
     else if (POS[TAP.id]) { const P = POS[TAP.id], L = P.x - NW / 2, Tp = P.y - NH / 2; if (TAP.kind === 'next') rRect(L + DW - 2, Tp - 3, NW - DW + 5, NH + 6, 445, 0.6); else if (TAP.kind === 'self') rRect(L - 3, Tp - 3, NW + 6, NH + 6, 447, 0.6); else rRect(L - 3, Tp - 3, DW + 4, NH + 6, 446, 0.6); }
     ctx.restore();
   }
