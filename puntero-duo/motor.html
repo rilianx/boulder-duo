@@ -51,16 +51,15 @@ h1 small{font-family:var(--body);font-size:15px;color:var(--soft);font-weight:40
 .codebar{display:flex;gap:6px;flex-wrap:wrap}
 .codebar button{font-family:var(--body);font-size:16px;padding:4px 12px;border:2px solid var(--graphite);background:#fffdf6;color:var(--graphite);border-radius:10px 4px 10px 4px;cursor:pointer}
 /* teléfono: una vista a la vez, con pestañas */
-body[data-view="board"] .vcode, body[data-view="code"] .vboard, body[data-view="code"] .build{display:none}
+body[data-view="board"] .vcode, body[data-view="code"] .vboard{display:none}
 /* pantalla ancha: cuaderno y código lado a lado, sin pestañas */
 @media (min-width:900px){
   .views{grid-template-columns:minmax(0,1fr) 340px}
   body[data-view] .vcode, body[data-view] .vboard{display:flex}
-  body[data-view="code"] .build{display:flex}
   .vtabs{visibility:hidden}
 }
 /* la tira: la última línea escrita y la que se está armando */
-.strip{font-family:var(--code);font-size:clamp(13.5px,3.7vw,16px);border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;background:#fffdf6;padding:4px 8px;display:flex;flex-direction:column;gap:1px}
+.strip{pointer-events:auto;flex:none;box-shadow:0 -3px 10px rgba(251,248,239,.9);font-family:var(--code);font-size:clamp(13.5px,3.7vw,16px);border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;background:#fffdf6;padding:4px 8px;display:flex;flex-direction:column;gap:1px}
 .strip .ln{white-space:pre-wrap;overflow-wrap:anywhere}
 .strip .prev{color:var(--soft)}
 .strip .now{border:1.5px dashed var(--ink);border-radius:4px;background:#f6f9ff;padding:1px 4px}
@@ -72,7 +71,9 @@ body[data-view="board"] .vcode, body[data-view="code"] .vboard, body[data-view="
 .strip{cursor:pointer}
 .strip .num{color:var(--lock);font-size:.85em;margin-right:6px}
 /* avisos: globos sobre el dibujo */
-.boardcell .fb{position:absolute;left:6px;right:6px;bottom:6px;z-index:3;box-shadow:3px 4px 0 rgba(46,44,42,.15)}
+.boardcell .fb{box-shadow:3px 4px 0 rgba(46,44,42,.15);pointer-events:auto}
+/* el dock va dentro del cuaderno, pegado abajo: el aviso y las piezas no achican el dibujo */
+.dock{position:absolute;bottom:0;left:0;right:0;z-index:3;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;padding:6px;pointer-events:none;max-height:62%}
 canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--graphite);border-radius:6px 12px 8px 10px / 10px 6px 12px 8px;background:var(--paper)}
 
 .code{min-height:0;min-width:0;overflow-y:auto;background:#fffdf6;border:1.5px solid var(--graphite);border-radius:4px 10px 6px 8px;
@@ -92,7 +93,9 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 .code .new{background:var(--note);animation:fade 1.6s ease-out forwards}
 @keyframes fade{to{background:transparent}}
 
-.build{display:flex;flex-direction:column;gap:6px;padding-bottom:env(safe-area-inset-bottom,0px)}
+.build{display:flex;flex-direction:column;gap:6px;min-height:0;pointer-events:auto;background:rgba(251,248,239,.95);border:1.5px dashed var(--soft);border-radius:10px 4px 10px 6px;padding:5px 7px;box-shadow:0 -3px 10px rgba(251,248,239,.9)}
+.build.closed{align-self:flex-start;border-style:solid;border-color:transparent;background:rgba(251,248,239,.85);box-shadow:none;padding:3px 5px}
+.build.closed .line{border-bottom:none;min-height:0;padding:0}
 .line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
   border-bottom:1.5px dashed var(--soft);padding:2px 2px 4px}
 .line .txt{flex:1;min-width:0;overflow-wrap:anywhere}
@@ -103,7 +106,7 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 @media (prefers-reduced-motion:reduce){ .hole.cur{animation:none} }
 .line .hint{font-family:var(--body);color:var(--soft);font-size:15px}
 .line button{font-family:var(--body);font-size:16px;border:1.5px solid var(--soft);background:transparent;color:var(--soft);border-radius:8px;padding:2px 10px;cursor:pointer}
-.chips{display:flex;flex-direction:column;gap:5px;max-height:42vh;overflow-y:auto}
+.chips{display:flex;flex-direction:column;gap:5px;min-height:0;overflow-y:auto}
 .chips:empty{display:none}
 .line .plus{font-size:17px;border:2px solid var(--ink);color:var(--ink);background:#fffdf6;border-radius:12px 4px 12px 4px / 4px 12px 4px 12px;padding:3px 12px}
 .grp{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
@@ -169,13 +172,19 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     <section class="vboard">
       <div class="boardcell" id="cell">
         <canvas id="cv" aria-label="Memoria: variables en el margen, nodos en la hoja"></canvas>
-        <div class="fb" id="fb" hidden>
-          <code id="fbcode"></code>
-          <p id="fbwhy"></p>
-          <div class="row" id="fbrow"></div>
+        <div class="dock" id="dock">
+          <div class="fb" id="fb" hidden>
+            <code id="fbcode"></code>
+            <p id="fbwhy"></p>
+            <div class="row" id="fbrow"></div>
+          </div>
+          <div class="strip" id="strip"></div>
+          <div class="build">
+            <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
+            <div class="chips" id="chips"></div>
+          </div>
         </div>
       </div>
-      <div class="strip" id="strip"></div>
     </section>
     <section class="vcode">
       <div class="code" id="code" aria-live="polite"></div>
@@ -187,10 +196,6 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
     </section>
   </div>
 
-  <div class="build">
-    <div class="line"><span class="txt" id="ltxt"></span><button id="bx" hidden>✕</button></div>
-    <div class="chips" id="chips"></div>
-  </div>
   <div class="overlay" id="ov" hidden></div>
 </div>
 
@@ -857,6 +862,7 @@ function mkChip(label, cls, onclick) {
 function renderBuilder() {
   renderCode();   // el cuaderno muestra la línea en construcción (o deja de mostrarla)
   const box = $('chips'); box.innerHTML = '';
+  document.querySelector('.build').classList.remove('closed');
   $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
   if (REPLAY) { PATH = null; renderReplayBar(box); return; }
   if (BUSY) { $('ltxt').innerHTML = '<span class="hint">ejecutando…</span>'; $('bx').hidden = true; return; }
@@ -864,6 +870,7 @@ function renderBuilder() {
     if (!PATH && !DRAWER_OPEN) {   // bandeja cerrada: el cuaderno se queda con la pantalla
       $('ltxt').innerHTML = `<button class="plus" id="bplus">＋ línea</button> <span class="hint">${anyVars() ? 'o toca un post-it del dibujo' : 'para empezar'}</span>`;
       $('bx').hidden = true; $('bplus').onclick = () => { DRAWER_OPEN = true; renderBuilder(); };
+      document.querySelector('.build').classList.add('closed');
       return;
     }
     $('ltxt').innerHTML = PATH ? '<span class="hint">Siguiendo punteros desde el dibujo:</span>' : '<span class="hint">Elige qué línea escribir.</span>'; $('bx').hidden = false;
@@ -1503,14 +1510,12 @@ function fit() {
   const cellEl = $('cell');
   if (!cellEl.offsetWidth) return;   // en el teléfono, con la pestaña de código abierta
   const cell = cellEl.getBoundingClientRect();
-  // con la bandeja cerrada, el cuaderno toma todo el alto disponible; al abrirla solo se achica (no cambia de forma)
-  if (!$('chips').children.length) {
-    const lh = Math.round(Math.max(250, Math.min(760, (cell.height - 4) * LW / Math.max(1, cell.width - 4))));
-    if (lh < LH || lh - LH > 12) {
-      LH = lh; ROWS = Math.max(3, Math.floor((LH - 50) / 66));
-      if (M) for (const n of Object.values(M.nodes)) n.y = Math.min(n.y, LH - NH / 2 - 10);
-      paper = null;
-    }
+  // el cuaderno toma todo el alto disponible; las piezas se abren encima, dentro del mismo cuaderno
+  const lh = Math.round(Math.max(250, Math.min(760, (cell.height - 4) * LW / Math.max(1, cell.width - 4))));
+  if (lh < LH || lh - LH > 12) {
+    LH = lh; ROWS = Math.max(3, Math.floor((LH * 0.55 - 50) / 66));   // las filas automáticas quedan sobre la bandeja de piezas
+    if (M) for (const n of Object.values(M.nodes)) n.y = Math.min(n.y, LH - NH / 2 - 10);
+    paper = null;
   }
   const s = Math.max(0.4, Math.min((cell.width - 4) / LW, (cell.height - 4) / LH));
   DPR = Math.min(3, window.devicePixelRatio || 1);
@@ -1520,6 +1525,9 @@ function fit() {
     cv.width = Math.round(LW * SC * DPR); cv.height = Math.round(LH * SC * DPR);
     paper = null;
   }
+  const dock = $('dock'), w = LW * SC;   // el dock calza con el ancho de la hoja
+  dock.style.left = (cell.width - w) / 2 + 'px'; dock.style.right = (cell.width - w) / 2 + 'px';
+  dock.style.bottom = Math.max(0, cell.height - LH * SC) + 'px';
 }
 new ResizeObserver(fit).observe($('cell'));
 addEventListener('resize', fit);
