@@ -1009,33 +1009,48 @@ function submitCmd() {
   PATH = null; setCmd(''); TYPED = t;
   guardRun(t);
 }
-// Sugerencias para completar la palabra que se está escribiendo (solo con la ayuda desplegada)
-function completions() {
-  const el = $('cmd'), left = el.value.slice(0, CUR.e);
-  const tok = (/[\w>*\-]*$/.exec(left) || [''])[0].replace(/^\*/, '');
-  const atStart = !left.slice(0, left.length - tok.length).trim();
-  const c = new Set();
-  if (atStart) {
-    for (const n of NAMES) if (!lookup(n)) c.add('Nodo *' + n + ' = ');
-    if (!EX && !lookup('l')) c.add('Lista *l = crearLista();');
-    c.add('free('); c.add('if ('); c.add('printf("%d", ');
-    for (const f of FUNC_ORDER) if (UNLOCKED.has(f) && FUNCS[f] && !FUNCS[f].returns && !(EX && f === EX.def.fn)) c.add(f + '(');
+// Sugerencias (con la ayuda desplegada): líneas completas que calzan con lo escrito, sin importar espacios ni mayúsculas.
+// «Nodo*» propone «Nodo *p = », «Nodo *p = malloc(sizeof(Nodo));»…; «p->n» propone «p->next = », «p->next = NULL;»…
+function candidateLines() {
+  const ptrVals = ['NULL', 'malloc(sizeof(Nodo))'];
+  for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev') && !ptrVals.includes(pc.text)) ptrVals.push(pc.text);
+  const nums = scope().filter(v => v.kind === 'int').map(v => v.name);
+  const exprs = piecesFor('lv').filter(pc => !pc.text.endsWith('->prev')).map(pc => pc.text);
+  const out = [];
+  const stem = (t, vals, close) => { out.push(t); for (const v of vals) if (t.slice(0, -3) !== v) out.push(t + v + close); };   // sin «p = p;»
+  const ptrStem = t => { stem(t, ptrVals, ';'); if (UNLOCKED.has('crearNodo')) out.push(t + 'crearNodo('); };
+  if (!EX && !lookup('l')) out.push('Lista *l = crearLista();');
+  for (const n of NAMES) if (!lookup(n)) ptrStem('Nodo *' + n + ' = ');
+  for (const v of declaredPtrs()) ptrStem(v.name + ' = ');
+  for (const l of listVars()) ptrStem(l.name + '->head = ');
+  for (const e of exprs) {
+    ptrStem(e + '->next = ');
+    stem(e + '->value = ', nums, ';');
+    stem('if (' + e + '->value == ', nums, ')');
+    out.push(`printf("%d", ${e}->value);`);
   }
-  for (const l of listVars()) { c.add(l.name); c.add(l.name + '->head'); }
-  for (const v of declaredPtrs()) { c.add(v.name); c.add(v.name + '->next'); c.add(v.name + '->value'); }
-  for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev')) c.add(pc.text);
-  c.add('NULL');
-  if (UNLOCKED.has('crearNodo')) c.add('crearNodo(');
-  for (const iv of scope().filter(v => v.kind === 'int')) c.add(iv.name);
-  return { tok, list: [...c].filter(x => x !== tok && x.toLowerCase().startsWith(tok.toLowerCase()) && (tok || !atStart || x.length < 30)).slice(0, 12) };
+  for (const e of ['NULL'].concat(exprs).slice(1)) { out.push(`free(${e});`); out.push(`if (${e} == NULL)`); }
+  for (const f of FUNC_ORDER) if (UNLOCKED.has(f) && FUNCS[f] && !FUNCS[f].returns && !(EX && f === EX.def.fn)) out.push(f + '(');
+  return [...new Set(out)];
+}
+const compact = t => t.replace(/\s+/g, '').toLowerCase();
+function completions() {
+  const left = $('cmd').value.slice(0, CUR.e), k = compact(left);
+  if (!k) return [];
+  const hits = candidateLines().filter(c => { const cc = compact(c); return cc.startsWith(k) && cc !== k; });
+  // de a un paso: si hay comienzos de línea por completar («p->next = »), solo esos; al tocar uno aparecen sus valores
+  const isStem = c => c.endsWith(' ') || (c.endsWith('(') && !c.includes(' = '));
+  const stems = hits.filter(isStem);
+  const shown = hits.filter(c => isStem(c) || !stems.some(st => c.startsWith(st)));
+  return shown.sort((a, b) => isStem(b) - isStem(a) || a.length - b.length).slice(0, 12);
 }
 function renderCompletions(box) {
-  const { tok, list } = completions();
+  const list = completions();
   const g = document.createElement('div'); g.className = 'grp';
   for (const x of list) {
     const b = mkChip(x, '', () => {
-      const el = $('cmd'), v = el.value, end = CUR.e, st = end - tok.length;
-      el.value = v.slice(0, st) + x + v.slice(end); CUR = { s: st + x.length, e: st + x.length, mine: true };
+      const el = $('cmd'), rest = el.value.slice(CUR.e);
+      el.value = x + rest; CUR = { s: x.length, e: x.length, mine: true };
       try { el.setSelectionRange(CUR.e, CUR.e); } catch (e) {}
       renderBuilder();
     });
