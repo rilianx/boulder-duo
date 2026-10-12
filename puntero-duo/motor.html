@@ -324,6 +324,12 @@ async function evalPtr(e, ctx) {
 function evalInt(e) {
   e = e.trim();
   if (/^-?\d+$/.test(e)) return +e;
+  const mv = /^(.+)->value$/.exec(e);
+  if (mv) {   // el valor de un nodo, por ejemplo nuevo->value = p->value;
+    const n = deref(evalChain(mv[1]), mv[1]);
+    if (n.v === null) throw new CErr(`Comportamiento indefinido: ${e} es basura (nunca se le asignó un valor).`, 'run');
+    return n.v;
+  }
   const v = lookup(e);
   if (v && v.kind === 'int') return v.val;
   throw new CErr(`error: '${e}' no es un número.`, 'compile');
@@ -857,6 +863,7 @@ function piecesFor(type) {
   }
   if (type === 'num') {
     for (const iv of scope().filter(v => v.kind === 'int')) out.push({ text: iv.name, cls: 'fn' });   // parámetros int, como v
+    for (const v of vs) { const t = v.t; if (t !== null && t !== G && nodeOf(t) && !nodeOf(t).freed && nodeOf(t).v !== null) out.push({ text: v.name + '->value' }); }
     for (let i = 0; i <= 9; i++) out.push({ text: String(i), cls: 'num' });
   }
   return out;
@@ -969,6 +976,11 @@ function fillChips(box, typing) {
 }
 /* ── Escribir con el teclado ── */
 function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; }
+function insertCmd(t) {   // escribe t donde está el cursor del campo
+  const el = $('cmd'), v = el.value, e = CUR.s + t.length;
+  el.value = v.slice(0, CUR.s) + t + v.slice(CUR.e); CUR = { s: e, e, mine: true };
+  try { el.setSelectionRange(e, e); } catch (er) {}
+}
 function syncPathInput() {   // la expresión que se va siguiendo en el dibujo se escribe en el campo
   const el = $('cmd'), v = el.value, ins = PATH.ins;
   el.value = v.slice(0, ins.s) + PATH.expr + v.slice(ins.e);
@@ -1014,7 +1026,7 @@ function submitCmd() {
 function candidateLines() {
   const ptrVals = ['NULL', 'malloc(sizeof(Nodo))'];
   for (const pc of piecesFor('ptr')) if (!pc.fn && !pc.text.endsWith('->prev') && !ptrVals.includes(pc.text)) ptrVals.push(pc.text);
-  const nums = scope().filter(v => v.kind === 'int').map(v => v.name);
+  const nums = scope().filter(v => v.kind === 'int').map(v => v.name).concat(piecesFor('num').filter(pc => pc.text.endsWith('->value')).map(pc => pc.text));
   const exprs = piecesFor('lv').filter(pc => !pc.text.endsWith('->prev')).map(pc => pc.text);
   const out = [];
   const stem = (t, vals, close) => { out.push(t); for (const v of vals) if (t.slice(0, -3) !== v) out.push(t + v + close); };   // sin «p = p;»
@@ -1284,7 +1296,7 @@ $('bhelp').onclick = () => {
 function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
-    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
+    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. En un nodo con nombre, su casilla value escribe <code>p->value</code> y su casilla next <code>p->next</code> (si dos punteros lo apuntan, se pregunta por cuál). <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
     <ul>
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
@@ -1680,7 +1692,7 @@ function hitTest(pt) {
   for (const id of ids) {
     const P = POS[id]; if (!P) continue;
     const L = P.x - NW / 2, Tp = P.y - NH / 2;
-    if (pt.y < Tp - 6 || pt.y > Tp + NH + 6 || pt.x < L - 4 || pt.x > L + NW + 8) continue;
+    if (pt.y < Tp - 6 || pt.y > Tp + NH + 6 || pt.x < L - 4 || pt.x > L + NW + 16) continue;
     return { kind: pt.x >= L + DW - 2 ? 'next' : 'node', id };
   }
   return null;
@@ -1730,22 +1742,42 @@ function tapBoard(e) {
     hint('Por un puntero', 'A la Lista también se llega por un puntero: toca el post-it que la apunta (por ejemplo l) y luego su casilla head.');
     return;
   }
-  const n = nodeOf(h.id);
-  if (h.kind === 'node') {
-    if (BUILD && type === 'num' && n.v !== null && !n.dead) { tapFx(h); fill(String(n.v)); return; }
-    hint('Por un puntero', 'En C no se toca un nodo directamente: se llega a él por un puntero. Toca el post-it de una variable y sigue las flechas tocando la casilla next de cada nodo.');
+  // casilla next del nodo marcado: se sigue la flecha (p → p->next → p->next->next)
+  if (h.kind === 'next' && PATH && pathValue(PATH.expr) === h.id && !(BUILD && type === 'var')) { tapFx(h); PATH.expr += '->next'; renderBuilder(); return; }
+  // casillas de un nodo con nombre: value → p->value · next → p->next
+  tapComponent(h, h.kind === 'node' ? 'value' : 'next');
+}
+// Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
+function namesOf(id) {
+  const vars = scope().filter(v => v.kind === 'ptr' && v.t === id).map(v => v.name);
+  if (vars.length) return vars;
+  return listVars().filter(l => l.t !== null && listOf(l.t) && listOf(l.t).head === id).map(l => l.name + '->head');
+}
+function tapComponent(h, comp) {
+  const n = nodeOf(h.id), type = holeType(), names = namesOf(h.id);
+  if (!names.length || n.dead) {
+    hint('Por un puntero', PATH ? `Ese nodo no es el que está marcado. Sigue las flechas desde ${PATH.expr}: toca la casilla next del nodo marcado.` : 'Este nodo no tiene nombre: ninguna variable lo apunta. Para llegar a él, toca el post-it de una variable y sigue las flechas tocando la casilla next de cada nodo.');
     return;
   }
-  // casilla next
-  if (BUILD && type === 'var') return;
-  if (!PATH) { hint('Primero un puntero', 'Para llegar a esa casilla, parte tocando el post-it de una variable y sigue las flechas hasta ese nodo.'); return; }
-  const cur = pathValue(PATH.expr);
-  if (cur !== h.id) {
-    hint(PATH.expr, cur === null ? `${PATH.expr} es NULL: no hay casilla next que seguir.` : cur && cur.list ? `${PATH.expr} apunta a una Lista: primero toca su casilla head.` : `Esa casilla no es la del nodo al que apunta ${PATH.expr}. Sigue las flechas: toca la casilla next del nodo marcado.`);
-    return;
+  if (BUILD) {   // la casilla tiene que calzar con el hueco que se está llenando
+    const fits = comp === 'value' ? type === 'num' : type === 'ptr' || type === 'lv';
+    if (!fits) { hint('No calza aquí', comp === 'value' ? 'La casilla value es un número: sirve donde la línea pide un número.' : type === 'num' ? 'Aquí va un número: toca la casilla value de un nodo, o un número.' : 'Aquí va el nombre de una variable: toca su post-it.'); return; }
+    if (comp === 'value' && n.v === null) { hint('Valor basura', `${names[0]}->value nunca recibió un valor: es basura.`); return; }
   }
   tapFx(h);
-  PATH.expr += '->next'; renderBuilder();
+  const go = name => {
+    hideFb();
+    const expr = name + '->' + comp;
+    if (BUILD) { PATH = null; fill(expr); return; }
+    if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: se inserta en el campo
+      if (comp === 'next') { PATH = { expr, ins: { s: CUR.s, e: CUR.e } }; renderBuilder(); return; }   // se puede seguir la flecha desde ahí
+      PATH = null; insertCmd(expr); renderBuilder(); return;
+    }
+    PATH = { expr: comp === 'next' ? expr : name }; renderBuilder();   // con la ayuda: las líneas posibles para ese nodo
+  };
+  if (names.length === 1) { go(names[0]); return; }
+  showFb('info', '¿Por cuál puntero?', `${names.join(' y ')} apuntan a este nodo. Hoy da lo mismo, pero el código queda distinto: si después mueves uno, ya no.`,
+    names.map(nm => [nm + '->' + comp, () => go(nm)]).concat([['Cancelar', hideFb]]));
 }
 function usePath() {
   const expr = PATH.expr; PATH = null;
