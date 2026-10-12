@@ -1594,8 +1594,17 @@ function drawNode(n) {
   const d = { x: x + NW / 2 - (NW - DW) / 2, y };
   if (n.next === null) { ctx.lineWidth = 1.4; rLine(L + DW + 3, Tp + NH - 4, L + NW - 3, Tp + 4, n.id * 5 + 1, 0.5, 1); }
   else { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, 7); ctx.fill(); }
+  // debajo: su referencia en chico a la izquierda, (p) · (p, q) · (l->head), y su dirección a la derecha
+  const nm = n.dead ? [] : namesOf(n.id);
+  let addrY = Tp + NH + 8;
+  if (nm.length) {
+    ctx.font = '11px "Patrick Hand", sans-serif'; ctx.fillStyle = '#2350b8'; ctx.textAlign = 'left';
+    const lab = '(' + nm.join(', ') + ')';
+    ctx.fillText(lab, L, Tp + NH + 8);
+    if (ctx.measureText(lab).width > NW - 34) addrY += 10;   // si no caben juntos, la dirección baja una línea
+  }
   ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'right';
-  ctx.fillText(addrOf(n.id), L + NW, Tp + NH + 8);
+  ctx.fillText(addrOf(n.id), L + NW, addrY);
   ctx.font = '13px "Patrick Hand", sans-serif'; ctx.textAlign = 'center';
   if (n.dead) { ctx.globalAlpha = 0.85; ctx.fillStyle = '#b7791f'; ctx.fillText('sin acceso', x, Tp - 7); }
   if (n.freed) { ctx.globalAlpha = 0.9; ctx.fillStyle = '#c23a32'; ctx.fillText('liberado', x, Tp - 7); }
@@ -1763,7 +1772,7 @@ function pathValue(expr) {   // a qué apunta la expresión, sin lanzar errores 
     if (parts.shift() !== 'head') return undefined;
     cur = listOf(cur).head;
   }
-  for (const f of parts) { if (cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) return undefined; cur = nodeOf(cur).next; }
+  for (const f of parts) { if (f !== 'next' || cur === null || cur === G || !nodeOf(cur) || nodeOf(cur).freed) return undefined; cur = nodeOf(cur).next; }
   return cur;
 }
 function hint(title, msg) { showFb('info', title, msg, [['Entendido', hideFb]]); }
@@ -1795,7 +1804,14 @@ function tapBoard(e) {
   // casilla next del nodo marcado: se sigue la flecha (p → p->next → p->next->next)
   if (h.kind === 'next' && PATH && pathValue(PATH.expr) === h.id && !(BUILD && type === 'var')) { tapFx(h); PATH.expr += '->next'; renderBuilder(); return; }
   // casilla value del nodo marcado: se termina el camino en su valor (p->next->value)
-  if (h.kind === 'node' && PATH && pathValue(PATH.expr) === h.id) { pickValue(h, PATH.expr + '->value'); return; }
+  if (h.kind === 'node' && PATH && pathValue(PATH.expr) === h.id) {
+    if (wantsPtr()) {   // donde va un puntero, tocar el nodo marcado lo elige tal cual (p->next)
+      tapFx({ ...h, kind: 'self' });
+      if (BUILD) { usePath(); return; }
+      PATH = null; renderBuilder(); return;
+    }
+    pickValue(h, PATH.expr + '->value'); return;
+  }
   // casillas de un nodo con nombre: value → p->value · next → p->next
   tapComponent(h, h.kind === 'node' ? 'value' : 'next');
 }
@@ -1810,6 +1826,16 @@ function pickValue(h, expr) {
   if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
   PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
 }
+// ¿Lo que se está llenando es un puntero? (un hueco de puntero, la derecha de p = …, p->next = …, free(…))
+// Ahí, tocar el cuerpo de un nodo con nombre escribe su nombre (q) y no q->value.
+function wantsPtr() {
+  if (BUILD) { const t = holeType(); return t === 'ptr' || t === 'lv'; }
+  const t = normalizeC($('cmd').value);
+  if (/^free\(/.test(t)) return true;
+  if (/^(if|printf)\b/.test(t)) return false;
+  const m = /^(.*?[^=!<>]) = (?!=)/.exec(t + ' ');
+  return !!m && !/->value$/.test(m[1].trim());
+}
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
   const vars = scope().filter(v => v.kind === 'ptr' && v.t === id).map(v => v.name);
@@ -1817,24 +1843,26 @@ function namesOf(id) {
   return listVars().filter(l => l.t !== null && listOf(l.t) && listOf(l.t).head === id).map(l => l.name + '->head');
 }
 function tapComponent(h, comp) {
+  if (comp === 'value' && wantsPtr()) comp = 'self';   // el nodo mismo: q
   const n = nodeOf(h.id), type = holeType(), names = namesOf(h.id);
+  const exprOf = name => comp === 'self' ? name : name + '->' + comp;
   if (!names.length || n.dead) {
     hint('Por un puntero', PATH ? `Ese nodo no es el que está marcado. Sigue las flechas desde ${PATH.expr}: toca la casilla next del nodo marcado.` : 'Este nodo no tiene nombre: ninguna variable lo apunta. Para llegar a él, toca el post-it de una variable y sigue las flechas tocando la casilla next de cada nodo.');
     return;
   }
   if (BUILD) {   // la casilla tiene que calzar con el hueco que se está llenando
-    const fits = comp === 'value' ? type === 'num' : type === 'ptr' || type === 'lv';
+    const fits = comp === 'value' ? type === 'num' : type === 'ptr' || type === 'lv';   // self solo llega aquí con un hueco de puntero
     if (!fits) { hint('No calza aquí', comp === 'value' ? 'La casilla value es un número: sirve donde la línea pide un número.' : type === 'num' ? 'Aquí va un número: toca la casilla value de un nodo, o un número.' : 'Aquí va el nombre de una variable: toca su post-it.'); return; }
     if (comp === 'value' && n.v === null) { hint('Valor basura', `${names[0]}->value nunca recibió un valor: es basura.`); return; }
   }
-  tapFx(h);
+  tapFx(comp === 'self' ? { ...h, kind: 'self' } : h);
   const go = name => {
     hideFb();
-    const expr = name + '->' + comp;
+    const expr = exprOf(name);
     if (BUILD) { PATH = null; fill(expr); return; }
     if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: a la izquierda del =, después a la derecha
       const ins = placeTap(expr);
-      PATH = comp === 'next' ? { expr, ins } : null;   // desde p->next se puede seguir la flecha
+      PATH = comp === 'value' ? null : { expr, ins };   // desde q o q->next se puede seguir la flecha
       renderBuilder(); return;
     }
     if (comp === 'value') { PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder(); return; }
@@ -1842,7 +1870,7 @@ function tapComponent(h, comp) {
   };
   if (names.length === 1) { go(names[0]); return; }
   showFb('info', '¿Por cuál puntero?', `${names.join(' y ')} apuntan a este nodo. Hoy da lo mismo, pero el código queda distinto: si después mueves uno, ya no.`,
-    names.map(nm => [nm + '->' + comp, () => go(nm)]).concat([['Cancelar', hideFb]]));
+    names.map(nm => [exprOf(nm), () => go(nm)]).concat([['Cancelar', hideFb]]));
 }
 function usePath() {
   const expr = PATH.expr; PATH = null;
@@ -1949,7 +1977,7 @@ function drawTapHints(layout) {
     ctx.save(); ctx.globalAlpha = TAP.t; ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 2.5;
     if (TAP.kind === 'var') { const it = layout.find(o => o.v === TAP.v); if (it) rRect(it.x - 3, it.y - 3, PW + 6, PH + 6, 444, 0.6); }
     else if (TAP.lid && listOf(TAP.lid)) { const L = listOf(TAP.lid); rRect(L.x - NW / 2 + DW - 2, L.y - NH / 2 - 3, NW - DW + 5, NH + 6, 449, 0.6); }
-    else if (POS[TAP.id]) { const P = POS[TAP.id], L = P.x - NW / 2, Tp = P.y - NH / 2; if (TAP.kind === 'next') rRect(L + DW - 2, Tp - 3, NW - DW + 5, NH + 6, 445, 0.6); else rRect(L - 3, Tp - 3, DW + 4, NH + 6, 446, 0.6); }
+    else if (POS[TAP.id]) { const P = POS[TAP.id], L = P.x - NW / 2, Tp = P.y - NH / 2; if (TAP.kind === 'next') rRect(L + DW - 2, Tp - 3, NW - DW + 5, NH + 6, 445, 0.6); else if (TAP.kind === 'self') rRect(L - 3, Tp - 3, NW + 6, NH + 6, 447, 0.6); else rRect(L - 3, Tp - 3, DW + 4, NH + 6, 446, 0.6); }
     ctx.restore();
   }
 }
