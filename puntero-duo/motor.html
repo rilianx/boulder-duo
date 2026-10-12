@@ -977,12 +977,29 @@ function fillChips(box, typing) {
   box.appendChild(g);
 }
 /* ── Escribir con el teclado ── */
-function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; }
-function insertCmd(t) {   // escribe t donde está el cursor del campo
-  TAPPED = true;
-  const el = $('cmd'), v = el.value, e = CUR.s + t.length;
-  el.value = v.slice(0, CUR.s) + t + v.slice(CUR.e); CUR = { s: e, e, mine: true };
-  try { el.setSelectionRange(e, e); } catch (er) {}
+function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; LASTTAP = null; }
+/* Lo que se toca en el dibujo se ubica como en una asignación: el primer toque es la izquierda (p),
+   el siguiente completa la derecha (p = q;) y los demás la cambian. En un if: if (p->value == q->value).
+   Si no, reemplaza lo último que se tocó o se escribe donde está el cursor (por ejemplo dentro de printf). */
+let LASTTAP = null;
+function placeTap(expr) {
+  const el = $('cmd'), v = el.value, t = normalizeC(v);
+  const put = (pre, post) => {
+    el.value = pre + expr + post;
+    const s = pre.length, e = s + expr.length;
+    CUR = { s: e, e, mine: true }; LASTTAP = { s, e }; TAPPED = true;
+    try { el.setSelectionRange(e, e); } catch (er) {}
+    return { s, e };
+  };
+  let m;
+  if (!t) return put('', '');
+  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return put(`if (${m[1]} == `, ')');
+  if ((m = /^(printf\("%d", |free\()/.exec(t))) return put(m[1], ');');
+  if ((m = /^(if \(.+? == ).*$/.exec(t))) return put(m[1], ')');
+  if (!/^if\b/.test(t) && (m = /^(.*?[^=!<>]) = (?!=)/.exec(t + ' '))) return put(m[1] + ' = ', ';');
+  if (/^(Nodo \*)?[\w>-]+$/.test(t)) return put(t + ' = ', ';');
+  if (LASTTAP && LASTTAP.e <= v.length) return put(v.slice(0, LASTTAP.s), v.slice(LASTTAP.e));
+  return put(v.slice(0, CUR.s), v.slice(CUR.e));
 }
 function syncPathInput() {   // la expresión que se va siguiendo en el dibujo se escribe en el campo
   TAPPED = true;
@@ -1022,7 +1039,7 @@ function submitCmd() {
   const t = normalizeC(raw);
   const ny = notYet(t);
   if (ny) { showFb('info', ny[0], ny[1], [['Entendido', hideFb]]); return; }
-  PATH = null; setCmd(''); TYPED = t; TAPPED = false;
+  PATH = null; setCmd(''); TYPED = t; TAPPED = false; LASTTAP = null;
   guardRun(t);
 }
 // Sugerencias (con la ayuda desplegada): líneas completas que calzan con lo escrito, sin importar espacios ni mayúsculas.
@@ -1074,7 +1091,7 @@ function renderCompletions(box) {
   for (const x of list) {
     const b = mkChip(x, '', () => {
       const el = $('cmd'), rest = el.value.slice(CUR.e);
-      el.value = x + rest; CUR = { s: x.length, e: x.length, mine: true };
+      el.value = x + rest; CUR = { s: x.length, e: x.length, mine: true }; LASTTAP = null;
       try { el.setSelectionRange(CUR.e, CUR.e); } catch (e) {}
       renderBuilder();
     });
@@ -1088,8 +1105,8 @@ function renderCompletions(box) {
 }
 {
   const el = $('cmd');
-  const track = () => { CUR = { s: el.selectionStart ?? el.value.length, e: el.selectionEnd ?? el.value.length }; };
-  el.addEventListener('input', () => { track(); const had = !!PATH || TAPPED; PATH = null; TAPPED = false; if (HELP_OPEN || had) renderBuilder(); });
+  const track = () => { if (document.activeElement !== el) return; CUR = { s: el.selectionStart ?? el.value.length, e: el.selectionEnd ?? el.value.length }; };
+  el.addEventListener('input', () => { track(); const had = !!PATH || TAPPED; PATH = null; TAPPED = false; LASTTAP = null; if (HELP_OPEN || had) renderBuilder(); });
   for (const ev of ['keyup', 'click', 'select']) el.addEventListener(ev, track);
   el.addEventListener('focus', () => { if (!CUR.mine) return; CUR.mine = false; try { el.setSelectionRange(Math.min(CUR.s, el.value.length), Math.min(CUR.e, el.value.length)); } catch (e) {} });   // vuelve donde se iba escribiendo (un toque en el campo lo mueve después)
   el.addEventListener('keydown', e => {
@@ -1744,7 +1761,7 @@ function tapBoard(e) {
   if (h.kind === 'var') {   // en un hueco numérico también: desde el post-it se llega a p->value o p->next->value
     tapFx(h);
     if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
-    PATH = { expr: h.v.name }; if (!BUILD && (!HELP_OPEN || $('cmd').value.trim())) PATH.ins = { s: CUR.s, e: CUR.e }; renderBuilder(); return;
+    PATH = { expr: h.v.name }; if (!BUILD && (!HELP_OPEN || $('cmd').value.trim())) PATH.ins = placeTap(h.v.name); renderBuilder(); return;
   }
   if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
     if (BUILD && (type === 'var' || type === 'num')) return;
@@ -1769,7 +1786,7 @@ function pickValue(h, expr) {
   }
   tapFx(h);
   if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
-  PATH = null; setCmd(expr); TAPPED = true; renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
+  PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
 }
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
@@ -1793,12 +1810,12 @@ function tapComponent(h, comp) {
     hideFb();
     const expr = name + '->' + comp;
     if (BUILD) { PATH = null; fill(expr); return; }
-    if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); if (comp === 'value') PATH = null; renderBuilder(); return; }
-    if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: se inserta en el campo
-      if (comp === 'next') { PATH = { expr, ins: { s: CUR.s, e: CUR.e } }; renderBuilder(); return; }   // se puede seguir la flecha desde ahí
-      PATH = null; insertCmd(expr); renderBuilder(); return;
+    if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: a la izquierda del =, después a la derecha
+      const ins = placeTap(expr);
+      PATH = comp === 'next' ? { expr, ins } : null;   // desde p->next se puede seguir la flecha
+      renderBuilder(); return;
     }
-    if (comp === 'value') { PATH = null; setCmd(expr); TAPPED = true; renderBuilder(); return; }
+    if (comp === 'value') { PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder(); return; }
     PATH = { expr }; renderBuilder();   // con la ayuda: las líneas posibles para p->next
   };
   if (names.length === 1) { go(names[0]); return; }
