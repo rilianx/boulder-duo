@@ -899,7 +899,7 @@ function fillChips(box, typing) {
     $('bx').hidden = true;
     if (PATH && !PATH.ins) { renderPathBar(box); return; }
     if (PATH && PATH.ins) {
-      if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `Sigue las flechas tocando la casilla next del nodo marcado: ${PATH.expr} se escribe en la línea.`; box.appendChild(t); }
+      if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `${PATH.expr} se escribe en la línea. En el nodo marcado: su casilla next sigue la flecha y su casilla value termina en ${PATH.expr}->value.`; box.appendChild(t); }
       return;
     }
     if (!HELP_OPEN) return;   // sin ayuda: solo el campo de texto
@@ -1729,8 +1729,7 @@ function tapBoard(e) {
     hint(h.v.name + ' = ' + h.v.val, `${h.v.name} es un int, no un puntero: se usa donde la línea pide un número (por ejemplo nuevo->value = ${h.v.name};).`);
     return;
   }
-  if (h.kind === 'var') {
-    if (BUILD && type === 'num') return;
+  if (h.kind === 'var') {   // en un hueco numérico también: desde el post-it se llega a p->value o p->next->value
     tapFx(h);
     if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
     PATH = { expr: h.v.name }; if (!BUILD && (!HELP_OPEN || $('cmd').value.trim())) PATH.ins = { s: CUR.s, e: CUR.e }; renderBuilder(); return;
@@ -1744,8 +1743,21 @@ function tapBoard(e) {
   }
   // casilla next del nodo marcado: se sigue la flecha (p → p->next → p->next->next)
   if (h.kind === 'next' && PATH && pathValue(PATH.expr) === h.id && !(BUILD && type === 'var')) { tapFx(h); PATH.expr += '->next'; renderBuilder(); return; }
+  // casilla value del nodo marcado: se termina el camino en su valor (p->next->value)
+  if (h.kind === 'node' && PATH && pathValue(PATH.expr) === h.id) { pickValue(h, PATH.expr + '->value'); return; }
   // casillas de un nodo con nombre: value → p->value · next → p->next
   tapComponent(h, h.kind === 'node' ? 'value' : 'next');
+}
+function pickValue(h, expr) {
+  const n = nodeOf(h.id), type = holeType();
+  if (BUILD) {
+    if (type !== 'num') { hint('No calza aquí', 'La casilla value es un número: sirve donde la línea pide un número.'); return; }
+    if (n.v === null) { hint('Valor basura', `${expr} nunca recibió un valor: es basura.`); return; }
+    tapFx(h); PATH = null; fill(expr); return;
+  }
+  tapFx(h);
+  if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
+  PATH = null; setCmd(expr); renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
 }
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
@@ -1769,6 +1781,7 @@ function tapComponent(h, comp) {
     hideFb();
     const expr = name + '->' + comp;
     if (BUILD) { PATH = null; fill(expr); return; }
+    if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); if (comp === 'value') PATH = null; renderBuilder(); return; }
     if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: se inserta en el campo
       if (comp === 'next') { PATH = { expr, ins: { s: CUR.s, e: CUR.e } }; renderBuilder(); return; }   // se puede seguir la flecha desde ahí
       PATH = null; insertCmd(expr); renderBuilder(); return;
@@ -1789,7 +1802,7 @@ function renderPathBar(box) {
   const g = document.createElement('div'); g.className = 'grp';
   const val = pathValue(PATH.expr);
   const isList = val && val.list;
-  if (BUILD) { if (!isList || holeType() === 'list') g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath)); }
+  if (BUILD) { if (holeType() !== 'num' && (!isList || holeType() === 'list')) g.appendChild(mkChip('✓ usar ' + PATH.expr, 'fn', usePath)); }
   else if (isList) g.appendChild(mkChip(PATH.expr + '->head = _;', 'fn', () => startFromPath('§e->head = §ptr;')));
   else {
     const E = PATH.expr, toNode = val !== null && val !== undefined && val !== G;
@@ -1808,7 +1821,7 @@ function renderPathBar(box) {
   g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
   box.appendChild(g);
   const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-  tip.textContent = isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : 'Para seguir la flecha, toca la casilla next del nodo marcado en el dibujo.';
+  tip.textContent = isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
