@@ -978,9 +978,9 @@ function fillChips(box, typing) {
 }
 /* ── Escribir con el teclado ── */
 function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; LASTTAP = null; }
-/* Lo que se toca en el dibujo se ubica como en una asignación: el primer toque es la izquierda (p),
-   el siguiente completa la derecha (p = q;) y los demás la cambian. En un if: if (p->value == q->value).
-   Si no, reemplaza lo último que se tocó o se escribe donde está el cursor (por ejemplo dentro de printf). */
+/* Lo que se toca en el dibujo arma un lado a la vez: primero la izquierda (un toque nuevo la reemplaza;
+   seguir flechas la extiende). «＝» (o escribir =) pasa a la derecha, y ahí los toques arman la derecha.
+   En un if el paso es «==». Dentro de printf( o free( el toque llena el argumento y cierra. */
 let LASTTAP = null;
 function placeTap(expr) {
   const el = $('cmd'), v = el.value, t = normalizeC(v);
@@ -993,11 +993,12 @@ function placeTap(expr) {
   };
   let m;
   if (!t) return put('', '');
-  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return put(`if (${m[1]} == `, ')');
+  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return put('if (', '');   // izquierda del ==: se reemplaza
   if ((m = /^(printf\("%d", |free\()/.exec(t))) return put(m[1], ');');
   if ((m = /^(if \(.+? == ).*$/.exec(t))) return put(m[1], ')');
   if (!/^if\b/.test(t) && (m = /^(.*?[^=!<>]) = (?!=)/.exec(t + ' '))) return put(m[1] + ' = ', ';');
-  if (/^(Nodo \*)?[\w>-]+$/.test(t)) return put(t + ' = ', ';');
+  if (/^Nodo \*\w+$/.test(t)) return put(t + ' = ', ';');   // una declaración solo puede seguir con =
+  if (/^[\w>-]+$/.test(t)) return put('', '');                // la izquierda todavía: se reemplaza
   if (LASTTAP && LASTTAP.e <= v.length) return put(v.slice(0, LASTTAP.s), v.slice(LASTTAP.e));
   return put(v.slice(0, CUR.s), v.slice(CUR.e));
 }
@@ -1085,8 +1086,23 @@ function completions() {
   const shown = hits.filter(c => isStem(c) || !stems.some(st => c.startsWith(st)));
   return shown.sort((a, b) => isStem(b) - isStem(a) || a.length - b.length).slice(0, 12);
 }
+// «＝» pasa de la izquierda a la derecha (en un if, «==»)
+function sideStep() {
+  const t = normalizeC($('cmd').value);
+  let m;
+  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return { label: '== →', text: `if (${m[1]} == ` };
+  if (/^[\w>-]+$/.test(t)) return { label: '＝ →', text: t + ' = ' };
+  return null;
+}
 function renderCompletions(box) {
-  const list = completions();
+  const st = sideStep();
+  if (st) {
+    const g = document.createElement('div'); g.className = 'grp';
+    const b = mkChip(st.label + ' pasar a la derecha', 'fn', () => { PATH = null; setCmd(st.text); TAPPED = true; renderBuilder(); });
+    b.addEventListener('pointerdown', e => e.preventDefault());
+    g.appendChild(b); box.appendChild(g);
+  }
+  const list = completions().filter(x => !st || x !== st.text);
   const g = document.createElement('div'); g.className = 'grp';
   for (const x of list) {
     const b = mkChip(x, '', () => {
