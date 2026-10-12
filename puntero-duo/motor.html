@@ -97,6 +97,14 @@ canvas#cv{display:block;touch-action:none;cursor:pointer;border:2px solid var(--
 @keyframes fade{to{background:transparent}}
 
 .build{display:flex;flex-direction:column;gap:6px;min-height:0;pointer-events:auto;background:rgba(251,248,239,.95);border:1.5px dashed var(--soft);border-radius:10px 4px 10px 6px;padding:5px 7px;box-shadow:0 -3px 10px rgba(251,248,239,.9)}
+/* las opciones van sobre el mismo cuaderno, semitransparentes: entre ellas se sigue viendo (y tocando) el dibujo */
+.dock .build{background:rgba(251,248,239,.35);border:none;box-shadow:none;pointer-events:none;padding:2px 4px}
+.dock .build button,.dock .build input,.dock .build .line,.dock .build p{pointer-events:auto}
+.dock .chip{background:rgba(255,253,246,.72);border-width:1.6px}
+.dock .tabs{border-bottom-color:rgba(165,159,149,.5)}
+.dock .tab{background:rgba(251,248,239,.6)}
+.dock .strip{background:rgba(255,253,246,.82)}
+.dock .build p{background:rgba(251,248,239,.7);border-radius:6px;padding:0 4px;align-self:flex-start}
 .build.closed{border-style:solid;border-color:transparent;background:rgba(251,248,239,.85);box-shadow:none;padding:3px 5px}
 .build.closed .line{border-bottom:none;min-height:0;padding:0}
 .line{display:flex;align-items:center;gap:8px;font-family:var(--code);font-size:clamp(14px,3.8vw,17px);min-height:34px;
@@ -189,7 +197,7 @@ button:focus-visible{outline:3px dashed var(--ink);outline-offset:2px}
           </div>
           <div class="strip" id="strip"></div>
           <div class="build">
-            <div class="line"><span class="txt" id="ltxt" hidden></span><input id="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="escribe una línea en C…" aria-label="Línea de C"><button id="bgo" aria-label="Ejecutar la línea">⏎</button><button id="bhelpd" aria-pressed="false" aria-label="Mostrar u ocultar la ayuda">🧩</button><button id="bx" hidden>✕</button></div>
+            <div class="line"><span class="txt" id="ltxt" hidden></span><input id="cmd" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="escribe una línea en C…" aria-label="Línea de C"><button id="bgo" aria-label="Ejecutar la línea">⏎</button><button id="bhelpd" aria-label="Volver a elegir opciones">☷</button><button id="bx" hidden>✕</button></div>
             <div class="chips" id="chips"></div>
           </div>
         </div>
@@ -486,7 +494,7 @@ function checkLeaks() {
 let PROG = [], UNDO = [], BUSY = false;
 async function run(text) {
   if (BUSY) return;
-  BUSY = true; hideFb(); renderBuilder();
+  BUSY = true; OPEN_TAB = false; hideFb(); renderBuilder();
   const snap = JSON.stringify(M);
   const entry = { text, src: text, sub: [], cls: 'new' };
   PROG.push(entry); NOTE.off = 0; renderCode();
@@ -823,8 +831,12 @@ function leaveExercise() {
    ════════════════════════════════════════════════════════════════════ */
 let BUILD = null, TAB = 'Variables';
 // Por defecto se escribe la línea con el teclado. 🧩 despliega la ayuda: las piezas y, mientras se escribe, sugerencias para completar.
-let HELP_OPEN = false;
-try { HELP_OPEN = localStorage.getItem('punteroC.help') === '1'; } catch (e) {}
+// Por defecto se arma cada línea eligiendo opciones (semitransparentes, sobre el cuaderno); ⌨ cambia a escribir con el teclado.
+const HELP_OPEN = true;          // las sugerencias del teclado siempre a mano
+let TYPE_MODE = false;
+try { TYPE_MODE = localStorage.getItem('punteroC.teclado') === '1'; } catch (e) {}
+let OPEN_TAB = false;            // ¿la pestaña elegida está desplegada? (plegada se ve solo la fila de pestañas y el código a mano)
+let NOTE_HIDE = false;           // el fragmento de código se oculta mientras hay opciones desplegadas
 let CUR = { s: 0, e: 0 };       // cursor del campo (se recuerda aunque el campo pierda el foco)
 let TYPED = null;
 let TAPPED = false;             // el campo recibió algo tocando el dibujo: se sugiere qué hacer con eso aunque la ayuda esté cerrada
@@ -888,12 +900,16 @@ function renderBuilder() {
   renderCode();   // el cuaderno muestra la línea en construcción (o deja de mostrarla)
   const box = $('chips'); box.innerHTML = '';
   $('bundo').disabled = BUSY || !!REPLAY || !UNDO.length;
-  const typing = !REPLAY && !BUILD;   // el campo de texto: se escribe ahí salvo al armar con piezas o al viajar en el tiempo
+  const typing = TYPE_MODE && !REPLAY && !BUILD;   // el campo de texto, solo en modo teclado
   for (const id of ['cmd', 'bgo', 'bhelpd']) $(id).hidden = !typing;
-  $('ltxt').hidden = typing; $('cmd').disabled = $('bgo').disabled = BUSY;
-  $('bhelpd').setAttribute('aria-pressed', HELP_OPEN);
+  $('cmd').disabled = $('bgo').disabled = BUSY;
   if (PATH && PATH.ins) syncPathInput();
   fillChips(box, typing);
+  // sin teclado y sin nada en curso, la fila de arriba (ltxt) no hace falta: solo quedan las pestañas
+  const idle = !typing && !BUILD && !PATH && !REPLAY && !BUSY;
+  $('ltxt').hidden = typing;
+  document.querySelector('.line').hidden = !typing && !BUILD && !REPLAY;   // eligiendo: la fila de arriba solo al armar con huecos o al viajar
+  NOTE_HIDE = !!(BUILD || PATH || (idle && OPEN_TAB) || (typing && box.children.length));
   document.querySelector('.build').classList.toggle('closed', !box.children.length);
 }
 function fillChips(box, typing) {
@@ -907,20 +923,21 @@ function fillChips(box, typing) {
       if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `${PATH.expr} se escribe en la línea. En el nodo marcado: su casilla next sigue la flecha y su casilla value termina en ${PATH.expr}->value.`; box.appendChild(t); }
       return;
     }
-    if (!HELP_OPEN) return;   // sin ayuda: solo el campo (las sugerencias se abren con 🧩)
-    if ($('cmd').value.trim()) { renderCompletions(box); return; }
+    if (typing) { if ($('cmd').value.trim()) renderCompletions(box); return; }   // modo teclado: sugerencias mientras se escribe
     const empty = !anyVars();
-    if (empty) TAB = 'Variables';
+    if (empty) { TAB = 'Variables'; OPEN_TAB = true; }
     const tabs = document.createElement('div'); tabs.className = 'tabs';
     for (const [lbl] of STMTS) {
-      const t = document.createElement('button'); t.className = 'tab' + (lbl === TAB ? ' on' : ''); t.textContent = lbl;
+      const t = document.createElement('button'); t.className = 'tab' + (lbl === TAB && OPEN_TAB ? ' on' : ''); t.textContent = lbl;
       t.disabled = empty && lbl !== 'Variables' && lbl !== 'Funciones';
-      t.onclick = () => { TAB = lbl; renderBuilder(); };
+      t.onclick = () => { OPEN_TAB = !(OPEN_TAB && TAB === lbl); TAB = lbl; renderBuilder(); };   // tocarla de nuevo la pliega
       tabs.appendChild(t);
     }
+    const kb = document.createElement('button'); kb.className = 'tab'; kb.textContent = '⌨'; kb.title = 'Escribir con el teclado';
+    kb.onclick = () => setTypeMode(true); tabs.appendChild(kb);
     box.appendChild(tabs);
     for (const [lbl, list] of STMTS) {
-      if (lbl !== TAB) continue;
+      if (lbl !== TAB || !OPEN_TAB) continue;
       const g = document.createElement('div'); g.className = 'grp';
       if (lbl === 'Variables') {   // un toque: el nombre ya viene puesto
         for (const v of declaredPtrs()) g.appendChild(mkChip(`${v.name} = _;`, '', () => { BUILD = `${v.name} = §ptr;`; renderBuilder(); }));
@@ -951,7 +968,7 @@ function fillChips(box, typing) {
       }
       if (g.children.length) box.appendChild(g);
     }
-    if (anyVars()) {
+    if (anyVars() && OPEN_TAB) {
       const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
       tip.textContent = 'También puedes tocar un post-it en el dibujo y seguir las flechas para elegir un puntero.';
       box.appendChild(tip);
@@ -980,6 +997,11 @@ function fillChips(box, typing) {
   box.appendChild(g);
 }
 /* ── Escribir con el teclado ── */
+function setTypeMode(on) {
+  TYPE_MODE = on; PATH = null; OPEN_TAB = false;
+  try { localStorage.setItem('punteroC.teclado', on ? '1' : '0'); } catch (e) {}
+  renderBuilder(); if (on && FINE) $('cmd').focus();
+}
 function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; LASTTAP = null; }
 /* Lo que se toca en el dibujo se ubica en la línea por lados: con el campo vacío, el primer toque escribe «p = »
    (el = aparece de inmediato) y los toques siguientes cambian la izquierda. La derecha se llena solo cuando uno
@@ -1147,7 +1169,7 @@ function renderCompletions(box) {
     } else if (e.key === 'Escape') { PATH = null; renderBuilder(); }
   });
   $('bgo').onclick = submitCmd;
-  $('bhelpd').onclick = () => { HELP_OPEN = !HELP_OPEN; try { localStorage.setItem('punteroC.help', HELP_OPEN ? '1' : '0'); } catch (e) {} if (!HELP_OPEN && PATH && !PATH.ins) PATH = null; renderBuilder(); };
+  $('bhelpd').onclick = () => setTypeMode(false);
 }
 function fill(piece) {
   PATH = null;
@@ -1204,7 +1226,7 @@ function renderCode() {
     let h = holeHTML(BUILD);
     if (PATH) h = h.replace(/<span class="hole cur">[^<]*<\/span>/, `<span class="hole cur">${esc(PATH.expr)}</span>`);
     lines.push(`<div class="ln draft">  ${h}</div>`);
-  } else if (PATH && !PATH.ins && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr)}</span> …</div>`);
+  } else if (PATH && !PATH.ins && !REPLAY) lines.push(`<div class="ln draft">  <span class="hole cur">${esc(PATH.expr + (PATH.val ? '->value' : ''))}</span> …</div>`);
   if (EX && EX.def) lines.push('<div class="ln dim">}</div>', `<div class="ln dim">// main: insertarInicio(lista, ${EX.def.v});</div>`);
   el.innerHTML = lines.join('');
   el.querySelectorAll('.ln .tg').forEach(t => t.onclick = ev => {
@@ -1236,7 +1258,7 @@ function renderStrip() {
       const box = (side, txt, on) => `<span class="slot${on ? ' on' : ''}" data-side="${side}">${txt ? esc(txt) : '?'}</span>`;
       out.push(`<div class="ln now">${sl.kind === 'if' ? 'if (' : ''}${box('left', sl.L, !r)}${op}${box('right', sl.R, r)}${sl.close}</div>`);
     }
-    else if (!last) out.push(`<div class="idle">Escribe abajo una línea en C, por ejemplo Lista *l = crearLista(); · 🧩 abre la ayuda</div>`);
+    else if (!last) out.push(`<div class="idle">Elige una pestaña de abajo o toca un post-it del dibujo para armar una línea.</div>`);
   }
   $('strip').innerHTML = out.join('');
   $('strip').querySelectorAll('.slot').forEach(x => x.onclick = ev => { ev.stopPropagation(); pickSide(x.dataset.side); });
@@ -1357,7 +1379,7 @@ $('bhelp').onclick = () => {
 function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
-    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. En un nodo con nombre, su casilla value escribe <code>p->value</code> y su casilla next <code>p->next</code> (si dos punteros lo apuntan, se pregunta por cuál). El primer toque arma la izquierda (<code>p = </code>); para llenar la derecha toca su casilla en la línea de arriba del campo. <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
+    <p>Abajo, sobre el cuaderno, <b>eliges cada línea</b>: toca una pestaña (Variables, Campos…) y luego la línea; los huecos se llenan con piezas o tocando el dibujo. Tocar un post-it, o la casilla value o next de un nodo con nombre, muestra lo que se puede hacer con eso. <b>⌨</b> cambia a escribir con el teclado y <b>☷</b> vuelve a las opciones. Las últimas líneas del programa se ven escritas a mano; el programa completo está en la pestaña <b>Código</b>.</p>
     <ul>
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
@@ -1726,7 +1748,7 @@ function drawCodeNote() {
   NOTE.rect = NOTE.up = NOTE.down = null;
   if (!PROG.length) return;
   // abajo, sobre la línea que se arma; cuando aparecen las opciones (o un aviso) se oculta
-  if ((!REPLAY && $('chips').children.length) || !$('fb').hidden) return;   // al viajar en el tiempo sí se ve: muestra la línea actual
+  if ((!REPLAY && NOTE_HIDE) || !$('fb').hidden) return;   // al viajar en el tiempo sí se ve: muestra la línea actual
   const cvr = cv.getBoundingClientRect(), dr = $('dock').getBoundingClientRect();
   if (!cvr.height) return;
   const bottom = Math.min(LH - 8, (dr.top - cvr.top) / cvr.height * LH - 6);
@@ -1863,7 +1885,7 @@ function tapBoard(e) {
   if (h.kind === 'var') {   // en un hueco numérico también: desde el post-it se llega a p->value o p->next->value
     tapFx(h);
     if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
-    PATH = { expr: h.v.name }; if (!BUILD && (!HELP_OPEN || $('cmd').value.trim())) PATH.ins = placeTap(h.v.name); renderBuilder(); return;
+    PATH = { expr: h.v.name }; if (!BUILD && TYPE_MODE) PATH.ins = placeTap(h.v.name); renderBuilder(); return;
   }
   if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
     if (BUILD && (type === 'var' || type === 'num')) return;
@@ -1873,7 +1895,7 @@ function tapBoard(e) {
     return;
   }
   // casilla next del nodo marcado: se sigue la flecha (p → p->next → p->next->next)
-  if (h.kind === 'next' && PATH && pathValue(PATH.expr) === h.id && !(BUILD && type === 'var')) { tapFx(h); PATH.expr += '->next'; renderBuilder(); return; }
+  if (h.kind === 'next' && PATH && pathValue(PATH.expr) === h.id && !(BUILD && type === 'var')) { tapFx(h); PATH.expr += '->next'; PATH.val = false; renderBuilder(); return; }
   // casilla value del nodo marcado: se termina el camino en su valor (p->next->value)
   if (h.kind === 'node' && PATH && pathValue(PATH.expr) === h.id) {
     if (wantsPtr()) {   // donde va un puntero, tocar el nodo marcado lo elige tal cual (p->next)
@@ -1895,7 +1917,8 @@ function pickValue(h, expr) {
   }
   tapFx(h);
   if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
-  PATH = null; placeTap(expr); renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
+  if (TYPE_MODE) { PATH = null; placeTap(expr); renderBuilder(); return; }
+  PATH.val = true; renderBuilder();   // eligiendo: las líneas posibles para ese value: queda escrito para seguir (p->value = …, if (p->value == …))
 }
 // ¿Lo que se está llenando es un puntero? (un hueco de puntero, la derecha de p = …, p->next = …, free(…))
 // Ahí, tocar el cuerpo de un nodo con nombre escribe su nombre (q) y no q->value.
@@ -1930,13 +1953,12 @@ function tapComponent(h, comp) {
     hideFb();
     const expr = exprOf(name);
     if (BUILD) { PATH = null; fill(expr); return; }
-    if (!HELP_OPEN || $('cmd').value.trim()) {   // escribiendo: a la izquierda del =, después a la derecha
+    if (TYPE_MODE) {   // escribiendo: a la izquierda del =, después a la derecha
       const ins = placeTap(expr);
       PATH = comp === 'value' ? null : { expr, ins };   // desde q o q->next se puede seguir la flecha
       renderBuilder(); return;
     }
-    if (comp === 'value') { PATH = null; placeTap(expr); renderBuilder(); return; }
-    PATH = { expr }; renderBuilder();   // con la ayuda: las líneas posibles para p->next
+    PATH = comp === 'value' ? { expr: name, val: true } : { expr }; renderBuilder();   // eligiendo: las líneas posibles para p->value o p->next
   };
   if (names.length === 1) { go(names[0]); return; }
   showFb('info', '¿Por cuál puntero?', `${names.join(' y ')} apuntan a este nodo. Hoy da lo mismo, pero el código queda distinto: si después mueves uno, ya no.`,
@@ -1957,21 +1979,26 @@ function renderPathBar(box) {
   else {
     const E = PATH.expr, toNode = val !== null && val !== undefined && val !== G;
     g.appendChild(mkChip(E + ' = _;', 'fn', () => startFromPath('§e = §ptr;')));
-    if (toNode) {   // los componentes del nodo al que apunta
+    if (toNode && PATH.val) {   // se tocó la casilla value: lo que se hace con un valor
+      g.innerHTML = '';
+      g.appendChild(mkChip(E + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
+      g.appendChild(mkChip(`if (${E}->value == _)`, '', () => startFromPath('if (§e->value == §num)')));
+      g.appendChild(mkChip(`printf("%d", ${E}->value);`, '', () => { const t = `printf("%d", ${E}->value);`; PATH = null; guardRun(t); }));
+    } else if (toNode) {   // los componentes del nodo al que apunta
       g.appendChild(mkChip(E + '->value = _;', 'fn', () => startFromPath('§e->value = §num;')));
       g.appendChild(mkChip(E + '->next = _;', 'fn', () => startFromPath('§e->next = §ptr;')));
       g.appendChild(mkChip(`if (${E}->value == _)`, '', () => startFromPath('if (§e->value == §num)')));
       g.appendChild(mkChip(`printf("%d", ${E}->value);`, '', () => { const t = `printf("%d", ${E}->value);`; PATH = null; guardRun(t); }));
       g.appendChild(mkChip(`free(${E});`, '', () => { const t = `free(${E});`; PATH = null; guardRun(t); }));
     }
-    g.appendChild(mkChip(`if (${E} == NULL)`, '', () => { const t = `if (${E} == NULL)`; PATH = null; guardRun(t); }));
+    if (!PATH.val) g.appendChild(mkChip(`if (${E} == NULL)`, '', () => { const t = `if (${E} == NULL)`; PATH = null; guardRun(t); }));
   }
   const tail = PATH.expr.match(/->(next|head)$/);
   if (tail) g.appendChild(mkChip('⌫ quitar ->' + tail[1], '', () => { PATH.expr = PATH.expr.slice(0, -tail[0].length); renderBuilder(); }));
   g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
   box.appendChild(g);
   const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-  tip.textContent = isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
+  tip.textContent = PATH.val && val !== null && val !== G && !isList ? `Elige qué hacer con ${PATH.expr}->value.` : isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
