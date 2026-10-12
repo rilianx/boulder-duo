@@ -69,6 +69,7 @@ body[data-view="board"] .vcode, body[data-view="code"] .vboard{display:none}
 .strip .leak{color:var(--warn)}
 .strip .out{color:var(--ok)}
 .strip{cursor:pointer}
+.strip:empty{display:none}
 .strip .slot{display:inline-block;min-width:1.4em;padding:0 4px;border-bottom:2px solid var(--lock);cursor:pointer}
 .strip .slot.on{border-color:var(--ink);background:#dfe8ff;color:var(--ink)}
 .strip .num{color:var(--lock);font-size:.85em;margin-right:6px}
@@ -488,7 +489,7 @@ async function run(text) {
   BUSY = true; hideFb(); renderBuilder();
   const snap = JSON.stringify(M);
   const entry = { text, src: text, sub: [], cls: 'new' };
-  PROG.push(entry); renderCode();
+  PROG.push(entry); NOTE.off = 0; renderCode();
   const ctx = { depth: 0, sub: entry.sub, path: String(PROG.length - 1) };
   try {
     await execStmt(text, ctx);
@@ -1225,14 +1226,9 @@ function renderStrip() {
   const numOf = path => { if (!path || path.includes('.')) return ''; const k = +path, e = PROG[k]; return e && (e.before || e.cls === 'err') ? visibleLine(k) : ''; };
   const cur = code.querySelector('.ln.cur');
   if (cur) {
-    const all = [...code.querySelectorAll('.ln[data-path]')], i = all.indexOf(cur);
-    for (const [d, cls] of [[-1, 'prev'], [0, 'cur'], [1, 'prev']]) {
-      const e = all[i + d]; if (!e) continue;
-      out.push(row(cls, numOf(e.dataset.path), esc(e.textContent.replace(/^[▾▸]/, '').trim())));
-    }
+    // al viajar en el tiempo, la línea actual se ve subrayada en el fragmento escrito en el cuaderno
   } else {
-    const k = PROG.length - 1, last = PROG[k];
-    if (last) out.push(row('prev ' + (last.cls === 'new' ? '' : last.cls || ''), numOf(String(k)), esc(last.text)));
+    const last = PROG[PROG.length - 1];   // las últimas líneas ya se ven escritas en el cuaderno
     const d = code.querySelector('.ln.draft'), sl = !BUILD && $('cmd').value.trim() ? slots($('cmd').value) : null;
     if (d) out.push(`<div class="ln now">${d.innerHTML.trim()}</div>`);
     else if (sl) {   // la línea que se arma con toques: [izquierda] = [derecha]; la casilla activa es la que recibe el próximo toque
@@ -1713,7 +1709,59 @@ function draw(dt) {
   for (const id of liveIds()) { const n = nodeOf(id); if (n.next !== null && !n.dead) { const P = POS[id]; ctx.beginPath(); ctx.arc(P.x + NW / 2 - (NW - DW) / 2, P.y, 3, 0, 7); ctx.fill(); } }
   for (const it of layout) if (it.v && (it.v.kind === 'ptr' || it.v.kind === 'list')) { ctx.beginPath(); ctx.arc(it.x + PW - 5, it.y + PH / 2, 2.6, 0, 7); ctx.fill(); }
   for (const L of Object.values(M.lists)) if (L.head !== null) { ctx.beginPath(); ctx.arc(listBox(L).cx, L.y, 3, 0, 7); ctx.fill(); }
+  drawCodeNote();
 }
+
+/* Un fragmento del programa escrito a mano en el cuaderno, justo sobre la línea que se arma:
+   las últimas CN líneas. Se desplaza arrastrándolo hacia arriba o abajo (o con la rueda, o ▲ ▼).
+   Al viajar en el tiempo (o al ver un caso) sigue la línea actual. */
+const CN = 4, CL = 17;
+const NOTE = { off: 0, rect: null, up: null, down: null, drag: null };
+function noteCur() {   // índice en PROG de la línea actual al viajar o al ver un caso
+  if (REPLAY && REPLAY.cur) return +REPLAY.cur.split('.')[0];
+  if (VIEW) { let n = -1; for (let k = 0; k < PROG.length; k++) if (PROG[k].before && ++n === VIEW.k) return k; }
+  return null;
+}
+function drawCodeNote() {
+  NOTE.rect = NOTE.up = NOTE.down = null;
+  if (!PROG.length) return;
+  const cvr = cv.getBoundingClientRect(), dr = $('dock').getBoundingClientRect();
+  if (!cvr.height) return;
+  const bottom = Math.min(LH - 8, (dr.top - cvr.top) / cvr.height * LH - 6);
+  const maxOff = Math.max(0, PROG.length - CN);
+  const cur = noteCur();
+  if (cur !== null) NOTE.off = Math.max(0, Math.min(maxOff, PROG.length - cur - 2));   // la actual, con la próxima debajo
+  NOTE.off = Math.max(0, Math.min(maxOff, NOTE.off));
+  const end = PROG.length - NOTE.off, start = Math.max(0, end - CN), n = end - start;
+  const top = bottom - n * CL;
+  if (top < 60) return;   // no hay espacio
+  const x0 = MX + 8, w = LW - MX - 16;
+  ctx.save();
+  ctx.fillStyle = 'rgba(251,248,239,.82)'; ctx.fillRect(x0 - 4, top - 4, w + 8, n * CL + 6);   // que se lea aunque pase sobre algo
+  ctx.strokeStyle = '#b6b0a6'; ctx.lineWidth = 1; rLine(x0 - 2, top - 2, x0 - 2, bottom - 2, 951, 0.6, 1);   // una raya al margen, como un apunte
+  ctx.textBaseline = 'middle';
+  for (let k = start; k < end; k++) {
+    const e = PROG[k], y = top + (k - start) * CL + CL / 2;
+    const num = e.before || e.cls === 'err' ? visibleLine(k) : '';
+    ctx.font = '10px "Cutive Mono", monospace'; ctx.fillStyle = '#b6b0a6'; ctx.textAlign = 'right';
+    if (num) ctx.fillText(String(num), x0 + 12, y);
+    ctx.font = '700 18px Caveat, "Patrick Hand", cursive'; ctx.textAlign = 'left';
+    ctx.fillStyle = e.cls === 'err' ? '#c23a32' : e.cls === 'leak' ? '#b7791f' : e.cls === 'out' ? '#2f6b45' : k === cur ? '#2350b8' : e.cls === 'new' ? '#2350b8' : '#2e2c2a';
+    let t = e.text; const max = w - 34;
+    while (ctx.measureText(t).width > max && t.length > 4) t = t.slice(0, -2);
+    if (t !== e.text) t = t.slice(0, -1) + '…';
+    ctx.fillText(t, x0 + 18, y + 1);
+    if (k === cur) { ctx.strokeStyle = '#2350b8'; ctx.lineWidth = 1.6; rLine(x0 + 16, y + 8, x0 + 20 + ctx.measureText(t).width, y + 8, 960 + k, 0.5, 1); }
+  }
+  ctx.font = '13px "Patrick Hand", sans-serif'; ctx.fillStyle = '#9a948b'; ctx.textAlign = 'center';
+  const ax = x0 + w - 4;
+  if (start > 0) { ctx.fillText('▲', ax, top + 6); NOTE.up = { x: ax - 12, y: top - 6, w: 24, h: 22 }; }
+  if (NOTE.off > 0) { ctx.fillText('▼', ax, bottom - 8); NOTE.down = { x: ax - 12, y: bottom - 20, w: 24, h: 22 }; }
+  ctx.restore();
+  NOTE.rect = { x: x0 - 4, y: top - 4, w: w + 8, h: n * CL + 6 };
+}
+const inRect = (r, p) => r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+function scrollNote(d) { NOTE.off = Math.max(0, Math.min(Math.max(0, PROG.length - CN), NOTE.off + d)); }
 
 /* ════════════════════════════════════════════════════════════════════
    8. SONIDO, TAMAÑO Y BUCLE
@@ -1938,14 +1986,23 @@ function applyDrag() {
 function clearDrag() { for (const k in DRAGPOS) delete DRAGPOS[k]; }
 const toBoard = e => { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH }; };
 cv.addEventListener('pointerdown', e => {
-  if (BUSY || !$('ov').hidden) return;
-  const pt = toBoard(e), h = hitTest(pt);
+  if (!$('ov').hidden) return;
+  const p0 = toBoard(e);
+  if (inRect(NOTE.rect, p0)) { NOTE.drag = { y: p0.y, off: NOTE.off, moved: false, pid: e.pointerId }; return; }
+  if (BUSY) return;
+  const pt = p0, h = hitTest(pt);
   if (!h || h.kind === 'var') return;
   const o = h.lid ? M.lists[h.lid] : M.nodes[h.id];
   if (!o) return;
   DRAG = { key: h.lid || String(h.id), o, start: pt, dx: o.x - pt.x, dy: o.y - pt.y, moved: false, pid: e.pointerId };
 });
 cv.addEventListener('pointermove', e => {
+  if (NOTE.drag && e.pointerId === NOTE.drag.pid) {   // arrastrar hacia abajo muestra líneas anteriores
+    const dy = toBoard(e).y - NOTE.drag.y;
+    if (Math.abs(dy) > 6 && !NOTE.drag.moved) { NOTE.drag.moved = true; try { cv.setPointerCapture(e.pointerId); } catch (er) {} }
+    if (NOTE.drag.moved) { NOTE.off = NOTE.drag.off; scrollNote(Math.round(dy / CL)); }
+    return;
+  }
   if (!DRAG || e.pointerId !== DRAG.pid) return;
   const pt = toBoard(e);
   if (!DRAG.moved && Math.hypot(pt.x - DRAG.start.x, pt.y - DRAG.start.y) < 7) return;
@@ -1959,11 +2016,16 @@ cv.addEventListener('pointermove', e => {
   DRAGPOS[DRAG.key] = { x, y };
 });
 const endDrag = e => {
+  if (NOTE.drag && e.pointerId === NOTE.drag.pid) {
+    if (!NOTE.drag.moved) { const p = toBoard(e); if (inRect(NOTE.up, p)) scrollNote(1); else if (inRect(NOTE.down, p)) scrollNote(-1); }
+    NOTE.drag = null; SUPPRESS_CLICK = true; setTimeout(() => { SUPPRESS_CLICK = false; }, 50); return;
+  }
   if (!DRAG || e.pointerId !== DRAG.pid) return;
   if (DRAG.moved) { SUPPRESS_CLICK = true; setTimeout(() => { SUPPRESS_CLICK = false; }, 50); }
   DRAG = null;
 };
 cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('wheel', e => { if (inRect(NOTE.rect, toBoard(e))) { e.preventDefault(); scrollNote(e.deltaY < 0 ? 1 : -1); } }, { passive: false });
 cv.addEventListener('pointercancel', endDrag);
 let TAP = null;
 function tapFx(h) { TAP = { ...h, t: 1 }; beep(880, 0.04, 'triangle', 0.03); }
@@ -2015,6 +2077,7 @@ M = newMem();
 setView('board'); renderCode(); renderBuilder(); fit();
 if (FINE) $('cmd').focus();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { paper = null; });
+try { document.fonts.load('700 18px Caveat'); } catch (e) {}   // la letra a mano del fragmento de código (el título que la usa se oculta en el celular)
 requestAnimationFrame(frame);
 // para pruebas y para el futuro modo teclado: ejecutar una línea escrita
 window.ejecutar = run;
