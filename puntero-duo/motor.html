@@ -69,6 +69,8 @@ body[data-view="board"] .vcode, body[data-view="code"] .vboard{display:none}
 .strip .leak{color:var(--warn)}
 .strip .out{color:var(--ok)}
 .strip{cursor:pointer}
+.strip .slot{display:inline-block;min-width:1.4em;padding:0 4px;border-bottom:2px solid var(--lock);cursor:pointer}
+.strip .slot.on{border-color:var(--ink);background:#dfe8ff;color:var(--ink)}
 .strip .num{color:var(--lock);font-size:.85em;margin-right:6px}
 /* avisos: globos sobre el dibujo */
 .boardcell .fb{box-shadow:3px 4px 0 rgba(46,44,42,.15);pointer-events:auto}
@@ -900,11 +902,11 @@ function fillChips(box, typing) {
     $('bx').hidden = true;
     if (PATH && !PATH.ins) { renderPathBar(box); return; }
     if (PATH && PATH.ins) {
-      renderCompletions(box);
+      if (HELP_OPEN) renderCompletions(box);
       if (HELP_OPEN) { const t = document.createElement('p'); t.style.cssText = 'margin:0;font-size:14px;color:var(--soft)'; t.textContent = `${PATH.expr} se escribe en la línea. En el nodo marcado: su casilla next sigue la flecha y su casilla value termina en ${PATH.expr}->value.`; box.appendChild(t); }
       return;
     }
-    if (!HELP_OPEN && !(TAPPED && $('cmd').value.trim())) return;   // sin ayuda: solo el campo (salvo justo después de tocar el dibujo)
+    if (!HELP_OPEN) return;   // sin ayuda: solo el campo (las sugerencias se abren con 🧩)
     if ($('cmd').value.trim()) { renderCompletions(box); return; }
     const empty = !anyVars();
     if (empty) TAB = 'Variables';
@@ -978,10 +980,20 @@ function fillChips(box, typing) {
 }
 /* ── Escribir con el teclado ── */
 function setCmd(v) { $('cmd').value = v; CUR = { s: v.length, e: v.length }; LASTTAP = null; }
-/* Lo que se toca en el dibujo arma un lado a la vez: primero la izquierda (un toque nuevo la reemplaza;
-   seguir flechas la extiende). «＝» (o escribir =) pasa a la derecha, y ahí los toques arman la derecha.
-   En un if el paso es «==». Dentro de printf( o free( el toque llena el argumento y cierra. */
+/* Lo que se toca en el dibujo se ubica en la línea por lados: con el campo vacío, el primer toque escribe «p = »
+   (el = aparece de inmediato) y los toques siguientes cambian la izquierda. La derecha se llena solo cuando uno
+   toca esa parte: su casilla en la tira, o el campo después del =. Lo mismo en un if (izquierda == derecha).
+   Dentro de printf( o free( el toque llena el argumento y cierra. */
 let LASTTAP = null;
+// Las dos partes de la línea del campo: { ls, le, eq, rs, re, close } (posiciones en el texto), o null
+function slots(v) {
+  let m = /^(\s*if\s*\(\s*)(.*?)(\s*==\s*)(.*?)(\s*\)?\s*)$/.exec(v), kind = 'if';
+  if (!m) { m = /^(\s*)(.*?[^=!<>\s])(\s*=(?!=)\s*)(.*?)(\s*;?\s*)$/.exec(v); kind = 'asg'; }
+  if (!m || (kind === 'asg' && /^\s*(if|printf|free|while|for)\b/.test(v))) return null;
+  const ls = m[1].length, le = ls + m[2].length, eq = le, rs = le + m[3].length, re = rs + m[4].length;
+  return { kind, ls, le, eq, rs, re, L: m[2], R: m[4], close: kind === 'if' ? ')' : ';', decl: /^Nodo \*\s*\w+$/.test(m[2].trim()) };
+}
+const onRight = sl => sl.decl || CUR.e > sl.eq;
 function placeTap(expr) {
   const el = $('cmd'), v = el.value, t = normalizeC(v);
   const put = (pre, post) => {
@@ -989,18 +1001,30 @@ function placeTap(expr) {
     const s = pre.length, e = s + expr.length;
     CUR = { s: e, e, mine: true }; LASTTAP = { s, e }; TAPPED = true;
     try { el.setSelectionRange(e, e); } catch (er) {}
+    renderStrip();
     return { s, e };
   };
   let m;
-  if (!t) return put('', '');
-  if ((m = /^if \(([\w>-]+)\)?$/.exec(t))) return put('if (', '');   // izquierda del ==: se reemplaza
+  if (!t) return put('', ' = ');                                         // izquierda, con el = ya puesto
+  if (/^if \(\)?$/.test(t)) return put('if (', ' == )');
   if ((m = /^(printf\("%d", |free\()/.exec(t))) return put(m[1], ');');
-  if ((m = /^(if \(.+? == ).*$/.exec(t))) return put(m[1], ')');
-  if (!/^if\b/.test(t) && (m = /^(.*?[^=!<>]) = (?!=)/.exec(t + ' '))) return put(m[1] + ' = ', ';');
-  if (/^Nodo \*\w+$/.test(t)) return put(t + ' = ', ';');   // una declaración solo puede seguir con =
-  if (/^[\w>-]+$/.test(t)) return put('', '');                // la izquierda todavía: se reemplaza
+  const sl = slots(v);
+  if (sl) {
+    if (onRight(sl)) { const post = v.slice(sl.re); return put(v.slice(0, sl.rs), post.trim() ? post : sl.close); }
+    return put(v.slice(0, sl.ls), v.slice(sl.le));
+  }
+  if (/^Nodo \*\w+$/.test(t)) return put(t + ' = ', ';');                // una declaración solo sigue con =
+  if (/^[\w>-]+$/.test(t)) return put('', ' = ');                        // la izquierda todavía: se reemplaza
   if (LASTTAP && LASTTAP.e <= v.length) return put(v.slice(0, LASTTAP.s), v.slice(LASTTAP.e));
   return put(v.slice(0, CUR.s), v.slice(CUR.e));
+}
+// Tocar una casilla de la tira elige ese lado (sin abrir el teclado)
+function pickSide(side) {
+  const el = $('cmd'), sl = slots(el.value); if (!sl) return;
+  const e = side === 'right' ? sl.re : sl.le;
+  CUR = { s: e, e, mine: true }; PATH = null; LASTTAP = null;
+  try { el.setSelectionRange(e, e); } catch (er) {}
+  renderBuilder();
 }
 function syncPathInput() {   // la expresión que se va siguiendo en el dibujo se escribe en el campo
   TAPPED = true;
@@ -1088,24 +1112,8 @@ function completions() {
   const lit = c => /[ (]\d[;)]$/.test(c);   // los números al final, después de las expresiones
   return shown.sort((a, b) => isStem(b) - isStem(a) || lit(a) - lit(b) || a.length - b.length).slice(0, 16);
 }
-// «＝» pasa de la izquierda a la derecha (en un if, «==»)
-function sideStep() {
-  const t = normalizeC($('cmd').value);
-  let m;
-  const known = e => scope().some(v => v.kind === 'int' && v.name === e) || (/^\w+(->(next|head))*(->value)?$/.test(e) && pathValue(e.replace(/->value$/, '')) !== undefined);   // una expresión completa y real
-  if ((m = /^if \(([\w>-]+)\)?$/.exec(t)) && known(m[1])) return { label: '== →', text: `if (${m[1]} == ` };
-  if (/^[\w>-]+$/.test(t) && known(t) && !scope().some(v => v.kind === 'int' && v.name === t)) return { label: '＝ →', text: t + ' = ' };
-  return null;
-}
 function renderCompletions(box) {
-  const st = sideStep();
-  if (st) {
-    const g = document.createElement('div'); g.className = 'grp';
-    const b = mkChip(st.label + ' pasar a la derecha', 'fn', () => { PATH = null; setCmd(st.text); TAPPED = true; renderBuilder(); });
-    b.addEventListener('pointerdown', e => e.preventDefault());
-    g.appendChild(b); box.appendChild(g);
-  }
-  const list = completions().filter(x => !st || x !== st.text);
+  const list = completions();
   const g = document.createElement('div'); g.className = 'grp';
   for (const x of list) {
     const raw = $('cmd').value.slice(0, CUR.e), typed = normalizeC(raw).replace(/;$/, '');
@@ -1128,8 +1136,8 @@ function renderCompletions(box) {
 {
   const el = $('cmd');
   const track = () => { if (document.activeElement !== el) return; CUR = { s: el.selectionStart ?? el.value.length, e: el.selectionEnd ?? el.value.length }; };
-  el.addEventListener('input', () => { track(); const had = !!PATH || TAPPED; PATH = null; TAPPED = false; LASTTAP = null; if (HELP_OPEN || had) renderBuilder(); });
-  for (const ev of ['keyup', 'click', 'select']) el.addEventListener(ev, track);
+  el.addEventListener('input', () => { track(); renderStrip(); const had = !!PATH || TAPPED; PATH = null; TAPPED = false; LASTTAP = null; if (HELP_OPEN || had) renderBuilder(); });
+  for (const ev of ['keyup', 'click', 'select']) el.addEventListener(ev, () => { track(); if (slots(el.value)) renderStrip(); });
   el.addEventListener('focus', () => { if (!CUR.mine) return; CUR.mine = false; try { el.setSelectionRange(Math.min(CUR.s, el.value.length), Math.min(CUR.e, el.value.length)); } catch (e) {} });   // vuelve donde se iba escribiendo (un toque en el campo lo mueve después)
   el.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); submitCmd(); }
@@ -1225,11 +1233,17 @@ function renderStrip() {
   } else {
     const k = PROG.length - 1, last = PROG[k];
     if (last) out.push(row('prev ' + (last.cls === 'new' ? '' : last.cls || ''), numOf(String(k)), esc(last.text)));
-    const d = code.querySelector('.ln.draft');
+    const d = code.querySelector('.ln.draft'), sl = !BUILD && $('cmd').value.trim() ? slots($('cmd').value) : null;
     if (d) out.push(`<div class="ln now">${d.innerHTML.trim()}</div>`);
+    else if (sl) {   // la línea que se arma con toques: [izquierda] = [derecha]; la casilla activa es la que recibe el próximo toque
+      const r = onRight(sl), op = sl.kind === 'if' ? ' == ' : ' = ';
+      const box = (side, txt, on) => `<span class="slot${on ? ' on' : ''}" data-side="${side}">${txt ? esc(txt) : '?'}</span>`;
+      out.push(`<div class="ln now">${sl.kind === 'if' ? 'if (' : ''}${box('left', sl.L, !r)}${op}${box('right', sl.R, r)}${sl.close}</div>`);
+    }
     else if (!last) out.push(`<div class="idle">Escribe abajo una línea en C, por ejemplo Lista *l = crearLista(); · 🧩 abre la ayuda</div>`);
   }
   $('strip').innerHTML = out.join('');
+  $('strip').querySelectorAll('.slot').forEach(x => x.onclick = ev => { ev.stopPropagation(); pickSide(x.dataset.side); });
 }
 $('strip').onclick = () => { if (!BUILD && !PATH && !REPLAY && matchMedia('(max-width: 899px)').matches) setView('code'); };
 function setView(v) {
@@ -1347,7 +1361,7 @@ $('bhelp').onclick = () => {
 function showHelp() {
   showCard(`<h2>Cómo funciona</h2>
     <p>En el <b>margen</b> están las variables (el stack). En la <b>hoja</b>, los nodos (el heap). Cada nodo es <code>[value | next]</code> y tiene su dirección.</p>
-    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. En un nodo con nombre, su casilla value escribe <code>p->value</code> y su casilla next <code>p->next</code> (si dos punteros lo apuntan, se pregunta por cuál). <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
+    <p>Abajo, en el cuaderno, <b>escribes cada línea en C</b> y la ejecutas con ⏎ (los espacios dan igual). Tocar un post-it y seguir sus flechas escribe la expresión por ti, por ejemplo <code>p->next->next</code>. En un nodo con nombre, su casilla value escribe <code>p->value</code> y su casilla next <code>p->next</code> (si dos punteros lo apuntan, se pregunta por cuál). El primer toque arma la izquierda (<code>p = </code>); para llenar la derecha toca su casilla en la línea de arriba del campo. <b>🧩</b> despliega la ayuda: piezas para armar la línea sin teclado y sugerencias mientras escribes. La línea se ejecuta y se anima; el programa completo está en la pestaña <b>Código</b>.</p>
     <ul>
       <li><code>malloc</code> crea un nodo con <b>basura</b>: hay que darle <code>value</code> y <code>next</code>.</li>
       <li>Lo que no compila o se cae (segfault, uso después de <code>free</code>) no se ejecuta y se explica.</li>
@@ -1824,17 +1838,16 @@ function pickValue(h, expr) {
   }
   tapFx(h);
   if (PATH && PATH.ins) { PATH.expr = expr; syncPathInput(); PATH = null; renderBuilder(); return; }
-  PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
+  PATH = null; placeTap(expr); renderBuilder();   // con la ayuda: queda escrito para seguir (p->value = …, if (p->value == …))
 }
 // ¿Lo que se está llenando es un puntero? (un hueco de puntero, la derecha de p = …, p->next = …, free(…))
 // Ahí, tocar el cuerpo de un nodo con nombre escribe su nombre (q) y no q->value.
 function wantsPtr() {
   if (BUILD) { const t = holeType(); return t === 'ptr' || t === 'lv'; }
-  const t = normalizeC($('cmd').value);
+  const v = $('cmd').value, t = normalizeC(v);
   if (/^free\(/.test(t)) return true;
-  if (/^(if|printf)\b/.test(t)) return false;
-  const m = /^(.*?[^=!<>]) = (?!=)/.exec(t + ' ');
-  return !!m && !/->value$/.test(m[1].trim());
+  const sl = slots(v);   // a la derecha de un = (o de un ==) de punteros
+  return !!sl && onRight(sl) && !/->value$/.test(sl.L.trim());
 }
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
@@ -1865,7 +1878,7 @@ function tapComponent(h, comp) {
       PATH = comp === 'value' ? null : { expr, ins };   // desde q o q->next se puede seguir la flecha
       renderBuilder(); return;
     }
-    if (comp === 'value') { PATH = null; setCmd(expr); TAPPED = true; LASTTAP = { s: 0, e: expr.length }; renderBuilder(); return; }
+    if (comp === 'value') { PATH = null; placeTap(expr); renderBuilder(); return; }
     PATH = { expr }; renderBuilder();   // con la ayuda: las líneas posibles para p->next
   };
   if (names.length === 1) { go(names[0]); return; }
