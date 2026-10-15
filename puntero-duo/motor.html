@@ -729,13 +729,15 @@ async function runCase(i, animate) {
     if (seen.has(id)) { bad = 'la lista tiene un ciclo: nunca llega a NULL.'; break; }
     seen.add(id); got.push(n.v); gotIds.push(id); id = n.next;
   }
-  const show = a => a.length ? a.join(' → ') + ' → NULL' : 'NULL (vacía)';
-  if (bad) return { ok: false, msg: 'Al terminar, ' + bad };
-  if (lost.length) {
+  const show = a => a.length ? a.map(v => v ?? '¿?').join(' → ') + ' → NULL' : 'NULL (vacía)';   // ¿? = value basura
+  if (lost.length) {   // la fuga va primero: un ciclo o una lista corta suelen ser su consecuencia
     const nm = lost.map(n => n.v ?? '¿?'), pl = nm.length > 1;
     const vals = pl ? nm.slice(0, -1).join(', el ') + ' y el ' + nm.at(-1) : String(nm[0]);
-    return { ok: false, msg: `${pl ? `El ${vals} quedaron` : `El ${vals} quedó`} sin acceso (fuga): la lista terminó ${show(got)} y se esperaba ${show(want)}.` };
+    const end = bad ? `Además, al terminar ${bad}` : `La lista terminó ${show(got)} y se esperaba ${show(want)}.`;
+    return { ok: false, msg: `${pl ? `El ${vals} quedaron` : `El ${vals} quedó`} sin acceso (fuga). ${end}` };
   }
+  if (bad) return { ok: false, msg: 'Al terminar, ' + bad };
+  if (got.some(v => v === null)) return { ok: false, msg: `La lista quedó ${show(got)} y se esperaba ${show(want)}: un nodo quedó con su value basura (¿?), nunca se le asignó un valor.` };
   if (got.length !== want.length || got.some((v, j) => v !== want[j])) return { ok: false, msg: `La lista quedó ${show(got)} y se esperaba ${show(want)}.` };
   const keep = gotIds.slice(1);
   if (keep.some((nid, j) => nid !== orig[j])) return { ok: false, msg: 'Los valores están bien, pero los nodos que ya estaban fueron reemplazados por otros: hay que reusarlos, no copiarlos.' };
@@ -1258,7 +1260,7 @@ function renderStrip() {
       const box = (side, txt, on) => `<span class="slot${on ? ' on' : ''}" data-side="${side}">${txt ? esc(txt) : '?'}</span>`;
       out.push(`<div class="ln now">${sl.kind === 'if' ? 'if (' : ''}${box('left', sl.L, !r)}${op}${box('right', sl.R, r)}${sl.close}</div>`);
     }
-    else if (!last) out.push(`<div class="idle">Elige una pestaña de abajo o toca un post-it del dibujo para armar una línea.</div>`);
+    else if (!last && TYPE_MODE) out.push(`<div class="idle">Escribe una línea en C, o toca un post-it del dibujo.</div>`);
   }
   $('strip').innerHTML = out.join('');
   $('strip').querySelectorAll('.slot').forEach(x => x.onclick = ev => { ev.stopPropagation(); pickSide(x.dataset.side); });
@@ -1610,7 +1612,7 @@ function drawList(L) {
   ctx.fillText('Lista', B.l + 6, L.y + 1);
   ctx.fillStyle = '#fffdf6'; ctx.fillRect(B.cl, B.ct, LCW, LCW);   // la casilla del puntero head
   ctx.strokeStyle = '#2f6b45'; ctx.lineWidth = 1.5; rRect(B.cl, B.ct, LCW, LCW, 913, 0.6);
-  const nm = listVars().filter(v => v.t === L.id).map(v => v.name + '->head');   // su nombre en chico, arriba de la casilla
+  const nm = listVars().filter(v => v.t === L.id && !v.hidden).map(v => v.name + '->head');   // su nombre en chico, arriba de la casilla
   if (nm.length) { ctx.fillStyle = '#2350b8'; ctx.font = '11px "Patrick Hand", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('(' + nm.join(', ') + ')', B.cx, B.Tp - 6); }
   if (L.head === null) { ctx.strokeStyle = '#2e2c2a'; ctx.lineWidth = 1.4; rLine(B.cl + 3, B.ct + LCW - 3, B.cl + LCW - 3, B.ct + 3, 917, 0.5, 1); }
 }
@@ -1884,7 +1886,7 @@ function tapBoard(e) {
   }
   if (h.kind === 'var') {   // en un hueco numérico también: desde el post-it se llega a p->value o p->next->value
     tapFx(h);
-    if (BUILD && type === 'var') { PATH = null; fill(h.v.name); return; }
+    if (BUILD && (type === 'var' || (type === 'list' && h.v.kind === 'list'))) { PATH = null; fill(h.v.name); return; }   // una lista entera: no hay flechas que seguir
     PATH = { expr: h.v.name }; if (!BUILD && TYPE_MODE) PATH.ins = placeTap(h.v.name); renderBuilder(); return;
   }
   if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
@@ -1931,9 +1933,9 @@ function wantsPtr() {
 }
 // Los nombres de un nodo: las variables que lo apuntan; si no hay, el head de una lista
 function namesOf(id) {
-  const vars = scope().filter(v => v.kind === 'ptr' && v.t === id).map(v => v.name);
+  const vars = scope().filter(v => v.kind === 'ptr' && v.t === id && !v.hidden).map(v => v.name);
   if (vars.length) return vars;
-  return listVars().filter(l => l.t !== null && listOf(l.t) && listOf(l.t).head === id).map(l => l.name + '->head');
+  return listVars().filter(l => !l.hidden && l.t !== null && listOf(l.t) && listOf(l.t).head === id).map(l => l.name + '->head');
 }
 function tapComponent(h, comp) {
   if (comp === 'value' && wantsPtr()) comp = 'self';   // el nodo mismo: q
@@ -1998,7 +2000,7 @@ function renderPathBar(box) {
   g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
   box.appendChild(g);
   const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-  tip.textContent = PATH.val && val !== null && val !== G && !isList ? `Elige qué hacer con ${PATH.expr}->value.` : isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
+  tip.textContent = PATH.val && val !== null && val !== G && !isList ? `Elige qué hacer con ${PATH.expr}->value.` : isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : BUILD ? `Toca ✓ usar (o el nodo marcado) para ponerlo en el hueco, o su casilla next para seguir la flecha.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
