@@ -1887,6 +1887,11 @@ function tapBoard(e) {
   if (h.kind === 'var') {   // en un hueco numérico también: desde el post-it se llega a p->value o p->next->value
     tapFx(h);
     if (BUILD && (type === 'var' || (type === 'list' && h.v.kind === 'list'))) { PATH = null; fill(h.v.name); return; }   // una lista entera: no hay flechas que seguir
+    if (BUILD && (type === 'ptr' || type === 'lv') && h.v.kind === 'ptr') {
+      // tocar lo marcado otra vez lo usa; sin flecha que seguir (NULL o basura), un solo toque basta
+      const t = h.v.t, noArrow = t === null || t === G || !nodeOf(t);
+      if ((PATH && PATH.expr === h.v.name) || (noArrow && type === 'ptr')) { PATH = null; fill(h.v.name); return; }
+    }
     PATH = { expr: h.v.name }; if (!BUILD && TYPE_MODE) PATH.ins = placeTap(h.v.name); renderBuilder(); return;
   }
   if (h.kind === 'list' || h.kind === 'lhead') {   // la caja Lista: se llega por el post-it que la apunta
@@ -2000,7 +2005,7 @@ function renderPathBar(box) {
   g.appendChild(mkChip('✕', '', () => { PATH = null; renderBuilder(); }));
   box.appendChild(g);
   const tip = document.createElement('p'); tip.style.cssText = 'margin:0;font-size:14px;color:var(--soft)';
-  tip.textContent = PATH.val && val !== null && val !== G && !isList ? `Elige qué hacer con ${PATH.expr}->value.` : isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : BUILD ? `Toca ✓ usar (o el nodo marcado) para ponerlo en el hueco, o su casilla next para seguir la flecha.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
+  tip.textContent = PATH.val && val !== null && val !== G && !isList ? `Elige qué hacer con ${PATH.expr}->value.` : isList ? `${PATH.expr} apunta a una Lista: toca su casilla head para llegar al primer nodo.` : val === null ? `${PATH.expr} es NULL.` : val === G ? `${PATH.expr} es basura: no se puede seguir.` : BUILD ? `Toca de nuevo ${PATH.expr} (o el nodo marcado) para ponerlo en el hueco, o la casilla next del nodo para seguir la flecha.` : `En el nodo marcado: toca su casilla next para seguir la flecha, o su casilla value para escribir ${PATH.expr}->value.`;
   box.appendChild(tip);
 }
 cv.addEventListener('click', tapBoard);
