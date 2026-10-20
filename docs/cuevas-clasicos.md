@@ -14,9 +14,9 @@ Como los niños pueden cavar por cualquier parte, cada obstáculo con ritmo est�
 
 | # | Cueva | Juego | Diamantes necesarios | Desafío |
 |---|---|---|---|---|
-| 1 | [La pirámide](#1-la-pirámide) | Montezuma's Revenge | 20 | Usar las llaves en el orden justo |
+| 1 | [La pirámide](#1-la-pirámide) | Montezuma's Revenge | 19 | Usar las llaves en el orden justo |
 | 2 | [Rayos](#2-rayos) | Montezuma's Revenge | 24 | Cruzar con el ritmo de los rayos |
-| 3 | [La antorcha](#3-la-antorcha) | Montezuma's Revenge | 18 | Un laberinto oscuro con enemigos |
+| 3 | [La antorcha](#3-la-antorcha) | Montezuma's Revenge | 27 | Un laberinto oscuro con enemigos |
 | 4 | [Cocodrilos](#4-cocodrilos) | Pitfall! | 15 | Cruzar sobre los cocodrilos, o por el túnel |
 | 5 | [Brea](#5-brea) | Pitfall! | 14 | Tapar los pozos con rocas |
 | 6 | [Troncos](#6-troncos) | Pitfall! | 15 | Esquivar los troncos y cortarles el paso |
@@ -32,61 +32,46 @@ Como los niños pueden cavar por cualquier parte, cada obstáculo con ritmo est�
 
 ## 1. La pirámide
 
-**De dónde sale:** las habitaciones de la pirámide de *Montezuma's Revenge* (1984), con llaves y puertas de colores que obligan a ir y volver.
+**De dónde sale:** las habitaciones de la pirámide de *Montezuma's Revenge* (1984), con llaves y puertas de colores que obligan a pensar el camino.
 
-**Qué hay de nuevo:** **llaves y puertas de tres colores**: roja (`k` `K`), azul (`m` `M`) y verde (`j` `J`). Cada llave abre solo una puerta de su color y se gasta, como las de la cueva «Llaves que se gastan», pero aquí lo difícil es el orden.
+**Qué hay de nuevo:** **llaves y puertas de tres colores**: roja (`k` `K`), azul (`m` `M`) y verde (`j` `J`). Cada llave abre una sola puerta de su color y se gasta. Hay **llaves justas**: 6 llaves para 11 puertas.
 
 **Letras nuevas:** `k` `m` `j` llaves · `K` `M` `J` puertas
 
-**Necesarios:** 20 diamantes · **diamantes en el mapa:** 25 · **rocas:** 11 · **tiempo:** 200 s
+**Necesarios:** 19 diamantes · **diamantes en el mapa:** 33 · **rocas:** 0 · **tiempo:** 240 s
 
 ```
 ########################################
-#12..o.......W....o.......W....o.......#
-#.......*....W..*.........W..*.........#
-#...*........W........*...W......*.....#
-#............K............M............#
-#........o...W F          W.........o..#
-#.....*......W.........o..W............#
-#............W...*........W...*........#
-#.........k..W......m.....W........k...#
-#..........*.W..........*.W.....*....*.#
+#12..........W............W............#
 #............W............W............#
-#WWWWWWWWWWWWWWWWWWKWWWWWWWWWWWWWWWWWWW#
+#...*.....*..M...*.....*..J...*.....*..#
+#...j..m.....W......k.....W......k.....#
 #............W............W............#
-#..*.........W.*.....o....W..*...o.....#
-#.......*....W........*...W..........*.#
-#....o....................W.......*....#
-#....o..............    ..J............#
-#....j.......W..o... B  ..W............#
-#............W......    ..W.........X..#
-#.........*..W....*.......W............#
-#...*........W..........*.W....*.......#
+#............W..*.........W............#
+#WWWWWJWWWWWWWWWWWWKWWWWWWWWWWWWKWWWWWW#
+#............W............W............#
+#............W............W............#
+#...*.....*..J...*.....*..M...*.....*..#
+#......*.....W............W......m.....#
+#............W............W............#
+#..*.......*.W..*.......*.W..*.......*.#
+#WWWWWMWWWWWWWWWWWWMWWWWWWWWWWWWKWWWWWW#
+#............W............W............#
+#............W............W............#
+#...*.....*..W...*.....*..J...*.....*..#
+#......*.....W......*.....W............#
+#............W............W..........X.#
+#..*.......*.W..*.......*.W..*.........#
 ########################################
 ```
 
-**Qué hay:** Seis habitaciones de ladrillo, tres arriba y tres abajo:
-  - **A** (arriba a la izquierda): la partida y una llave roja.
-  - **B** (arriba al medio): un pasillo con una luciérnaga y la llave azul. Tiene una puerta azul hacia C y una roja hacia E, abajo.
-  - **C** (arriba a la derecha): la segunda llave roja.
-  - **D** (abajo a la izquierda): la llave verde, debajo de dos rocas. Se entra desde E.
-  - **E** (abajo al medio): una mariposa encerrada.
-  - **F** (abajo a la derecha): la salida, tras la puerta verde.
+**Qué hay:** Nueve salas de ladrillo, en 3 × 3, unidas por puertas de colores. Entre la segunda y la tercera de la fila de abajo hay pared. Se parte arriba a la izquierda, con una llave azul y una verde, y la salida está abajo a la derecha. Hay más llaves repartidas en otras salas, y diamantes en todas. No hay enemigos ni rocas: es un puzle.
 
-**El desafío:** Se necesitan 20 diamantes de los 25. Hay cuatro llaves para cuatro puertas, pero solo sirven en un orden: la llave roja de A se gasta en la primera puerta, así que para bajar a E hace falta la otra llave roja, que está en C, detrás de la puerta azul.
+**El desafío:** Llegar a la salida con 19 diamantes. Cada puerta abierta gasta una llave que después puede faltar. El puzle se armó y se revisó con un programa que prueba todos los órdenes posibles: hay un solo camino, y 9 de las 25 situaciones a las que se puede llegar ya no tienen salida. Si eso pasa, se reinicia con R.
 
-**Cómo se pasa:**
+**Cómo se pasa:** Antes de abrir, mirar qué llaves hay detrás de cada puerta. La puerta verde de la primera sala es la trampa: da a una sala llena de diamantes, pero gasta la única llave verde, que hace falta para pasar de la segunda sala a la tercera. Por ahí se juntan las llaves rojas y la segunda azul, que alcanzan justo para bajar hasta la salida: la última puerta, roja, se abre con la llave que estaba más lejos.
 
-1. En A, tomar la llave roja y abrir la puerta hacia B.
-2. En B, esquivar la luciérnaga y tomar la llave azul.
-3. Abrir C, tomar la segunda llave roja y volver a B.
-4. Bajar a E con la llave roja.
-5. Pasar a D, sacar la llave verde de debajo de las rocas sin quedar aplastado y volver a E.
-6. Abrir la puerta verde hacia F y salir.
-
-Antes de entrar a F hay 21 diamantes a mano.
-
-**Con dos jugadores:** cada niño lleva sus llaves, así que pueden repartirse: uno va por la llave azul mientras el otro junta en A. Pero el que abre la puerta gasta su llave, y una mala elección deja a los dos encerrados.
+**Con dos jugadores:** cada niño lleva sus llaves y cualquiera puede abrir. Conviene que uno solo decida qué puerta se abre: dos llaves gastadas a la vez en puertas distintas pueden cerrar el camino.
 
 **En el juego:** las llaves y puertas tienen color (letras `a` `A` dorada, `k` `K` roja, `m` `M` azul, `j` `J` verde), y el marcador muestra las llaves de cada color que lleva cada niño.
 
@@ -98,7 +83,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **De dónde sale:** las barreras láser de *Montezuma's Revenge*, que se encienden y se apagan con un ritmo fijo.
 
-**Qué hay de nuevo:** el **rayo** (`=` y `-`): una cortina de luz que dura 1,5 segundos encendida y 1,5 apagada. Las `=` y las `-` van al revés: cuando unas se apagan, las otras se encienden. Un niño que está en un rayo encendido muere. Para las rocas y los enemigos el rayo es una pared.
+**Qué hay de nuevo:** el **rayo** (`=` y `-`): una cortina de luz que dura 1,5 segundos encendida y 1,5 apagada. Las `=` y las `-` van al revés: cuando unas se apagan, las otras se encienden. Un niño que pisa un rayo encendido, o que está en él cuando se enciende, muere. Para las rocas y los enemigos el rayo es una pared.
 
 **Letras nuevas:** `=` `-` rayos (en turnos opuestos)
 
@@ -137,7 +122,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **Con dos jugadores:** uno mira y avisa («¡ahora!») mientras el otro cruza. Si van juntos, el segundo tiene que esperar al turno siguiente, porque en el cuadro del medio cabe uno solo.
 
-**En el juego:** el rayo sigue el reloj de la cueva, el mismo en los dos celulares. No se puede pisar encendido, y quien está en él cuando se enciende muere. Su ritmo se cambia con `laser=encendido,apagado` en los ritmos del mapa.
+**En el juego:** el rayo sigue el reloj de la cueva, el mismo en los dos celulares. Quien lo pisa encendido, o está en él cuando se enciende, muere. Su ritmo se cambia con `laser=encendido,apagado` en los ritmos del mapa.
 
 ---
 
@@ -150,50 +135,49 @@ Antes de entrar a F hay 21 diamantes a mano.
 **Qué hay de nuevo:** esta cueva es **siempre oscura** (como con la opción OSCURIDAD) y tiene tres objetos:
   - la **antorcha** (`i`): quien la toma ve lejos durante toda la cueva;
   - el **amuleto** (`e`): todos los enemigos se quedan quietos 10 segundos;
-  - la **espada** (`h`): quien la lleva elimina al primer enemigo que toca, sin explosión (una mariposa deja sus diamantes). Se gasta en un golpe.
+  - la **espada** (`h`): el primer enemigo que toca a su dueño muere en vez del niño (una mariposa deja 9 diamantes). Se gasta en un golpe.
 
 **Letras nuevas:** `i` antorcha · `e` amuleto · `h` espada
 
-**Necesarios:** 18 diamantes · **diamantes en el mapa:** 24 · **rocas:** 8 · **tiempo:** 180 s
+**Necesarios:** 27 diamantes · **diamantes en el mapa:** 0 · **rocas:** 0 · **tiempo:** 200 s
 
 ```
 ########################################
-#12.....i..............................#
-#.              *           F         .#
-#.   *                           *    .#
-#...........o......  ...*...........  .#
-#........*.........  .....o.........  .#
-#..................  ..........*....  .#
-#.        F   *                    *  .#
-#.    *                    *          .#
-#.  ..o..........*.....................#
-#.  .......*.........e........h..o.....#
-#.  .....................*.............#
-#.           *           B            .#
-#.  *                          *      .#
-#..............o...  ...............  .#
-#.......*..........  .......o.....*.  .#
-#..................  ..*............  .#
-#.      B           *         F       .#
-#.            *              *        .#
-#....o.............................*...#
-#........h......*.......o.............X#
+#12..h..i..............................#
+#.          B               F         .#
+#.                                    .#
+#..................  ...............  .#
+#..................  ...............  .#
+#..................  ...............  .#
+#.             B              F       .#
+#.                                    .#
+#.  ...................................#
+#.  ..........h......e........h........#
+#.  ...................................#
+#.                       B            .#
+#.                                    .#
+#..................  ...............  .#
+#..................  ...h...........  .#
+#..................  ...............  .#
+#.      B           F            B    .#
+#.                                    .#
+#......................................#
+#........h............................X#
 ########################################
 ```
 
-**Qué hay:** Un laberinto de cuatro pasillos vacíos unidos por pozos, con tierra entre ellos. En los pasillos andan tres luciérnagas y dos mariposas. Hay 24 diamantes y algunas rocas en la tierra. La antorcha está cerca de la partida, en la tierra; el amuleto y una espada están al medio, y otra espada abajo.
+**Qué hay:** Un laberinto de cuatro pasillos vacíos unidos por pozos, con tierra entre ellos. **No hay diamantes sueltos ni rocas:** los diamantes están en las cinco mariposas, y la única forma de sacarlos es la espada. Hay cinco espadas repartidas en la tierra y tres luciérnagas en los pasillos. La antorcha está cerca de la partida, y el amuleto al medio.
 
-**El desafío:** Se necesitan 18. En la oscuridad las luciérnagas se ven recién cuando están encima. Los pasillos dan vueltas, así que los enemigos vuelven por donde uno no los espera.
+**El desafío:** Se necesitan 27 diamantes, o sea, tres mariposas. Cada espada sirve para un solo enemigo: si una luciérnaga toca primero a quien la lleva, la espada se gasta en ella. Sin espada, cualquier enemigo que toque a un niño lo mata. Y en la oscuridad los enemigos se ven recién cuando están cerca.
 
 **Cómo se pasa:**
 
-- **Primero la antorcha:** está a seis cuadros de la partida, cavando por la tierra de arriba.
-- **Por la tierra:** cavar túneles propios en vez de usar los pasillos, para no cruzarse con los enemigos.
-- **El amuleto:** guardarlo para el pasillo más concurrido. En 10 segundos se pasa entre las luciérnagas quietas.
-- **Las espadas:** usarlas con las mariposas, que dan diamantes.
+- **Primero la antorcha:** está a seis cuadros de la partida, por la tierra de arriba. La primera espada está en el camino.
+- **Cazar:** con una espada, esperar a una mariposa en un pasillo, lejos de las luciérnagas, y dejar que se acerque.
+- **El amuleto:** sirve para pasar entre las luciérnagas quietas hasta otra espada.
 - **Salida:** abajo a la derecha.
 
-**Con dos jugadores:** hay una sola antorcha. Quien la tiene ve por los dos y guía al otro. El amuleto detiene a los enemigos para los dos.
+**Con dos jugadores:** hay una sola antorcha: quien la tiene ve por los dos. Uno caza con la espada mientras el otro vigila las luciérnagas.
 
 **En el juego:** la cueva es oscura aunque la opción OSCURIDAD esté apagada (casilla «Cueva oscura» del editor). La antorcha más que duplica la luz de quien la lleva. El amuleto dura 10 segundos (`amulet=` en los ritmos) y cada espada sirve para un golpe. El marcador muestra 🔥 y 🗡.
 
@@ -207,7 +191,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **De dónde sale:** los cocodrilos de *Pitfall!* (1982), cuyas cabezas se pisan para cruzar el pantano mientras tienen la boca cerrada, y el túnel de abajo, que ahorra camino.
 
-**Qué hay de nuevo:** el **agua** (`w`), donde no se puede entrar (lo que cae en ella se hunde y desaparece), y el **cocodrilo** (`c` y `C`): con la boca cerrada, 2 segundos, se puede pisar; al abrirla, muerde al que está encima. Los `c` y los `C` abren la boca por turnos.
+**Qué hay de nuevo:** el **agua** (`w`), donde no se puede entrar (lo que cae en ella se hunde y desaparece), y el **cocodrilo** (`c` y `C`): con la boca cerrada, 2 segundos, se puede pisar; abierta muerde, al que la pisa o al que está encima cuando la abre. Los `c` y los `C` abren la boca por turnos.
 
 **Letras nuevas:** `w` agua · `c` `C` cocodrilos (en turnos opuestos)
 
@@ -257,7 +241,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno puede tomar el túnel y el otro ir por arriba, y se juntan en el tercer tramo. En el islote cabe uno solo, así que se cruza de a uno.
 
-**En el juego:** el agua (`w`) se traga lo que cae en ella. Los cocodrilos siguen el reloj de la cueva (`croc=abierta,cerrada`): no se pueden pisar con la boca abierta, y si la abren con alguien encima, muerde.
+**En el juego:** el agua (`w`) se traga lo que cae en ella. Los cocodrilos siguen el reloj de la cueva (`croc=abierta,cerrada`): pisar uno con la boca abierta, o estar encima cuando la abre, mata.
 
 ---
 
@@ -267,7 +251,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **De dónde sale:** los pozos de brea de *Pitfall!*, que se abren y se cierran, y el gusto de *Sokoban* por tapar hoyos con lo que hay a mano.
 
-**Qué hay de nuevo:** el **pozo de brea** (`z` y `Z`): 2 segundos cerrado, como suelo firme, y 2 segundos abierto, cuando se traga lo que tiene encima (un niño muere; una roca o un diamante desaparece). Los `z` y los `Z` van por turnos. Un cuadro de brea que se traga una roca **queda tapado para siempre**.
+**Qué hay de nuevo:** el **pozo de brea** (`z` y `Z`): 2 segundos cerrado, como suelo firme, y 2 segundos abierto, cuando se traga lo que tiene encima o lo que entra (un niño muere; una roca o un diamante desaparece). Los `z` y los `Z` van por turnos. Un cuadro de brea que se traga una roca **queda tapado para siempre**.
 
 **Letras nuevas:** `z` `Z` pozos de brea (en turnos opuestos)
 
@@ -306,7 +290,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno empuja la roca hasta el borde y el otro avisa el turno. En versus, una roca en el lugar justo le tapa el camino al otro… o se lo abre.
 
-**En el juego:** la brea sigue el reloj de la cueva (`tar=abierta,cerrada`). Cerrada aguanta a niños y cosas, y al abrirse se traga lo que tiene: un niño muere, una roca (o una nuez, o un barril) la tapa para siempre y un diamante se pierde.
+**En el juego:** la brea sigue el reloj de la cueva (`tar=abierta,cerrada`). Cerrada aguanta a niños y cosas; abierta, el niño que la pisa muere, y al abrirse se traga lo que tiene: un niño muere, una roca (o una nuez, o un barril) la tapa para siempre y un diamante se pierde.
 
 ---
 
@@ -359,7 +343,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno corta el carril con una roca mientras el otro espera en un hueco. Si los dos usan el mismo hueco, el segundo se lleva el golpe.
 
-**En el juego:** el tronco avanza un cuadro cada 2 turnos (`log=`). Al alcanzar a un niño, pasa por encima: le hace saltar un diamante y lo deja atrás. Pasa también por encima de los diamantes. Lo detienen una roca, un barril u otro tronco, y al llegar a una pared vuelve a salir por la otra punta de su carril.
+**En el juego:** el tronco avanza un cuadro cada 2 turnos (`log=`). Al alcanzar a un niño, pasa por encima: le hace saltar un diamante y lo deja atrás. Pasa también por encima de los diamantes y de lo que se recoge. Lo detienen una roca, un barril u otro tronco, y al llegar a una pared vuelve a salir por la otra punta de su carril.
 
 ---
 
@@ -379,13 +363,13 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Letras nuevas:** `d` gorila · `b` tonel · `f` bidón · `H` martillo
 
-**Necesarios:** 18 diamantes · **diamantes en el mapa:** 15 · **rocas:** 3 · **tiempo:** 150 s
+**Necesarios:** 18 diamantes · **diamantes en el mapa:** 15 · **rocas:** 0 · **tiempo:** 150 s
 
 ```
 ########################################
 #                   X                  #
 #dd                                    #
-#dd             *         *      o     #
+#dd             *         *            #
 #WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW    #
 #                                      #
 #                                      #
@@ -393,20 +377,20 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 #    WWWWWWWWWWWWWWW WWWWWWWWWWWWWWWWWW#
 #                                      #
 #                                      #
-#     o       *         *       *      #
+#             *         *       *      #
 #WWWWWWWWWWW WWWWWWWWWWWWWWW WWWWWW    #
 #                                      #
 #                                      #
-#       *       *             H *   o  #
+#       *       *             H *      #
 #    WWWWWWWWWWWWWWWWW WWWWWWWWWWWWWWWW#
 #                                      #
 #                                      #
 #                                      #
-# f       *       *       *     *   12 #
+#         * 12    *       *     *     f#
 ########################################
 ```
 
-**Qué hay:** Cuatro vigas de ladrillo en zigzag, con huecos que sirven de escalera (por ellos también caen los toneles). Se parte abajo a la derecha. El gorila está arriba a la izquierda, el bidón abajo a la izquierda y la salida arriba, junto al gorila, donde estaría Pauline. Hay 15 diamantes sobre las vigas, dos martillos y tres rocas.
+**Qué hay:** Cuatro vigas de ladrillo en zigzag, con huecos que sirven de escalera (por ellos también caen los toneles). Se parte abajo, al medio. El gorila está arriba a la izquierda, el bidón abajo a la derecha, donde terminan los toneles, y la salida arriba, cerca del gorila, donde estaría Pauline. Hay 15 diamantes sobre las vigas y dos martillos. Los toneles pasan por encima de los diamantes y de los martillos.
 
 **El desafío:** Se necesitan 18, así que hay que romper al menos tres toneles. Hay que subir contra los toneles que bajan, y cada uno que llega al bidón suelta una luciérnaga más.
 
@@ -414,11 +398,11 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 - **Subir:** de viga en viga, esperando en un extremo a que pase el tonel.
 - **Los martillos:** con uno, quedarse en el camino de los toneles y romperlos.
-- **Las luciérnagas:** se pueden aplastar empujando una roca de una viga. Mejor que no lleguen toneles al bidón: hay que romperlos antes.
+- **Las luciérnagas:** mejor que no lleguen toneles al bidón: hay que romperlos antes.
 
 **Con dos jugadores:** con dos martillos se rompe el doble. Uno sube mientras el otro, con martillo, cuida que no lleguen toneles al bidón.
 
-**En el juego:** el gorila tira un tonel cada 3 segundos (`ape=`; con `ape=0` no tira) hacia el lado que tenga libre. El tonel cae como una roca y rueda un cuadro cada 2 turnos (`tonel=`). Lo que cae en el bidón se quema, y un tonel que llega a él suelta una luciérnaga (hasta 6 en la cueva). El martillo dura 8 segundos (`hammer=`), y con él también se puede romper un tonel caminando hacia él. El marcador muestra 🔨 y los segundos que le quedan.
+**En el juego:** el gorila tira un tonel cada 3 segundos (`ape=`; con `ape=0` no tira) hacia el lado que tenga libre. El tonel cae como una roca, rueda un cuadro cada 2 turnos (`tonel=`) y pasa por encima de los diamantes y de lo que se recoge. Lo que cae en el bidón se quema, y un tonel que llega a él suelta una luciérnaga (hasta 6 en la cueva). El martillo dura 8 segundos (`hammer=`), y con él también se puede romper un tonel caminando hacia él. El marcador muestra 🔨 y los segundos que le quedan.
 
 ---
 

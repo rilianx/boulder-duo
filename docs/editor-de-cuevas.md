@@ -2,8 +2,6 @@
 
 Con el **editor de cuevas** se hacen cuevas nuevas sin tocar el código. Una cueva es un mapa de 40 × 22 letras, y cada letra es una pieza. Lo que hace cada pieza está escrito una sola vez en el juego y es igual en cualquier mapa. Por eso las 10 [cuevas nuevas](cuevas-propuestas.md), las 9 [cuevas clásicas](cuevas-clasicos.md) y las que hagas tú son todas mapas del mismo tipo, y se pueden abrir y cambiar en el editor.
 
-![El editor con la cueva «Remaches»](editor.png)
-
 ## Cómo se usa
 
 1. En el menú, toca **EDITOR DE CUEVAS**.
@@ -74,7 +72,7 @@ Cambian lo que tardan las piezas con reloj. Los valores van en segundos, salvo e
 | `amulet=s` | 10 | cuánto dura el amuleto |
 | `regrow=s` | 6 | cuánto tarda en crecer la tierra viva |
 
-Las piezas con ritmo vienen en dos **turnos**, `a` y `b`. Si los dos tiempos son iguales, mientras las `a` son peligrosas las `b` son seguras. Así se arman cruces en dos tiempos, como en las cuevas «Rayos» y «Cocodrilos».
+Pisar una pieza con ritmo mientras es peligrosa mata, igual que estar en ella cuando cambia. Las piezas con ritmo vienen en dos **turnos**, `a` y `b`. Si los dos tiempos son iguales, mientras las `a` son peligrosas las `b` son seguras. Así se arman cruces en dos tiempos, como en las cuevas «Rayos» y «Cocodrilos».
 
 ### Letras propias (`Legend`)
 
@@ -150,8 +148,8 @@ Por ejemplo, `7=plate:7 8=gate:7` agrega un séptimo par de placa y compuerta, y
 | `M` | puerta azul | Se abre con una llave de su color, que se gasta. | `M=door:2` |
 | `j` | llave verde | Se recoge. Cada una abre una sola puerta de su color. | `j=key:3` |
 | `J` | puerta verde | Se abre con una llave de su color, que se gasta. | `J=door:3` |
-| `=` | rayo (turno a) | Se enciende y se apaga. Encendido no se pisa, y mata a quien está en él cuando se enciende. Para las cosas y los enemigos es pared. | `==laser:a` |
-| `-` | rayo (turno b) | Se enciende y se apaga. Encendido no se pisa, y mata a quien está en él cuando se enciende. Para las cosas y los enemigos es pared. | `-=laser:b` |
+| `=` | rayo (turno a) | Se enciende y se apaga. Mata a quien lo pisa encendido o está en él cuando se enciende. Para las cosas y los enemigos es pared. | `==laser:a` |
+| `-` | rayo (turno b) | Se enciende y se apaga. Mata a quien lo pisa encendido o está en él cuando se enciende. Para las cosas y los enemigos es pared. | `-=laser:b` |
 | `i` | antorcha | Quien la toma ve lejos en una cueva oscura. | `i=torch` |
 | `e` | amuleto | Al tomarlo, los enemigos, los troncos, los toneles y el gorila se quedan quietos 10 segundos. | `e=amulet` |
 | `h` | espada | El próximo enemigo que toque a su dueño muere en vez del niño. | `h=sword` |
@@ -161,19 +159,19 @@ Por ejemplo, `7=plate:7 8=gate:7` agrega un séptimo par de placa y compuerta, y
 | Letra | Pieza | Qué hace | En «Letras propias» |
 |---|---|---|---|
 | `w` | agua | No se puede entrar. Lo que cae en ella se hunde. | `w=pond` |
-| `c` | cocodrilo (turno a) | Abre y cierra la boca. Cerrada se pisa; abierta no, y muerde a quien está encima. | `c=croc:a` |
-| `C` | cocodrilo (turno b) | Abre y cierra la boca. Cerrada se pisa; abierta no, y muerde a quien está encima. | `C=croc:b` |
-| `z` | brea (turno a) | Se abre y se cierra. Cerrada aguanta niños y cosas; al abrirse se traga lo que tiene (una roca la tapa para siempre). | `z=tar:a` |
-| `Z` | brea (turno b) | Se abre y se cierra. Cerrada aguanta niños y cosas; al abrirse se traga lo que tiene (una roca la tapa para siempre). | `Z=tar:b` |
-| `l` | tronco ← | Rueda por su carril. Al alcanzar a un niño, pasa por encima y le hace saltar un diamante. Lo detienen las rocas; en la pared vuelve a salir por la otra punta. | `l=log:l` |
-| `L` | tronco → | Rueda por su carril. Al alcanzar a un niño, pasa por encima y le hace saltar un diamante. Lo detienen las rocas; en la pared vuelve a salir por la otra punta. | `L=log:r` |
+| `c` | cocodrilo (turno a) | Abre y cierra la boca. Cerrada se pisa; abierta muerde a quien la pisa o está encima. | `c=croc:a` |
+| `C` | cocodrilo (turno b) | Abre y cierra la boca. Cerrada se pisa; abierta muerde a quien la pisa o está encima. | `C=croc:b` |
+| `z` | brea (turno a) | Se abre y se cierra. Cerrada aguanta niños y cosas; abierta mata al niño que la pisa, y al abrirse se traga lo que tiene (una roca la tapa para siempre). | `z=tar:a` |
+| `Z` | brea (turno b) | Se abre y se cierra. Cerrada aguanta niños y cosas; abierta mata al niño que la pisa, y al abrirse se traga lo que tiene (una roca la tapa para siempre). | `Z=tar:b` |
+| `l` | tronco ← | Rueda por su carril. Pasa por encima de diamantes y objetos, y al alcanzar a un niño le hace saltar un diamante. Lo detienen las rocas; en la pared vuelve a salir por la otra punta. | `l=log:l` |
+| `L` | tronco → | Rueda por su carril. Pasa por encima de diamantes y objetos, y al alcanzar a un niño le hace saltar un diamante. Lo detienen las rocas; en la pared vuelve a salir por la otra punta. | `L=log:r` |
 
 **Donkey Kong**
 
 | Letra | Pieza | Qué hace | En «Letras propias» |
 |---|---|---|---|
 | `d` | gorila | Ocupa 2 × 2. Tira un tonel hacia el lado libre cada 3 segundos. Si el mapa tiene remaches, al sacarlos todos se deshace en diamantes. | `d=ape` |
-| `b` | tonel → | Rueda; cae donde no hay suelo y, al caer, sigue hacia el otro lado. Mata al tocar. | `b=tonel:r` |
+| `b` | tonel → | Rueda y pasa por encima de diamantes y objetos; cae donde no hay suelo y, al caer, sigue hacia el otro lado. Mata al tocar. | `b=tonel:r` |
 | `f` | bidón | Quema lo que cae en él y al niño que lo toca. Un tonel que llega a él suelta una luciérnaga. | `f=drum` |
 | `H` | martillo | Durante 8 segundos, los toneles que tocan a su dueño se vuelven diamantes. | `H=hammer` |
 | `x` | remache | Se saca pisándolo. Mientras quede alguno, la salida no se abre. | `x=rivet` |
