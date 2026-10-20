@@ -1,6 +1,6 @@
-# 9 cuevas inspiradas en Montezuma's Revenge, Pitfall! y Donkey Kong (propuestas)
+# 9 cuevas inspiradas en Montezuma's Revenge, Pitfall! y Donkey Kong
 
-Tres cuevas por juego, en el mismo formato que las [10 cuevas nuevas](cuevas-propuestas.md): 40 × 22 con borde de acero, con lo que hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia de a dos y qué haría falta. Son propuestas: todavía no están en el juego. Los tiempos y ritmos son una primera idea, para ajustar jugando.
+Tres cuevas por juego, en el mismo formato que las [10 cuevas nuevas](cuevas-propuestas.md): 40 × 22 con borde de acero, con lo que hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia de a dos y cómo quedó en el juego. **Ya se juegan:** en el menú, botón **CUEVAS CLÁSICAS** (también con VISTA 3D y con dos celulares). Los tiempos y ritmos son una primera idea, para ajustar jugando; cada mapa se puede abrir y cambiar en el [editor de cuevas](editor-de-cuevas.md).
 
 **Cómo se adaptan:** los tres son juegos de plataformas, donde el héroe salta, trepa y cae. Aquí los niños no caen ni saltan: van para cualquier lado y cavan. Por eso se toma lo que sí calza:
 
@@ -88,7 +88,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **Con dos jugadores:** cada niño lleva sus llaves, así que pueden repartirse: uno va por la llave azul mientras el otro junta en A. Pero el que abre la puerta gasta su llave, y una mala elección deja a los dos encerrados.
 
-**Qué haría falta:** los colores, y una llave por color en el marcador. El resto ya está hecho para las cuevas nuevas. Es fácil.
+**En el juego:** las llaves y puertas tienen color (letras `a` `A` dorada, `k` `K` roja, `m` `M` azul, `j` `J` verde), y el marcador muestra las llaves de cada color que lleva cada niño.
 
 ---
 
@@ -137,7 +137,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **Con dos jugadores:** uno mira y avisa («¡ahora!») mientras el otro cruza. Si van juntos, el segundo tiene que esperar al turno siguiente, porque en el cuadro del medio cabe uno solo.
 
-**Qué haría falta:** un tipo de celda que cambia con el reloj de la cueva (el mismo para los dos celulares), y que mate al niño que está en ella cuando se enciende. Es fácil.
+**En el juego:** el rayo sigue el reloj de la cueva, el mismo en los dos celulares. No se puede pisar encendido, y quien está en él cuando se enciende muere. Su ritmo se cambia con `laser=encendido,apagado` en los ritmos del mapa.
 
 ---
 
@@ -195,7 +195,7 @@ Antes de entrar a F hay 21 diamantes a mano.
 
 **Con dos jugadores:** hay una sola antorcha. Quien la tiene ve por los dos y guía al otro. El amuleto detiene a los enemigos para los dos.
 
-**Qué haría falta:** la oscuridad ya existe; falta que la cueva la imponga, que la antorcha agrande el radio de luz de quien la lleva, y los otros dos objetos. Es fácil o mediano.
+**En el juego:** la cueva es oscura aunque la opción OSCURIDAD esté apagada (casilla «Cueva oscura» del editor). La antorcha más que duplica la luz de quien la lleva. El amuleto dura 10 segundos (`amulet=` en los ritmos) y cada espada sirve para un golpe. El marcador muestra 🔥 y 🗡.
 
 ---
 
@@ -257,7 +257,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno puede tomar el túnel y el otro ir por arriba, y se juntan en el tercer tramo. En el islote cabe uno solo, así que se cruza de a uno.
 
-**Qué haría falta:** dos tipos de celda que cambian con el reloj de la cueva (como los rayos), y que el agua se trague lo que cae. Es fácil.
+**En el juego:** el agua (`w`) se traga lo que cae en ella. Los cocodrilos siguen el reloj de la cueva (`croc=abierta,cerrada`): no se pueden pisar con la boca abierta, y si la abren con alguien encima, muerde.
 
 ---
 
@@ -306,7 +306,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno empuja la roca hasta el borde y el otro avisa el turno. En versus, una roca en el lugar justo le tapa el camino al otro… o se lo abre.
 
-**Qué haría falta:** dos tipos de celda con reloj, que se traguen lo que tienen encima, y que el cuadro tapado pase a ser suelo. Es fácil.
+**En el juego:** la brea sigue el reloj de la cueva (`tar=abierta,cerrada`). Cerrada aguanta a niños y cosas, y al abrirse se traga lo que tiene: un niño muere, una roca (o una nuez, o un barril) la tapa para siempre y un diamante se pierde.
 
 ---
 
@@ -316,9 +316,9 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **De dónde sale:** los troncos que ruedan hacia el jugador en *Pitfall!*: no matan, pero quitan puntos.
 
-**Qué hay de nuevo:** el **tronco** (`l`): rueda por su carril, uno cada dos turnos del niño, siempre hacia el mismo lado, y al llegar al final vuelve a aparecer en la otra punta. Al niño que alcanza le hace saltar un diamante, que cae cerca (como al morir, pero uno solo). Las rocas lo detienen.
+**Qué hay de nuevo:** el **tronco** (`l` hacia la izquierda, `L` hacia la derecha): rueda por su carril, uno cada dos turnos del niño, siempre hacia el mismo lado, y al llegar al final vuelve a aparecer en la otra punta. Al niño que alcanza le hace saltar un diamante, que cae cerca (como al morir, pero uno solo). Las rocas lo detienen.
 
-**Letras nuevas:** `l` troncos
+**Letras nuevas:** `l` tronco hacia la izquierda · `L` hacia la derecha
 
 **Necesarios:** 15 diamantes · **diamantes en el mapa:** 21 · **rocas:** 9 · **tiempo:** 150 s
 
@@ -336,7 +336,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 #WWWWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWW..#
 #WWWW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WW..#
 #WWWW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WW..#
-#   l            l           l         #
+#   L            L           L         #
 #..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#
 #..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#
 #..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#
@@ -359,7 +359,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno corta el carril con una roca mientras el otro espera en un hueco. Si los dos usan el mismo hueco, el segundo se lleva el golpe.
 
-**Qué haría falta:** un objeto nuevo que se mueve en línea recta por su carril y vuelve a empezar al final, con la regla del diamante que salta (la de morir, pero con uno). Es mediano.
+**En el juego:** el tronco avanza un cuadro cada 2 turnos (`log=`). Al alcanzar a un niño, pasa por encima: le hace saltar un diamante y lo deja atrás. Pasa también por encima de los diamantes. Lo detienen una roca, un barril u otro tronco, y al llegar a una pared vuelve a salir por la otra punta de su carril.
 
 ---
 
@@ -375,9 +375,9 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
   - el **gorila** (`d`, de 2 × 2): no se mueve y tira un **tonel** cada 3 segundos;
   - el **tonel** rueda por las vigas, cae en los huecos y en los extremos y sigue hacia el otro lado. Mata al que toca;
   - el **bidón** (`f`): un tonel que llega a él se quema y suelta una luciérnaga;
-  - el **martillo** (`h`): durante 8 segundos, cada tonel que toca su dueño se rompe y deja un diamante.
+  - el **martillo** (`H`): durante 8 segundos, cada tonel que toca su dueño se rompe y deja un diamante.
 
-**Letras nuevas:** `d` gorila · `f` bidón · `h` martillo
+**Letras nuevas:** `d` gorila · `b` tonel · `f` bidón · `H` martillo
 
 **Necesarios:** 18 diamantes · **diamantes en el mapa:** 15 · **rocas:** 3 · **tiempo:** 150 s
 
@@ -389,7 +389,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 #WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW    #
 #                                      #
 #                                      #
-#         h *             *       *    #
+#         H *             *       *    #
 #    WWWWWWWWWWWWWWW WWWWWWWWWWWWWWWWWW#
 #                                      #
 #                                      #
@@ -397,7 +397,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 #WWWWWWWWWWW WWWWWWWWWWWWWWW WWWWWW    #
 #                                      #
 #                                      #
-#       *       *             h *   o  #
+#       *       *             H *   o  #
 #    WWWWWWWWWWWWWWWWW WWWWWWWWWWWWWWWW#
 #                                      #
 #                                      #
@@ -418,7 +418,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** con dos martillos se rompe el doble. Uno sube mientras el otro, con martillo, cuida que no lleguen toneles al bidón.
 
-**Qué haría falta:** un objeto que rueda de lado y cae (parecido a la roca que rueda), un lugar que lo suelta cada tanto, el bidón y el martillo. Es mediano.
+**En el juego:** el gorila tira un tonel cada 3 segundos (`ape=`; con `ape=0` no tira) hacia el lado que tenga libre. El tonel cae como una roca y rueda un cuadro cada 2 turnos (`tonel=`). Lo que cae en el bidón se quema, y un tonel que llega a él suelta una luciérnaga (hasta 6 en la cueva). El martillo dura 8 segundos (`hammer=`), y con él también se puede romper un tonel caminando hacia él. El marcador muestra 🔨 y los segundos que le quedan.
 
 ---
 
@@ -467,7 +467,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** cada uno saca los remaches de un lado. Antes de sacar uno con roca, avisar al que está abajo.
 
-**Qué haría falta:** una celda que se saca al pisarla, un contador como el de las placas y el gorila que cae (solo dibujo). Es fácil.
+**En el juego:** el remache se saca pisándolo o cavándolo de lado. Mientras quede alguno, la salida no se abre (vale para cualquier mapa con remaches). Al sacar el último, los gorilas se deshacen en diamantes. En esta cueva el gorila no tira toneles (`ape=0`).
 
 ---
 
@@ -490,20 +490,20 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 #WWWWW......*..............*......WWWWW#
 #WWWW                              WWWW#
 #WWWW     *                        WWWW#
-#WWWW }}}}}}}}}}}}}  }}}}}}}}}}}}} WWWW#
-#WWWWf.....o......*...............fWWWW#
+#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#
+#WWWWW.....o......*...............WWWWW#
 #WWWWW...*...............*.o......WWWWW#
 #WWWWW........*...............*...WWWWW#
 #WWWW       F                      WWWW#
 #WWWW                    *         WWWW#
-#WWWW {{{{{{{{{{{{{  {{{{{{{{{{{{{ WWWW#
-#WWWWf...........o....*...........fWWWW#
+#WWWWf{{{{{{{{{{{{{  {{{{{{{{{{{{{fWWWW#
+#WWWWW...........o....*...........WWWWW#
 #WWWWW..*....................o..*.WWWWW#
 #WWWWW.......*............*.......WWWWW#
 #WWWW                     F        WWWW#
 #WWWW          *                   WWWW#
-#WWWW }}}}}}}}}}}}}  }}}}}}}}}}}}} WWWW#
-#WWWWf                            fWWWW#
+#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#
+#WWWWW                            WWWWW#
 #WWWWW              X             WWWWW#
 ########################################
 ```
@@ -516,7 +516,7 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 
 **Con dos jugadores:** uno suelta los diamantes desde la tierra y el otro, abajo, los recoge al caer del hueco.
 
-**Qué haría falta:** un tipo de suelo que empuja lo que tiene encima y cambia de sentido con el reloj, y el bidón. Es mediano.
+**En el juego:** las cintas mueven lo que tienen encima un cuadro cada dos turnos, a un niño solo si está quieto, y todas se dan vuelta cada 6 segundos (`belt=`). El bidón quema lo que cae en él y al niño que lo toca.
 
 ---
 
@@ -529,14 +529,6 @@ Bajo los dos primeros ríos pasa un túnel con dos luciérnagas (los escorpiones
 - **Ascensores** (*Donkey Kong*, tercera pantalla): plataformas que suben y bajan sin parar, llevando rocas y diamantes.
 - **El invernadero** (*Donkey Kong 3*, 1983): el gorila baja colgado de unas lianas y hay que empujarlo hacia arriba antes de que llegue a las flores (aquí, los diamantes).
 
-## Orden sugerido para implementarlas
+## Piezas para cualquier mapa
 
-1. **Remaches**: es como la tierra que se cava, más un contador.
-2. **La pirámide**: las llaves ya existen.
-3. **Rayos**, **Cocodrilos** y **Brea**: los tres usan celdas que cambian con el reloj de la cueva, así que van juntos.
-4. **La antorcha**: la oscuridad ya existe.
-5. **Cintas**.
-6. **Troncos**.
-7. **Vigas y toneles**: es la que más cosas nuevas tiene.
-
-Como las 10 cuevas nuevas, son reglas propias de estas cuevas: no tocan el entrenamiento del PC ni su copia en Python, y se juegan igual en dos celulares si los ritmos salen del reloj de la cueva, que es el mismo en los dos.
+Ninguna de estas cuevas tiene reglas propias: cada pieza (rayo, cocodrilo, brea, tronco, gorila, tonel, bidón, remache, cinta, llaves de colores, antorcha, amuleto, espada, martillo) está descrita una sola vez en el juego y funciona igual en cualquier mapa. Se pueden combinar con las de las [cuevas nuevas](cuevas-propuestas.md) en el [editor de cuevas](editor-de-cuevas.md). No tocan el entrenamiento del PC ni su copia en Python, y se juegan igual en dos celulares porque los ritmos salen del reloj de la cueva, que es el mismo en los dos.

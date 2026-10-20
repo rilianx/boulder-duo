@@ -1,6 +1,6 @@
 # 10 cuevas nuevas (propuestas)
 
-Ideas para cuevas con desafíos que no están en Boulder Dash 1 ni 2. Cada una toma algo de otro juego del género (o vecino) y lo adapta a este, que se juega solo o **de a dos**. **Ya se pueden jugar:** en el menú, botón **CUEVAS NUEVAS** (también con VISTA 3D y con dos celulares). Al entrar a cada una aparece una pista corta.
+Ideas para cuevas con desafíos que no están en Boulder Dash 1 ni 2. Cada una toma algo de otro juego del género (o vecino) y lo adapta a este, que se juega solo o **de a dos**. **Ya se pueden jugar:** en el menú, botón **CUEVAS NUEVAS** (también con VISTA 3D y con dos celulares). Al entrar a cada una aparece una pista corta. Cada mapa se puede abrir y cambiar en el [editor de cuevas](editor-de-cuevas.md), y sus piezas sirven en cualquier mapa.
 
 Cada mapa tiene el **tamaño de una cueva original** (40 × 22, con borde de acero), igual que en el [catálogo](catalogo-cuevas.md). Para cada cueva: de dónde sale la idea, qué hay de nuevo, el mapa, el desafío, cómo se pasa, qué cambia con dos jugadores y cómo quedó en el juego. Los números (diamantes, rocas) son los del mapa; los tiempos son una primera propuesta, para ajustar jugando.
 
@@ -349,7 +349,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 
 **De dónde sale:** el *Yam-Yam* de *Emerald Mine* y *Rocks'n'Diamonds*, una bestia que se come lo que encuentra y explota soltando lo que tenía adentro.
 
-**Qué hay de nuevo:** el **comelón** (`Y`). Avanza en línea recta por el espacio vacío y da la vuelta al chocar. Se come los diamantes que encuentra y mata al tocar. Si le cae una roca encima explota y deja **todos** los diamantes que se comió, más uno de propina, alrededor.
+**Qué hay de nuevo:** el **comelón** (`Y`, o `y` si parte hacia la izquierda). Avanza en línea recta por el espacio vacío y da la vuelta al chocar. Se come los diamantes que encuentra y mata al tocar. Si le cae una roca encima explota y deja **todos** los diamantes que se comió, más uno de propina, alrededor.
 
 **Necesarios:** 30 diamantes · **diamantes en el mapa:** 41 · **rocas:** 11 · **tiempo:** 150 s
 
@@ -364,7 +364,7 @@ Antes de cruzar cada paso, tomar todo lo de ese tramo. Es una cueva de pensar m�
 #......................................#
 #.....o.......o.......o.......o........#
 #......................................#
-#.                                   Y.#
+#.                                   y.#
 #.   *   *   *   *   *   *   *   *    .#
 #......................................#
 #......................................#

@@ -170,6 +170,40 @@ body.lmode .views{width:100%!important;max-width:none!important;margin-inline:0;
   .touch .views{grid-template-columns:1fr 1fr;gap:4px;width:min(100%, calc((100dvh - 60px) * 2.75));margin-inline:auto}
   .touch .views.solo{grid-template-columns:1fr;width:min(100%, calc((100dvh - 60px) * 1.36))}
 }
+/* the cave editor */
+body.editing .wrap{display:none}
+#ed{position:fixed;inset:0;z-index:50;background:var(--bg);overflow:auto;padding:10px 12px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px}
+#ed[hidden]{display:none}
+#ed button,#ed select{font-family:var(--display);font-size:9px;padding:7px 8px}
+#ed select{background:var(--panel);color:var(--ink);border:2px solid var(--line)}
+.edtop{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.edtop b{font-family:var(--display);font-size:11px;color:var(--warn);margin-right:6px}
+.edmain{display:grid;grid-template-columns:minmax(170px,210px) 1fr minmax(220px,280px);gap:10px;align-items:start}
+.edpal{display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 80px);overflow:auto}
+.edgrp h4{margin:0 0 3px;font-family:var(--display);font-size:8px;color:var(--muted);font-weight:normal}
+.edgrid{display:flex;flex-wrap:wrap;gap:3px}
+#ed .edpc{padding:2px;border:2px solid var(--line);background:#07060a;line-height:0}
+#ed .edpc.on{border-color:var(--warn)}
+.edpc canvas{width:28px;height:28px}
+.edcenter{min-width:0;display:flex;flex-direction:column;gap:6px}
+.edtools{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+#ed .edtools button.on{border-color:var(--warn);color:var(--warn)}
+#edsel{font-size:18px;color:var(--muted);margin-left:6px}
+#edcv{touch-action:none;cursor:crosshair;border:2px solid var(--line);align-self:flex-start;max-width:100%}
+#edstat{font-size:18px;color:var(--muted)}
+.ederr{color:#ff6a5a} .edwarn{color:var(--warn)} .edok{color:#7dffa0}
+.edprops{display:flex;flex-direction:column;gap:6px}
+.edprops label{display:flex;flex-direction:column;gap:2px;font-size:17px;color:var(--muted)}
+.edprops input{font-family:var(--body);font-size:18px;background:var(--panel);color:var(--ink);border:2px solid var(--line);padding:3px 6px}
+.edprops .edchk{flex-direction:row;align-items:center;gap:6px}
+.edcols{display:flex;gap:3px} .edcols select{flex:1;min-width:0}
+.edhelp{font-size:15px;color:var(--muted);margin:0}
+#edmodal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:60}
+#edmodal[hidden]{display:none}
+#edmodal .card{background:var(--panel);border:2px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:8px;width:min(720px,94vw)}
+#edtext{width:100%;height:min(60vh,520px);box-sizing:border-box;font-family:ui-monospace,monospace;font-size:13px;line-height:1.15;background:#07060a;color:var(--ink);border:2px solid var(--line);white-space:pre;overflow:auto}
+#edmbtn{display:flex;gap:6px;flex-wrap:wrap}
+@media (max-width:980px){ .edmain{grid-template-columns:1fr} .edpal{max-height:none;flex-direction:row;flex-wrap:wrap} }
 </style>
 
 <div class="wrap">
@@ -1463,13 +1497,70 @@ function glideZoom(){
 const E=0, DIRT=1, WALL=2, STEEL=3, ROCK=4, GEM=5, EXIT=6, FIRE=7, BUTT=8, P1=9, P2=10, BOOM=11;
 const MAGIC=12, AMOEBA=13, SLIME=14, EXPW=15;   // only in the original caves
 const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star of each cave
-// the new caves (CUEVAS NUEVAS, docs/cuevas-propuestas.md): a nut, a key and a door, one-way passages, a barrel, a
-// plate for rocks, the eater, earth that grows back, the gravity switch, and a gate opened from a plate
-const NUT=18, KEY=19, DOOR=20, PORTU=21, PORTR=22, PORTD=23, PORTL=24, BARREL=25, TARGET=26, EATER=28, LDIRT=29, GSW=30, GATE=31;
+/* The pieces of the map caves (CUEVAS NUEVAS, CLÁSICOS and the ones made with the editor; docs/cuevas-propuestas.md,
+   docs/cuevas-clasicos.md). Each piece is described once, in EL: what it is and how it behaves. A map is only letters
+   that name pieces (LEGEND), so any piece can go in any map and no cave has rules of its own. */
+const NUT=18, KEY=19, DOOR=20, PORTU=21, PORTR=22, PORTD=23, PORTL=24, BARREL=25, TARGET=26, PLATE=27, EATER=28, LDIRT=29, GSW=30, GATE=31,
+  LASER=32, TORCH=33, AMULET=34, SWORD=35, HAMMER=36, POND=37, CROC=38, TAR=39, LOG=40, APE=41, TONEL=42, DRUM=43, RIVET=44, BELT=45;
 const PORT_D = { [PORTU]: 0, [PORTR]: 1, [PORTD]: 2, [PORTL]: 3 };
 const isPort = t => t >= PORTU && t <= PORTL;
-const pushable = t => t === ROCK || t === NUT || t === BARREL;
-const fallsLike = t => t === ROCK || t === GEM || t === NUT || t === BARREL;
+/* What each piece is (only what differs from plain solid ground):
+   falls: gravity moves it, like a rock · round: what lands on it rolls off · push: a kid pushes it sideways ·
+   hard: blasts leave it · kid: a kid can stand in its cell (and it is there again when the kid leaves) · obj: so can a
+   rock, a gem or a barrel · rhythm: it takes turns, dangerous then safe (laser, crocodile, tar: nobody can step on
+   it while dangerous, and whoever is on it when it turns pays) · take: a kid picks it up · sink: what falls on it is
+   gone · foe: an enemy (the amulet stops it). name: what the editor calls it. */
+const EL = {
+  [E]: { name: 'vacío' }, [DIRT]: { name: 'tierra' }, [WALL]: { name: 'ladrillo', round: 1 }, [STEEL]: { name: 'acero', hard: 1 },
+  [ROCK]: { name: 'roca', falls: 1, round: 1, push: 1 }, [GEM]: { name: 'diamante', falls: 1, round: 1 }, [EXIT]: { name: 'salida', hard: 1 },
+  [FIRE]: { name: 'luciérnaga', foe: 1 }, [BUTT]: { name: 'mariposa', foe: 1 }, [NEST]: { hard: 1 }, [STAR]: { hard: 1 },
+  [NUT]: { name: 'nuez', falls: 1, round: 1, push: 1 }, [BARREL]: { name: 'barril', falls: 1, round: 1, push: 1 },
+  [KEY]: { name: 'llave', take: 1 }, [DOOR]: { name: 'puerta' },
+  [PORTU]: { name: 'paso ↑', hard: 1 }, [PORTR]: { name: 'paso →', hard: 1 }, [PORTD]: { name: 'paso ↓', hard: 1 }, [PORTL]: { name: 'paso ←', hard: 1 },
+  [TARGET]: { name: 'placa de roca', hard: 1 }, [PLATE]: { name: 'placa', hard: 1, kid: 1, obj: 1 }, [GATE]: { name: 'compuerta', hard: 1 },
+  [EATER]: { name: 'comelón', foe: 1 }, [LDIRT]: { name: 'tierra viva' }, [GSW]: { name: 'interruptor de gravedad', hard: 1 },
+  [LASER]: { name: 'rayo', hard: 1, kid: 1, rhythm: 'laser' }, [TORCH]: { name: 'antorcha', take: 1 }, [AMULET]: { name: 'amuleto', take: 1 },
+  [SWORD]: { name: 'espada', take: 1 }, [HAMMER]: { name: 'martillo', take: 1 }, [POND]: { name: 'agua', hard: 1, sink: 1 },
+  [CROC]: { name: 'cocodrilo', hard: 1, kid: 1, rhythm: 'croc' }, [TAR]: { name: 'brea', hard: 1, kid: 1, obj: 1, rhythm: 'tar' },
+  [LOG]: { name: 'tronco', foe: 1 }, [APE]: { name: 'gorila', hard: 1 }, [TONEL]: { name: 'tonel', falls: 1, round: 1, foe: 1 },
+  [DRUM]: { name: 'bidón', hard: 1, sink: 1 }, [RIVET]: { name: 'remache', hard: 1 }, [BELT]: { name: 'cinta', hard: 1 },
+};
+const ELT = k => { const a = new Uint8Array(64); for (const t in EL) if (EL[t][k]) a[t] = 1; return a; };
+const FALLS = ELT('falls'), ROUND = ELT('round'), PUSH = ELT('push'), HARD = ELT('hard'), KIDON = ELT('kid'), OBJON = ELT('obj'), TAKE = ELT('take'), SINK = ELT('sink'), FOE = ELT('foe');
+const pushable = t => PUSH[t] === 1;
+const fallsLike = t => FALLS[t] === 1;
+/* How long the pieces with a rhythm or a clock take, in seconds (a map can change them, Params line):
+   laser, croc, tar: dangerous, then safe · belt: the belts turn round every so often · ape: the gorilla throws a
+   barrel every so often · log, tonel: ticks per cell · hammer, amulet: how long they last · regrow: living earth. */
+const EP_DEF = { laser: [1.5, 1.5], croc: [2, 2], tar: [2, 2], belt: [6], ape: [3], log: [2], tonel: [2], hammer: [8], amulet: [10], regrow: [6] };
+let EP = EP_DEF;
+/* The letters of a map. Each names a piece and, for some, its direction (u r d l), its turn (a, b: the b ones are
+   dangerous while the a ones are safe), its colour (keys and doors: 0 gold, 1 red, 2 blue, 3 green, 4 purple) or its
+   group (plates open the gates of their number). A map can add letters or change these (Legend line, for example
+   "y=eater:l Q=gate:7"). */
+const PIECE = { steel: STEEL, wall: WALL, dirt: DIRT, empty: E, rock: ROCK, gem: GEM, exit: EXIT, firefly: FIRE, butterfly: BUTT,
+  nut: NUT, key: KEY, door: DOOR, port: PORTU, barrel: BARREL, target: TARGET, plate: PLATE, gate: GATE, eater: EATER, ldirt: LDIRT,
+  switch: GSW, laser: LASER, torch: TORCH, amulet: AMULET, sword: SWORD, hammer: HAMMER, pond: POND, croc: CROC, tar: TAR, log: LOG,
+  ape: APE, tonel: TONEL, drum: DRUM, rivet: RIVET, belt: BELT, start1: -1, start2: -2, water: -3 };
+const LEGEND_DEF = ("#=steel W=wall .=dirt _sp_=empty o=rock *=gem X=exit F=firefly:l B=butterfly:r 1=start1 2=start2 n=nut " +
+  "a=key:0 A=door:0 k=key:1 K=door:1 m=key:2 M=door:2 j=key:3 J=door:3 ^=port:u >=port:r v=port:d <=port:l %=barrel _=target " +
+  "p=plate:1 q=plate:2 r=plate:3 s=plate:4 t=plate:5 u=plate:6 P=gate:1 Q=gate:2 R=gate:3 S=gate:4 T=gate:5 U=gate:6 " +
+  "Y=eater:r y=eater:l :=ldirt G=switch ~=water ==laser:a -=laser:b i=torch e=amulet h=sword H=hammer w=pond c=croc:a C=croc:b " +
+  "z=tar:a Z=tar:b l=log:l L=log:r d=ape b=tonel:r f=drum x=rivet {=belt:l }=belt:r");
+const DIRS = { u: 0, r: 1, d: 2, l: 3 };
+function parseLegend(txt, into = {}){
+  for (const w of (txt || '').split(/\s+/).filter(Boolean)) {
+    const m = w.match(/^(.|_sp_)=([a-z0-9]+)(?::([a-z0-9]+))?$/); if (!m || !(m[2] in PIECE)) continue;
+    const ch = m[1] === '_sp_' ? ' ' : m[1], a = m[3];
+    let id = PIECE[m[2]], d = 0, g = 0;
+    if (a in DIRS) d = DIRS[a]; else if (a === 'a' || a === 'b') g = a === 'b' ? 1 : 0; else if (a !== undefined) g = Math.min(255, +a || 0);
+    if (id === PORTU) id = PORTU + d;
+    if (id === FIRE && a === undefined) d = 3; if (id === BUTT && a === undefined) d = 1;
+    into[ch] = { id, d, g, w };
+  }
+  return into;
+}
+const LEGEND = parseLegend(LEGEND_DEF);
 const OFF = [-W, 1, W, -1];            // up, right, down, left
 /* Hidden option: which way things fall (G key on a computer; on a phone, hold the pause button).
    gDir is an OFF index (2 = down, the normal game) or -1 for no gravity at all. Rocks and gems fall towards it and
@@ -2035,7 +2126,9 @@ const BIG_N = 16, BIG_TIME = [360, 320, 280, 240, 200], BIG_SEED_MAX = 999999;
 CAVE_SETS.str = { name: 'Infinita aleatoria', caves: [{ props: { Name: 'Infinita aleatoria', Colors: 'Orange Gray1 White', Endless: 'strip' }, objects: [] }] };
 CAVE_SETS.inf = { name: 'Infinita', caves: [{ props: { Name: 'Infinita', Colors: 'Orange Gray1 White', Endless: true }, objects: [] }] };
 /* The ten new caves (docs/cuevas-propuestas.md), each built from its own map, letter by letter. */
-CAVE_SETS.new = { name: 'Nuevas', caves: [{"Name": "Nueva 1. Nueces", "Hint": "Una roca que cae sobre una nuez la rompe y deja un diamante.", "Map": "########################################\n#12....o.......o.......o.......o.......#\n#......................................#\n#......n.......n.......n.......n.......#\n#WWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWW#\n#......................................#\n#..o...o...o...o......o...o...o...o....#\n#......................................#\n#                                      #\n#    F                                 #\n#                                      #\n#    n     n        n      n      n    #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW...W#\n#...o.....o.....o.........o.....o......#\n#......................................#\n#...n.....n.....n.........n.....n......#\n#...n...........n...............n......#\n#........   ...........................#\n#........ B ...........................#\n#........   ...........................#\n#....................................X.#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "Orange Gray1 White", "DiamondValue": "10 15"}, {"Name": "Nueva 2. Llaves que se gastan", "Hint": "Cada llave abre una sola puerta. Hay tres puertas y dos llaves.", "Map": "########################################\n#12..o.....o.....o......o.....o....o...#\n#.........a....................a.......#\n#..o....o.....o....o......o.....o....o.#\n#......................................#\n#....o.......o..........o........o.....#\n#......................................#\n#WWWWWWAWWWWWWWWWWWWAWWWWWWWWWWWWAWWWWW#\n#............Wo.o.o.o.o.o.W            #\n#.*..*..*..*.W.*o*o*o*o*o.W            #\n#............W.o.o.o.o.o..W  F         #\n#..*..*..*...W............W            #\n#............W.....*......W            #\n#.*.....*....W............W            #\n#............W............W            #\n#............W..o.........W        F   #\n#...o........W............W            #\n#........o...W........o...W            #\n#............W............W            #\n#.....o......W............W            #\n#............W............W *   *   * X#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "LightRed Purple White", "DiamondValue": "20 50"}, {"Name": "Nueva 3. Pasos de un sentido", "Hint": "Las flechas se cruzan solo hacia donde apuntan: no hay vuelta atrás.", "Map": "########################################\n#12...o.*....W....o...*...W.....o..*...#\n#...*........>..*.........>...*........#\n#............W............W............#\n#WWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWvWWWW#\n#......*..W...*.o...........W.......*..#\n#..*......<.................<..*.......#\n#.........W............*....W......o...#\n#WWWWvWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWW#\n#........*..o......W...*...o...........#\n#...*..............>.............*.....#\n#..............*...W...................#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWvWWWWWWWW#\n#.......o...W.........*..W....*..o.....#\n#...........<....*.......<.............#\n#.....*.....W............W.........*...#\n#WWWvWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..........o........W.....*..o.........#\n#.......*...........W..................#\n#...................>...........*......#\n#.............*.....W................X.#\n########################################", "DiamondsRequired": "22", "CaveTime": "180 165 150 135 120", "Colors": "Cyan Blue White", "DiamondValue": "15"}, {"Name": "Nueva 4. Barriles", "Hint": "Un barril que cae, o al que le cae algo, explota y rompe el ladrillo.", "Map": "########################################\n#12.........o...........o..............#\n#...o...............o.......o......o...#\n#.......%.......o..............%.......#\n#......................................#\n#.....o...........o.......o..........o.#\n#.............o........................#\n#......................................#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W * * * *W....W * * * W...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W  * * * W....W * * * W...#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#......................................#\n#......................................#\n#....o...........   .....o.............#\n#................ F ................o..#\n#.........o......   ...................#\n#.............................o........#\n#....................................X.#\n########################################", "DiamondsRequired": "16", "CaveTime": "180 165 150 135 120", "Colors": "Yellow Brown White", "DiamondValue": "20"}, {"Name": "Nueva 5. Placas", "Hint": "Pon una roca sobre cada placa para abrir la salida.", "Map": "########################################\n#12...................................X#\n#......................................#\n#......................................#\n#....o......o.......o......o...........#\n#......................................#\n#......................................#\n#                                      #\n#                                      #\n#                                      #\n#                                      #\n#WWWWWWWW_WWWWWWWW_WWWWWWWWWWW_WWWWW..W#\n#......................................#\n#                                      #\n#            o                         #\n#           WWW                    F   #\n#                                      #\n#                           o    o     #\n#WWWWWW_WWWWWWWWWWWWWW_WWWWWWWWWWWWWWWW#\n#......................................#\n#......................................#\n########################################", "DiamondsRequired": "0", "CaveTime": "200 185 170 155 140", "Colors": "LightBlue Gray2 White", "DiamondValue": "10"}, {"Name": "Nueva 6. Inundación", "Hint": "El agua sube. Bajo el agua el aire dura poco.", "Map": "########################################\n#........o...X.............o.......*...#\n#....*..............o..................#\n#.............................*........#\n#WWWWWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWW#\n#..o..............*...........o........#\n#.........*...o.....................*..#\n#.........................*............#\n#WWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWW#\n#..........o....*........o.............#\n#.......*....................*......o..#\n#.....................*................#\n#WWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWWW#\n#......o....*...............o..........#\n#...*............o...............*.....#\n#.......................*..............#\n#WWWWWWW..WWWWWWWWWWWWWWWWWWWW..WWWWWWW#\n#.........o...*........o...........*...#\n#.....*....................*.....o.....#\n#.12................*..................#\n#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#\n########################################", "DiamondsRequired": "16", "CaveTime": "150 135 120 105 90", "Colors": "Blue Cyan White", "DiamondValue": "15 30", "WaterRise": "7.5 7 6.5 6 5.5"}, {"Name": "Nueva 7. El comelón", "Hint": "El comelón se come los diamantes. Aplastado, los devuelve todos.", "Map": "########################################\n#.......o.......o.......o.......o......#\n#......................................#\n#.Y                                   .#\n#.  * * * * * * * * * * * * * * * *   .#\n#......................................#\n#.12...................................#\n#......................................#\n#.....o.......o.......o.......o........#\n#......................................#\n#.                                   Y.#\n#.   *   *   *   *   *   *   *   *    .#\n#......................................#\n#......................................#\n#......................................#\n#.........o.........o.......o..........#\n#......................................#\n#.                                    .#\n#. * * * * * * * * * * * * * * * * *  .#\n#......................................#\n#....................................X.#\n########################################", "DiamondsRequired": "30", "CaveTime": "150 135 120 105 90", "Colors": "Purple LightRed White", "DiamondValue": "10 20"}, {"Name": "Nueva 8. Tierra viva", "Hint": "La tierra verde se vuelve a cerrar: atrapa a las mariposas.", "Map": "########################################\n#12::::::::::::::::::::::::::::::::::::#\n#:::::::::::::*::::::::::::::::::::::::#\n#::::::::::::::::::::::::*:::::::::::::#\n#:::::B::::::::::::::::::::::::::B:::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#:::::::::::::::::::::::::::::::::::*::#\n#:::*::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#.......o.........o........o.......o...#\n#......................................#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::*:::::::#\n#::::::::*:::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::B:::::::::::::::B::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::*:::::::::::::::::::::#\n#:::::::::::::::::::::::*:::::::::::::X#\n########################################", "DiamondsRequired": "20", "CaveTime": "150 135 120 105 90", "Colors": "Green LightGreen White", "DiamondValue": "10 20"}, {"Name": "Nueva 9. Cueva giratoria", "Hint": "Empuja un interruptor G para girar la gravedad de toda la cueva.", "Map": "########################################\n#12....................................#\n#...........G..............G...........#\n#..WWWWWWW.......o....o.......WWWWWWW..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....            ....WoooooW..#\n#..W*****.....            ....WoooooW..#\n#..W*****.....  B         ....WoooooW..#\n#..WWWWWWW....            ....W.....W..#\n#.............            .............#\n#.............            .............#\n#..W.....W....            ....WWWWWWW..#\n#..WoooooW....         B  .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..W*****W.....................*****W..#\n#..W*****W.....................*****W..#\n#..WWWWWWW........o..o........WWWWWWW..#\n#...........G..............G...........#\n#....................................X.#\n########################################", "DiamondsRequired": "24", "CaveTime": "180 165 150 135 120", "Colors": "Gray1 Purple White", "DiamondValue": "10 20"}, {"Name": "Nueva 10. Dos llaves, una puerta", "Hint": "Cada placa abre una compuerta del otro piso: túrnense, o usen las rocas.", "Map": "########################################\n#.1.......W.........W.........W........#\n#.........W....r.o..W....t.o..W........#\n#.........W.........W.........W..*.....#\n#...*.....W.........W.........W........#\n#.........Q.........S.........U........#\n#.........W...*.....W.........W........#\n#.........W.........W...*.....W........#\n#.....p.o.W.........W.........W........#\n#.........W..*......W.........W........#\n#.........#####################....X...#\n#.........#####################........#\n#.........W.........W.........W........#\n#.........W.........W.....*...W........#\n#......*..W......*..W.........W........#\n#.........W.........W.........W........#\n#.........P.........R.........T........#\n#.........W.........W.........W....u.o.#\n#.........W.........W.......*.W........#\n#.........W....q.o..W....s.o..W........#\n#.2.......W.........W.........W.....*..#\n########################################", "DiamondsRequired": "8", "CaveTime": "240 225 210 195 180", "Colors": "Orange Brown White", "DiamondValue": "15 30"}].map(props => ({ props, objects: [] })) };
+CAVE_SETS.new = { name: 'Nuevas', caves: [{"Name": "Nueva 1. Nueces", "Hint": "Una roca que cae sobre una nuez la rompe y deja un diamante.", "Map": "########################################\n#12....o.......o.......o.......o.......#\n#......................................#\n#......n.......n.......n.......n.......#\n#WWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWW#\n#......................................#\n#..o...o...o...o......o...o...o...o....#\n#......................................#\n#                                      #\n#    F                                 #\n#                                      #\n#    n     n        n      n      n    #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW...W#\n#...o.....o.....o.........o.....o......#\n#......................................#\n#...n.....n.....n.........n.....n......#\n#...n...........n...............n......#\n#........   ...........................#\n#........ B ...........................#\n#........   ...........................#\n#....................................X.#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "Orange Gray1 White", "DiamondValue": "10 15"}, {"Name": "Nueva 2. Llaves que se gastan", "Hint": "Cada llave abre una sola puerta. Hay tres puertas y dos llaves.", "Map": "########################################\n#12..o.....o.....o......o.....o....o...#\n#.........a....................a.......#\n#..o....o.....o....o......o.....o....o.#\n#......................................#\n#....o.......o..........o........o.....#\n#......................................#\n#WWWWWWAWWWWWWWWWWWWAWWWWWWWWWWWWAWWWWW#\n#............Wo.o.o.o.o.o.W            #\n#.*..*..*..*.W.*o*o*o*o*o.W            #\n#............W.o.o.o.o.o..W  F         #\n#..*..*..*...W............W            #\n#............W.....*......W            #\n#.*.....*....W............W            #\n#............W............W            #\n#............W..o.........W        F   #\n#...o........W............W            #\n#........o...W........o...W            #\n#............W............W            #\n#.....o......W............W            #\n#............W............W *   *   * X#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "LightRed Purple White", "DiamondValue": "20 50"}, {"Name": "Nueva 3. Pasos de un sentido", "Hint": "Las flechas se cruzan solo hacia donde apuntan: no hay vuelta atrás.", "Map": "########################################\n#12...o.*....W....o...*...W.....o..*...#\n#...*........>..*.........>...*........#\n#............W............W............#\n#WWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWvWWWW#\n#......*..W...*.o...........W.......*..#\n#..*......<.................<..*.......#\n#.........W............*....W......o...#\n#WWWWvWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWW#\n#........*..o......W...*...o...........#\n#...*..............>.............*.....#\n#..............*...W...................#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWvWWWWWWWW#\n#.......o...W.........*..W....*..o.....#\n#...........<....*.......<.............#\n#.....*.....W............W.........*...#\n#WWWvWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..........o........W.....*..o.........#\n#.......*...........W..................#\n#...................>...........*......#\n#.............*.....W................X.#\n########################################", "DiamondsRequired": "22", "CaveTime": "180 165 150 135 120", "Colors": "Cyan Blue White", "DiamondValue": "15"}, {"Name": "Nueva 4. Barriles", "Hint": "Un barril que cae, o al que le cae algo, explota y rompe el ladrillo.", "Map": "########################################\n#12.........o...........o..............#\n#...o...............o.......o......o...#\n#.......%.......o..............%.......#\n#......................................#\n#.....o...........o.......o..........o.#\n#.............o........................#\n#......................................#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W * * * *W....W * * * W...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W  * * * W....W * * * W...#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#......................................#\n#......................................#\n#....o...........   .....o.............#\n#................ F ................o..#\n#.........o......   ...................#\n#.............................o........#\n#....................................X.#\n########################################", "DiamondsRequired": "16", "CaveTime": "180 165 150 135 120", "Colors": "Yellow Brown White", "DiamondValue": "20"}, {"Name": "Nueva 5. Placas", "Hint": "Pon una roca sobre cada placa para abrir la salida.", "Map": "########################################\n#12...................................X#\n#......................................#\n#......................................#\n#....o......o.......o......o...........#\n#......................................#\n#......................................#\n#                                      #\n#                                      #\n#                                      #\n#                                      #\n#WWWWWWWW_WWWWWWWW_WWWWWWWWWWW_WWWWW..W#\n#......................................#\n#                                      #\n#            o                         #\n#           WWW                    F   #\n#                                      #\n#                           o    o     #\n#WWWWWW_WWWWWWWWWWWWWW_WWWWWWWWWWWWWWWW#\n#......................................#\n#......................................#\n########################################", "DiamondsRequired": "0", "CaveTime": "200 185 170 155 140", "Colors": "LightBlue Gray2 White", "DiamondValue": "10"}, {"Name": "Nueva 6. Inundación", "Hint": "El agua sube. Bajo el agua el aire dura poco.", "Map": "########################################\n#........o...X.............o.......*...#\n#....*..............o..................#\n#.............................*........#\n#WWWWWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWW#\n#..o..............*...........o........#\n#.........*...o.....................*..#\n#.........................*............#\n#WWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWW#\n#..........o....*........o.............#\n#.......*....................*......o..#\n#.....................*................#\n#WWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWWW#\n#......o....*...............o..........#\n#...*............o...............*.....#\n#.......................*..............#\n#WWWWWWW..WWWWWWWWWWWWWWWWWWWW..WWWWWWW#\n#.........o...*........o...........*...#\n#.....*....................*.....o.....#\n#.12................*..................#\n#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#\n########################################", "DiamondsRequired": "16", "CaveTime": "150 135 120 105 90", "Colors": "Blue Cyan White", "DiamondValue": "15 30", "WaterRise": "7.5 7 6.5 6 5.5"}, {"Name": "Nueva 7. El comelón", "Hint": "El comelón se come los diamantes. Aplastado, los devuelve todos.", "Map": "########################################\n#.......o.......o.......o.......o......#\n#......................................#\n#.Y                                   .#\n#.  * * * * * * * * * * * * * * * *   .#\n#......................................#\n#.12...................................#\n#......................................#\n#.....o.......o.......o.......o........#\n#......................................#\n#.                                   y.#\n#.   *   *   *   *   *   *   *   *    .#\n#......................................#\n#......................................#\n#......................................#\n#.........o.........o.......o..........#\n#......................................#\n#.                                    .#\n#. * * * * * * * * * * * * * * * * *  .#\n#......................................#\n#....................................X.#\n########################################", "DiamondsRequired": "30", "CaveTime": "150 135 120 105 90", "Colors": "Purple LightRed White", "DiamondValue": "10 20"}, {"Name": "Nueva 8. Tierra viva", "Hint": "La tierra verde se vuelve a cerrar: atrapa a las mariposas.", "Map": "########################################\n#12::::::::::::::::::::::::::::::::::::#\n#:::::::::::::*::::::::::::::::::::::::#\n#::::::::::::::::::::::::*:::::::::::::#\n#:::::B::::::::::::::::::::::::::B:::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#:::::::::::::::::::::::::::::::::::*::#\n#:::*::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#.......o.........o........o.......o...#\n#......................................#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::*:::::::#\n#::::::::*:::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::B:::::::::::::::B::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::*:::::::::::::::::::::#\n#:::::::::::::::::::::::*:::::::::::::X#\n########################################", "DiamondsRequired": "20", "CaveTime": "150 135 120 105 90", "Colors": "Green LightGreen White", "DiamondValue": "10 20"}, {"Name": "Nueva 9. Cueva giratoria", "Hint": "Empuja un interruptor G para girar la gravedad de toda la cueva.", "Map": "########################################\n#12....................................#\n#...........G..............G...........#\n#..WWWWWWW.......o....o.......WWWWWWW..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....            ....WoooooW..#\n#..W*****.....            ....WoooooW..#\n#..W*****.....  B         ....WoooooW..#\n#..WWWWWWW....            ....W.....W..#\n#.............            .............#\n#.............            .............#\n#..W.....W....            ....WWWWWWW..#\n#..WoooooW....         B  .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..W*****W.....................*****W..#\n#..W*****W.....................*****W..#\n#..WWWWWWW........o..o........WWWWWWW..#\n#...........G..............G...........#\n#....................................X.#\n########################################", "DiamondsRequired": "24", "CaveTime": "180 165 150 135 120", "Colors": "Gray1 Purple White", "DiamondValue": "10 20"}, {"Name": "Nueva 10. Dos llaves, una puerta", "Hint": "Cada placa abre una compuerta del otro piso: túrnense, o usen las rocas.", "Map": "########################################\n#.1.......W.........W.........W........#\n#.........W....r.o..W....t.o..W........#\n#.........W.........W.........W..*.....#\n#...*.....W.........W.........W........#\n#.........Q.........S.........U........#\n#.........W...*.....W.........W........#\n#.........W.........W...*.....W........#\n#.....p.o.W.........W.........W........#\n#.........W..*......W.........W........#\n#.........#####################....X...#\n#.........#####################........#\n#.........W.........W.........W........#\n#.........W.........W.....*...W........#\n#......*..W......*..W.........W........#\n#.........W.........W.........W........#\n#.........P.........R.........T........#\n#.........W.........W.........W....u.o.#\n#.........W.........W.......*.W........#\n#.........W....q.o..W....s.o..W........#\n#.2.......W.........W.........W.....*..#\n########################################", "DiamondsRequired": "8", "CaveTime": "240 225 210 195 180", "Colors": "Orange Brown White", "DiamondValue": "15 30"}].map(props => ({ props, objects: [] })) };
+// the caves after Montezuma's Revenge, Pitfall! and Donkey Kong (docs/cuevas-clasicos.md): maps, like the new ones
+CAVE_SETS.cls = { name: 'Clásicas', caves: [{"Name": "Clásica 1. La pirámide", "Hint": "Cada llave abre una puerta de su color. Piensa el orden: hay que volver atrás.", "Map": "########################################\n#12..o.......W....o.......W....o.......#\n#.......*....W..*.........W..*.........#\n#...*........W........*...W......*.....#\n#............K............M............#\n#........o...W F          W.........o..#\n#.....*......W.........o..W............#\n#............W...*........W...*........#\n#.........k..W......m.....W........k...#\n#..........*.W..........*.W.....*....*.#\n#............W............W............#\n#WWWWWWWWWWWWWWWWWWKWWWWWWWWWWWWWWWWWWW#\n#............W............W............#\n#..*.........W.*.....o....W..*...o.....#\n#.......*....W........*...W..........*.#\n#....o....................W.......*....#\n#....o..............    ..J............#\n#....j.......W..o... B  ..W............#\n#............W......    ..W.........X..#\n#.........*..W....*.......W............#\n#...*........W..........*.W....*.......#\n########################################", "DiamondsRequired": "20", "CaveTime": "200 185 170 155 140", "Colors": "Yellow Brown White", "DiamondValue": "15 30"}, {"Name": "Clásica 2. Rayos", "Hint": "Los rayos se encienden y se apagan. Cruza cuando estén apagados.", "Map": "########################################\n#1       =  *  -      = -  *   =       #\n#2  *    =     -      =*-      =  *    #\n#        =     -  *   = -      =       #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#.....o...*....o..............*...o....#\n#...................*....o.............#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#       = -      =  *  - =    -        #\n#   *   =*-      =  F  -*=    -   *    #\n#       = -  *   =     - = *  -        #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#.......*...o.........o.....*..........#\n#.................*.............o......#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#       =*- =       -   *  = -   =  *  #\n#    *  = - =   *   -      =*-   =    X#\n#       = -*=       -      = - * =     #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..W#\n#.....*...o.........o....*.............#\n#..............*..............o..*.....#\n########################################", "DiamondsRequired": "24", "CaveTime": "180 165 150 135 120", "Colors": "Gray1 Red White", "DiamondValue": "10 20"}, {"Name": "Clásica 3. La antorcha", "Hint": "Está oscuro: busca la antorcha. El amuleto detiene a los enemigos y la espada acaba con uno.", "Map": "########################################\n#12.....i..............................#\n#.              *           F         .#\n#.   *                           *    .#\n#...........o......  ...*...........  .#\n#........*.........  .....o.........  .#\n#..................  ..........*....  .#\n#.        F   *                    *  .#\n#.    *                    *          .#\n#.  ..o..........*.....................#\n#.  .......*.........e........h..o.....#\n#.  .....................*.............#\n#.           *           B            .#\n#.  *                          *      .#\n#..............o...  ...............  .#\n#.......*..........  .......o.....*.  .#\n#..................  ..*............  .#\n#.      B           *         F       .#\n#.            *              *        .#\n#....o.............................*...#\n#........h......*.......o.............X#\n########################################", "DiamondsRequired": "18", "CaveTime": "180 165 150 135 120", "Colors": "Brown Gray1 White", "DiamondValue": "10 20", "Dark": "true"}, {"Name": "Clásica 4. Cocodrilos", "Hint": "Pisa a los cocodrilos cuando cierran la boca. Abajo hay un túnel.", "Map": "########################################\n#12.....WWWWW......WWWWW.....WWWWWWWW..#\n#.......WWWWW.*....WWWWW.....WWWWWWWW..#\n#...*...WWWWW......WWWWW.*...WWWWWWWW*.#\n#.......WWWWW..o...WWWWW.....WWWWWWWW..#\n#.......WWWWW......WWWWW..o..WWWWWWWW..#\n#....o..WWWWW...*..WWWWW.....WWWWWWWW.*#\n#.......WWWWW......WWWWW...*.WWWWWWWW..#\n#.......WWWWW......WWWWW.....WWWWWWWW..#\n#.......cc*CC......ccccc.....cc*CC*cc..#\n#.......wwwww...o..wwwww.....wwwwwwww..#\n#.......wwwww......wwwww....*wwwwwwww..#\n#.....*.wwwww..*...wwwww.....wwwwwwww.X#\n#.......wwwww......wwwww*....wwwwwwww..#\n#.......wwwww....*.wwwww.....wwwwwwww..#\n#.......wwwww......wwwww.....wwwwwwww..#\n#W.WWWWWWWWWWWWWWWWWWWWWWW.WWWWWWWWWWWW#\n#                           WWWWWWWWWWW#\n#       F           F       WWWWWWWWWWW#\n#                           WWWWWWWWWWW#\n#....*.....*.....*.....*....WWWWWWWWWWW#\n########################################", "DiamondsRequired": "15", "CaveTime": "150 135 120 105 90", "Colors": "Green Brown White", "DiamondValue": "15 30"}, {"Name": "Clásica 5. Brea", "Hint": "La brea se abre y se cierra. Empuja una roca adentro y queda tapada.", "Map": "########################################\n#....o....WW...*........WWW.....o......#\n#...*.....WW.....o......WWW...*........#\n#.......*.WW............WWW........*...#\n#.........WW......*.....WWW............#\n#12   o   zz        o   ZZZ            #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#.............WWW...........WW.........#\n#........*....WWW... F ..o..WW...*.....#\n#..........o..WWW...   .*...WW.........#\n#....*........WWW..*........WW*........#\n#.............WWW...........WW.........#\n#             ZZZ  o        zz   o     #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#........WW.........WWW........WW......#\n#....*..oWW......*..WWW.o......WW..*...#\n#........WW.........WWW...*....WW......#\n#........WW..*......WWW........WW..o...#\n#........WW.........WWW......*.WW......#\n#     o  zz    o    ZZZ    o   zz     X#\n#........WW.........WWW........WW......#\n########################################", "DiamondsRequired": "14", "CaveTime": "180 165 150 135 120", "Colors": "Brown Orange White", "DiamondValue": "15 30"}, {"Name": "Clásica 6. Troncos", "Hint": "Escóndete en los huecos. Una roca en el carril detiene los troncos.", "Map": "########################################\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#WWWWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWWWW#\n#12WW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WWWW#\n#..WW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WWWW#\n#           l           l           l  #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWW..#\n#WWWW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WW..#\n#WWWW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WW..#\n#   L            L           L         #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWWWW#\n#..WW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WWWW#\n#..WW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WWWW#\n#        l         l        l        lX#\n########################################", "DiamondsRequired": "15", "CaveTime": "150 135 120 105 90", "Colors": "Green Brown White", "DiamondValue": "10 20"}, {"Name": "Clásica 7. Vigas y toneles", "Hint": "Sube hasta la salida. Con el martillo, los toneles se vuelven diamantes.", "Map": "########################################\n#                   X                  #\n#dd                                    #\n#dd             *         *      o     #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW    #\n#                                      #\n#                                      #\n#         H *             *       *    #\n#    WWWWWWWWWWWWWWW WWWWWWWWWWWWWWWWWW#\n#                                      #\n#                                      #\n#     o       *         *       *      #\n#WWWWWWWWWWW WWWWWWWWWWWWWWW WWWWWW    #\n#                                      #\n#                                      #\n#       *       *             H *   o  #\n#    WWWWWWWWWWWWWWWWW WWWWWWWWWWWWWWWW#\n#                                      #\n#                                      #\n#                                      #\n# f       *       *       *     *   12 #\n########################################", "DiamondsRequired": "18", "CaveTime": "150 135 120 105 90", "Colors": "Red Blue White", "DiamondValue": "15 30"}, {"Name": "Clásica 8. Remaches", "Hint": "Saca los 8 remaches pisándolos y el gorila caerá.", "Map": "########################################\n#                                      #\n#                                    X #\n#                  dd                  #\n#              *   dd    *     o *     #\n#WWWWWWWxWWW WWWWWWWWWWWWWW WWWxWWWWWWW#\n#                                      #\n#         F                            #\n#    *  o        *           *         #\n#WW WWWWxWWWWWWWWWWWWWWWWWWWWWWxWWWW WW#\n#                                      #\n#                        F             #\n#       o  *          *            *   #\n#WWWWWWWxWWWWW WWWWWWWWWWW WWWWxWWWWWWW#\n#                                      #\n#              F                       #\n#     *            *           o  *    #\n#WW WWWWxWWWWWWWWWWW WWWWWWWWWWxWWWW WW#\n#                                      #\n#                                      #\n# 12 *        *          *       *     #\n########################################", "DiamondsRequired": "10", "CaveTime": "180 165 150 135 120", "Colors": "Red Blue White", "DiamondValue": "10 20", "Params": "ape=0"}, {"Name": "Clásica 9. Cintas", "Hint": "Las cintas cambian de sentido. ¡Que los diamantes no caigan al fuego!", "Map": "########################################\n#WWWWW12..o.....*..............*..WWWWW#\n#WWWWW..*..............*.....o....WWWWW#\n#WWWWW......*..............*......WWWWW#\n#WWWW                              WWWW#\n#WWWW     *                        WWWW#\n#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#\n#WWWWW.....o......*...............WWWWW#\n#WWWWW...*...............*.o......WWWWW#\n#WWWWW........*...............*...WWWWW#\n#WWWW       F                      WWWW#\n#WWWW                    *         WWWW#\n#WWWWf{{{{{{{{{{{{{  {{{{{{{{{{{{{fWWWW#\n#WWWWW...........o....*...........WWWWW#\n#WWWWW..*....................o..*.WWWWW#\n#WWWWW.......*............*.......WWWWW#\n#WWWW                     F        WWWW#\n#WWWW          *                   WWWW#\n#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#\n#WWWWW                            WWWWW#\n#WWWWW              X             WWWWW#\n########################################", "DiamondsRequired": "14", "CaveTime": "150 135 120 105 90", "Colors": "Gray1 Cyan White", "DiamondValue": "15 30"}].map(props => ({ props, objects: [] })) };
 CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
   ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
 /* And the type, with the button next to the seed: A, the cave (like BD1's cave A), or B, the building (cave B). */
@@ -2064,12 +2157,13 @@ try { setBigSeed(localStorage.getItem('boulder-duo-bigseed') || 1); } catch (e) 
 // is a new cave
 const caveKey = i => caveSet === 'rnd' ? 'rnd:' + (bigType === 'B' ? 'b' : 's') + (bigSeed + i) : caveSet + ':' + i;
 let caveSet = 'bd2';
-try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v]) caveSet = v; } catch (e) {}
+CAVE_SETS.mine = mineSet(loadMine());   // my caves, made with the editor (see openEditor)
+try { const v = localStorage.getItem('boulder-duo-caves'); if (CAVE_SETS[v] && CAVE_SETS[v].caves.length) caveSet = v; } catch (e) {}
 const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n - 1) % cs.length], lvl: Math.min(4, Math.floor((n - 1) / cs.length)) }; };
 function caveLabel(n){
   if (mode === 'train' && !hlTrain()) return 'NIVEL ' + n;
   const { cave, lvl } = caveOf(n), nm = cave.props.Name || '';
-  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(Aleatoria|Edificio|Nueva) (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
+  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(Aleatoria|Edificio|Nueva|Clásica|Mía|Prueba) (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
   return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : rm ? rm[1].toUpperCase() + ' ' + rm[2] : nm.toUpperCase()) + lv;
 }
 const caveTitle = n => { if (mode === 'train' && !hlTrain()) return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
@@ -2402,12 +2496,29 @@ let need = 12, needEach = 7, timeLeft = 150, timeAcc = 0, exitOpenShown = false;
    the moment of whatever is being simulated, so a move knows when it began and the drawing can glide it. */
 let simT = 0, worldT = 0, nowT = 0;
 let src = new Int32Array(MAXN).fill(-1), srcAt = new Float64Array(MAXN), dugAt = new Float64Array(MAXN).fill(-1e9);
-/* The new caves' state: under the cells, the plates (which gate each opens, 1..6) and the gates' numbers; what each
-   eater has eaten; when each cell of living earth grows back (a tick, 0 = never); the water's level (the first
-   flooded row) and its clock; the plates for rocks (TARGET) of the cave. */
-const plateA = new Uint8Array(MAXN), gateA = new Uint8Array(MAXN), eatN = new Uint8Array(MAXN), regrowAt = new Int32Array(MAXN);
-let waterY = 99, waterAcc = 0, waterMs = 0, targets = [], gatePl = [], gateCells = [], gravSwitched = false;
+/* The map caves' state. under: the piece a kid or a thing is standing on (a plate, a laser, a crocodile, tar), back
+   when they leave. grp: each cell's colour, group or turn (from the map). What each eater has eaten; when each cell
+   of living earth grows back (a tick, 0 = never); the water's level (the first flooded row) and its clock. The
+   cave's own clock (ctick, ticks since it began: the rhythms come from it, the same on two phones), until when the
+   amulet holds the enemies, and how many rivets are left. Lists of the cells that do something each tick. */
+const under = new Uint8Array(MAXN), grp = new Uint8Array(MAXN), eatN = new Uint8Array(MAXN), regrowAt = new Int32Array(MAXN);
+let waterY = 99, waterAcc = 0, waterMs = 0, targets = [], gateCells = [], plateCells = [], rhyCells = [], beltCells = [], apeCells = [], drumCells = [], gravSwitched = false;
+let mapCave = false, caveDark = false, ctick = 0, frozenT = 0, rivetN = 0, rivet0 = 0;
 const AIR_MS = 4000;
+const frozen = () => ctick < frozenT;
+const vacate = i => { grid[i] = under[i] || E; under[i] = 0; };          // a kid or a thing leaves cell i
+const standOn = j => { under[j] = KIDON[grid[j]] ? grid[j] : 0; };      // ... and steps into cell j (before writing it there)
+const keyN = (p, c) => (p.keys >> (c * 4)) & 15;                        // a kid's keys of colour c (four bits each)
+const EPn = (k, m = 0) => EP[k][m] ?? EP_DEF[k][m];
+const secT = s => Math.max(1, Math.round(s * 1000 / tickMs));
+// a piece with a rhythm: is it dangerous now? (the b ones are a turn behind the a ones)
+function danger(i){
+  const r = EL[under[i] || grid[i]]?.rhythm; if (!r) return false;
+  const a = secT(EPn(r, 0)), b = secT(EPn(r, 1));
+  return (ctick + (grp[i] & 1 ? a : 0)) % (a + b) < a;
+}
+// can a thing (a rock, a gem, a barrel) go into cell k: empty, or a piece that holds things and is safe now
+const ofree = k => grid[k] === E || (OBJON[grid[k]] === 1 && !danger(k));
 /* Falling starts slow and speeds up (ease-in on the first cell); a rock turns as it rolls and squashes and
    kicks up dust when it lands. */
 /* Living cave (drawing only): glowing mushrooms on some dirt floors, roots hanging from some dirt ceilings, and
@@ -2462,6 +2573,8 @@ try { darkCaves = localStorage.getItem('boulder-duo-dark') === '1'; } catch (e) 
 // only the picture changes, the cave plays exactly the same
 let tilt3d = false;
 try { tilt3d = localStorage.getItem('boulder-duo-tilt') === '1'; } catch (e) {}
+// dark now: the option, or a map cave made dark (it has a torch to find)
+const darkNow = () => (darkCaves || caveDark) && mode !== 'train' && state !== 'menu';
 const DARK = [0, 1].map(() => { const c = document.createElement('canvas'); c.width = VW * T * SS; c.height = VH * T * SS; return c; });
 function drawDark(g, k, ox, oy, x0, y0){
   const dc = DARK[k], d = dc.getContext('2d');
@@ -2472,7 +2585,7 @@ function drawDark(g, k, ox, oy, x0, y0){
   const light = (x, y, r, a = 1) => { lights.push([x, y, r, a]); };
   players.forEach(p => {
     if (!p.alive) return;
-    const [gx, gy] = glidePos(p), r = T * (3.4 + .12 * Math.sin(simT / 140) + .06 * Math.sin(simT / 47));
+    const [gx, gy] = glidePos(p), r = T * ((p.torch ? 7.5 : 3.4) + .12 * Math.sin(simT / 140) + .06 * Math.sin(simT / 47));   // the torch: far
     light(gx * T - ox + T/2, gy * T - oy + T * .45, r); warm.push([gx * T - ox + T/2, gy * T - oy + T * .45, r]);
   });
   for (let y = Math.max(0, y0 - 1); y <= Math.min(H - 1, y0 + Math.ceil(CH) + 1); y++) for (let x = Math.max(0, x0 - 1); x <= Math.min(W - 1, x0 + Math.ceil(CW) + 1); x++){
@@ -2486,6 +2599,10 @@ function drawDark(g, k, ox, oy, x0, y0){
     else if (t === EXIT && exitVisiblyOpen(INF ? i : undefined)) light(cx, cy, T * 2);
     else if (t === MAGIC && (INF ? infMagicAt(i).state : magicState) === 1) light(cx, cy, T * 1.1, .8);
     else if (shroomAt(i)) light(cx, cy + T * .3, T * .9, .7);
+    else if (t === DRUM) { light(cx, cy, T * 1.8); warm.push([cx, cy, T * 1.8]); }
+    else if (t === TORCH) { light(cx, cy, T * 1.4); warm.push([cx, cy, T * 1.4]); }
+    else if ((t === LASER || under[i] === LASER) && danger(i)) light(cx, cy, T * 1.1, .9);
+    else if (t === AMULET || t === SWORD || t === KEY) light(cx, cy, T * .7, .7);
   }
   lights.forEach(([x, y, r, a]) => {
     const gr = d.createRadialGradient(x, y, r * .15, x, y, r); gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(.6, `rgba(0,0,0,${a * .75})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
@@ -2556,7 +2673,9 @@ let amoebaSlow = 0, amoebaTicks = 0, amoebaN = 0, amoebaCan = false, slimePerm =
 function resetCaveRules(n){
   gemVal = 10; gemExtra = 20; crng = rng(n * 104729 + 7);
   magicTime = 0; magicState = 0; magicLeft = 0; amoebaSlow = 0; amoebaTicks = 0; slimePerm = 0;
-  plateA.fill(0); gateA.fill(0); eatN.fill(0); regrowAt.fill(0); regrowN = 0; waterY = 99; waterAcc = 0; waterMs = 0; targets = []; gateCells = [];
+  under.fill(0); grp.fill(0); gateMark.fill(0); eatN.fill(0); regrowAt.fill(0); regrowN = 0; waterY = 99; waterAcc = 0; waterMs = 0;
+  targets = []; gateCells = []; plateCells = []; rhyCells = []; beltCells = []; apeCells = []; drumCells = [];
+  mapCave = false; caveDark = false; ctick = 0; frozenT = 0; rivetN = 0; rivet0 = 0; EP = EP_DEF;
   // a cave that turned the gravity with its switches: the next one starts with it the normal way again
   if (gravSwitched) { gravSwitched = false; gDirSet = 2; applyGravity(); }
 }
@@ -2747,24 +2866,29 @@ function caveLayout(cave, lvl){
   let outbox = null; for (let i = 0; i < W*H; i++) if (grid[i] === EXIT) { outbox = [i % W, i / W | 0]; break; }
   return { g: grid, d: dir, inbox, second, outbox, cw, ch, num };
 }
-// a cave given as a 40 x 22 map (the new caves): one letter per cell
-const MAP_CH = { '#': STEEL, 'W': WALL, '.': DIRT, ' ': E, 'o': ROCK, '*': GEM, 'X': EXIT, 'F': FIRE, 'B': BUTT, 'n': NUT, 'a': KEY, 'A': DOOR,
-  '^': PORTU, '>': PORTR, 'v': PORTD, '<': PORTL, '%': BARREL, '_': TARGET, '~': E, 'Y': EATER, ':': LDIRT, 'G': GSW };
+// a cave given as a map (the map caves): one letter per cell, read with the legend (LEGEND, and the map's own Legend)
 function mapLayout(P, grid, dir, num){
-  const rows = P.Map.split('\n'), W = 40, x = { plates: [], gates: [], water: 99 };
-  let inbox = [2, 2], second = [3, 2];
-  rows.forEach((r, y) => [...r].forEach((c, cx) => {
-    const i = y * W + cx;
-    if (c === '1') { inbox = [cx, y]; grid[i] = E; }
-    else if (c === '2') { second = [cx, y]; grid[i] = E; }
-    else if (c >= 'p' && c <= 'u') { grid[i] = E; x.plates.push([i, c.charCodeAt(0) - 111]); }
-    else if (c >= 'P' && c <= 'U') { grid[i] = GATE; x.gates.push([i, c.charCodeAt(0) - 79]); }
-    else { grid[i] = MAP_CH[c] ?? DIRT; if (c === '~') x.water = Math.min(x.water, y); }
-    if (c === 'F') dir[i] = 3; if (c === 'B') dir[i] = 1;
-    if (c === 'Y') dir[i] = cx < W / 2 ? 1 : 3;
-  }));
+  const rows = P.Map.split('\n'), W = 40, H = 22, leg = P.Legend ? parseLegend(P.Legend, { ...LEGEND }) : LEGEND, g = new Uint8Array(W * H);
+  let inbox = null, second = null, water = 99;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x, edge = x === 0 || y === 0 || x === W - 1 || y === H - 1, c = (rows[y] || '')[x] ?? '#', L = leg[c] || leg['.'];
+    if (edge) { grid[i] = STEEL; continue; }   // the border is always steel
+    if (L.id === -1) { inbox = [x, y]; grid[i] = E; }
+    else if (L.id === -2) { second = [x, y]; grid[i] = E; }
+    else if (L.id === -3) { water = Math.min(water, y); grid[i] = E; }
+    else { grid[i] = L.id; dir[i] = L.d; g[i] = L.g; }
+  }
+  inbox = inbox || [1, 1];
+  if (!second) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = inbox[0] + dx, y = inbox[1] + dy; if (x > 0 && y > 0 && x < W - 1 && y < H - 1 && (grid[y*W + x] === E || grid[y*W + x] === DIRT)) { second = [x, y]; grid[y*W + x] = E; break; } }
+  second = second || inbox;
   let outbox = null; for (let i = 0; i < grid.length; i++) if (grid[i] === EXIT) { outbox = [i % W, i / W | 0]; break; }
-  return { g: grid, d: dir, inbox, second, outbox, cw: W, ch: rows.length, num, mapX: x };
+  return { g: grid, d: dir, inbox, second, outbox, cw: W, ch: H, num, mapX: { grp: g, water } };
+}
+// a map's Params line ("laser=1.5,1.5 ape=2"): its own rhythms, over the defaults
+function parseParams(txt){
+  const o = { ...EP_DEF };
+  for (const w of (txt || '').split(/\s+/).filter(Boolean)) { const [k, v] = w.split('='); if (k in EP_DEF && v) o[k] = v.split(',').map(Number).map((n, m) => isFinite(n) ? n : EP_DEF[k][m]); }
+  return o;
 }
 function genCave(n){
   const { cave, lvl } = caveOf(n), P = cave.props;
@@ -2781,10 +2905,18 @@ function genCave(n){
   tickMs = CAVE_TICK[lvl];
   magicTime = num('MagicWallTime', 0); amoebaSlow = Math.round(num('AmoebaTime', 0) * 1000 / tickMs); slimePerm = num('SlimePermeability', 0);
   if (L.mapX) {
-    // the new caves: their plates and gates, the rock plates, the water; no star (they are puzzles as they are)
-    L.mapX.plates.forEach(([i, k]) => { plateA[i] = k; }); L.mapX.gates.forEach(([i, k]) => { gateA[i] = k; });
-    gateCells = L.mapX.gates.map(([i]) => i);
-    for (let i = 0; i < W*H; i++) if (grid[i] === TARGET) targets.push(i);
+    // the map caves: each cell's colour or group, the lists of what acts each tick, the water, the rhythms; no star
+    // (they are puzzles as they are)
+    mapCave = true; grp.set(L.mapX.grp); EP = parseParams(P.Params); caveDark = P.Dark === 'true' || P.Dark === '1';
+    for (let i = 0; i < W*H; i++) {
+      const t = grid[i];
+      if (t === TARGET) targets.push(i); else if (t === GATE) gateCells.push(i); else if (t === PLATE) plateCells.push(i);
+      else if (t === BELT) beltCells.push(i); else if (t === DRUM) drumCells.push(i); else if (t === RIVET) rivetN++;
+      else if (t === APE && grid[i - 1] !== APE && grid[i - W] !== APE) apeCells.push(i);   // a gorilla: its top-left cell
+      if (t === GATE) gateMark[i] = 1;
+      if (EL[t]?.rhythm) rhyCells.push(i);
+    }
+    rivet0 = rivetN;
     waterY = L.mapX.water; waterMs = num('WaterRise', 0) * 1000;
     starIdx = -1; boss.fill(0); starPending = -1; starIsGem = false;
     return [inbox, second];
@@ -3308,7 +3440,7 @@ function initLevel(n){
   const spawns = gen ? genLevel(n) : big || endlessCave ? genCave(n) : safeSpawns(genCave(n));
   players.forEach((p, k) => {
     p.sx = spawns[k][0]; p.sy = spawns[k][1]; p.x = p.sx; p.y = p.sy;
-    p.gems = 0; p.exited = false; p.doomed = false; p.dieX = undefined; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.tap = null; p.tapLock = null; p.zz = null; p.vec = null; p.stepAt = -1e9; p.aiR = 0; p.tr = []; p.keys = 0; p.air = AIR_MS; p.gswAt = -1e9;
+    p.gems = 0; p.exited = false; p.doomed = false; p.dieX = undefined; p.push = 0; p.held = []; p.walking = false; p.idle = 0; p.nextAt = 0; p.actAt = -1e9; p.pend = null; p.tap = null; p.tapLock = null; p.zz = null; p.vec = null; p.stepAt = -1e9; p.aiR = 0; p.tr = []; p.keys = 0; p.air = AIR_MS; p.gswAt = -1e9; p.torch = 0; p.sword = 0; p.hamT = 0;
     // no safe spot anywhere near (a cave made for dodging from the first second): protected until the first step
     if (p.lives > 0) { p.alive = true; p.respawn = -1; p.immune = startUnsafe ? 450 : 16; p.waitMove = startUnsafe; grid[p.y*W+p.x] = p.cell; }
     else { p.alive = false; p.respawn = -1; }
@@ -3324,7 +3456,8 @@ function initLevel(n){
 /* ---------- rules ---------- */
 function exitOpenFor(p, j){
   if (INF) return false;   // the endless cave has no exits to open: its ways are always open
-  if (targets.length && !targets.every(i => grid[i - W] === ROCK)) return false;   // the plates for rocks (new caves) all covered
+  if (targets.length && !targets.every(i => grid[i - W] === ROCK)) return false;   // the plates for rocks (map caves) all covered
+  if (rivetN > 0) return false;   // and all the rivets out
   return mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
 }
 function exitVisiblyOpen(i){
@@ -3337,8 +3470,9 @@ function move(i, j){
   fallN[j] = GOFF && j === i + GOFF ? (fall[i] ? Math.min(250, fallN[i] + 1) : 0) : 0;
   rot[j] = rot[i] + (j === i + 1 ? 1 : j === i - 1 ? -1 : 0) * Math.PI / 2;
   fallT[j] = 0; untouched[i] = untouched[j] = 0; boss[j] = boss[i]; boss[i] = 0;   // a rock that has moved once has nothing left under it
+  if (grid[j] !== E) under[j] = OBJON[grid[j]] ? grid[j] : 0;   // a plate or tar under it (map caves)
   grid[j] = grid[i]; dir[j] = dir[i]; fall[j] = fall[i];
-  grid[i] = E; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; vari[j] = vari[i];
+  grid[i] = under[i] || E; under[i] = 0; fall[i] = 0; aux[i] = aux[j] = 0; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; vari[j] = vari[i];
   eatN[j] = eatN[i]; eatN[i] = 0;
 }
 
@@ -3429,7 +3563,7 @@ function explode(cx, cy, toGem, now){
   const chain = [];
   for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++){
     const j = (cy+dy)*W + cx+dx, t = grid[j];
-    if (t === STEEL || t === EXIT || t === NEST || t === STAR || t === TARGET || t === GATE || t === GSW || isPort(t)) continue;
+    if (HARD[t]) continue;
     if (t === BARREL && (dx || dy)) chain.push([cx + dx, cy + dy]);
     eatN[j] = 0;
     if (t === P1 || t === P2){ const p = players[t-P1]; if (p.immune > 0 || (friendly() && !rockBlast)) continue; killPlayer(p); }
@@ -3579,7 +3713,8 @@ function heldDirs(p){
 }
 function canEnter(p, d){
   const j = p.y * W + p.x + OFF[d], t = grid[j];
-  return t === E || t === DIRT || t === LDIRT || t === GEM || t === STAR || t === KEY || (t === DOOR && p.keys > 0) || (isPort(t) && PORT_D[t] === d) || (t === EXIT && exitOpenFor(p)) || (pushable(t) && d % 2 === 1 && grid[j + OFF[d]] === E);
+  return t === E || t === DIRT || t === LDIRT || t === GEM || t === STAR || TAKE[t] === 1 || t === RIVET || (KIDON[t] === 1 && !danger(j)) ||
+    (t === DOOR && keyN(p, Math.min(6, grp[j])) > 0) || (isPort(t) && PORT_D[t] === d) || (t === EXIT && exitOpenFor(p)) || (pushable(t) && d % 2 === 1 && ofree(j + OFF[d]));
 }
 function slantDir(p, h){
   const last = h[h.length - 1];
@@ -3601,6 +3736,23 @@ function slantDir(p, h){
   if (d === hx) z.ex -= 1; else z.ey -= 1;
   return d;
 }
+// a kid picks up a piece (map caves): a key of its colour, the torch, the amulet, a sword, the hammer
+function take(p, j){
+  const t = grid[j], c = Math.min(6, grp[j]);
+  if (t === KEY) { if (keyN(p, c) < 15) p.keys += 1 << (c * 4); }
+  else if (t === TORCH) p.torch = 1;
+  else if (t === AMULET) frozenT = ctick + secT(EPn('amulet'));
+  else if (t === SWORD) p.sword = (p.sword || 0) + 1;
+  else if (t === HAMMER) p.hamT = ctick + secT(EPn('hammer'));
+  grid[j] = E; sfx.gem();
+}
+// the sword: the enemy next to the kid goes (a butterfly leaves its gems, an eater what it ate) and the sword is spent
+function slay(p, i){
+  const t = grid[i]; p.sword--; sfx.crash();
+  if (t === EATER) { eaterBurst(i); return; }
+  grid[i] = E; fall[i] = 0; aux[i] = 0; if (!netReplaying) dust.push({ x: i % W, y: (i / W | 0) - 1, at: nowT });
+  if (t === BUTT) gemsAround(i, 9);
+}
 // digging (or taking a gem) next to the kid without stepping in
 function snapPlayer(p, d){
   if (!p.alive || p.doomed) return;
@@ -3608,7 +3760,8 @@ function snapPlayer(p, d){
   const j = p.y * W + p.x + OFF[d], t = grid[j];
   p.idle = 0; p.walking = false; p.push = 0; p.actAt = nowT;
   if (t === DIRT || t === LDIRT) { grid[j] = E; dugAt[j] = nowT; p.dig = d; sfx.step(); if (t === LDIRT) regrowLater(j); }
-  else if (t === KEY) { grid[j] = E; p.keys = (p.keys || 0) + 1; sfx.gem(); }
+  else if (TAKE[t]) take(p, j);
+  else if (t === RIVET) { grid[j] = E; rivetN--; sfx.step(); }
   else if (t === GEM) {
     const over = mode === 'coop' ? players[0].gems + players[1].gems >= need : p.gems >= needEach;
     p.gems++; p.score += over ? gemExtra : gemVal; flyGem(p, j); sfx.gem();
@@ -3624,21 +3777,25 @@ function stepPlayer(p){
   const [dx, dy] = DXY[d];
   if (dx) p.face = dx < 0 ? 1 : 0;
   const i = p.y*W + p.x, j = i + OFF[d], t = grid[j];
-  const go = () => { grid[i] = E; grid[j] = p.cell; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; p.actAt = nowT; p.x += dx; p.y += dy; p.walking = true; p.stepN++;
+  const go = () => { vacate(i); standOn(j); grid[j] = p.cell; moved[j] = 1; src[j] = i; srcAt[j] = nowT; src[i] = -1; p.actAt = nowT; p.x += dx; p.y += dy; p.walking = true; p.stepN++;
     if (p.waitMove) { p.waitMove = false; p.immune = Math.min(p.immune, 16); } };   // protected start: a moment more after the first step
   if (t === E || t === DIRT) { go(); p.push = 0; if (t === DIRT) { sfx.step(); p.dig = d; dugAt[j] = nowT; } }
   // the new caves
   else if (t === LDIRT) { go(); p.push = 0; sfx.step(); p.dig = d; dugAt[j] = nowT; regrowLater(j); }
-  else if (t === KEY) { go(); p.push = 0; p.keys = (p.keys || 0) + 1; sfx.gem(); }
-  else if (t === DOOR && p.keys > 0) { p.keys--; grid[j] = E; go(); p.push = 0; sfx.open(); }
-  else if (isPort(t) && PORT_D[t] === d && [E, DIRT, LDIRT, GEM, KEY].includes(grid[j + OFF[d]])) {
+  // the map caves: things to pick up, doors of a colour, pieces to stand on, rivets to take out, barrels to smash
+  else if (TAKE[t]) { take(p, j); go(); p.push = 0; }
+  else if (t === DOOR && keyN(p, Math.min(6, grp[j])) > 0) { p.keys -= 1 << (Math.min(6, grp[j]) * 4); grid[j] = E; go(); p.push = 0; sfx.open(); }
+  else if (KIDON[t] && !danger(j)) { go(); p.push = 0; sfx.step(); }
+  else if (t === RIVET) { grid[j] = E; rivetN--; go(); p.push = 0; sfx.step(); }
+  else if (t === TONEL && p.hamT > ctick) { grid[j] = GEM; fall[j] = 0; aux[j] = 0; vari[j] = (j * 7) & 255; p.push = 0; p.walking = false; sfx.crash(); if (!netReplaying) dust.push({ x: j % W, y: (j / W | 0) - 1, at: nowT }); }
+  else if (isPort(t) && PORT_D[t] === d && [E, DIRT, LDIRT, GEM].includes(grid[j + OFF[d]]) || isPort(t) && PORT_D[t] === d && TAKE[grid[j + OFF[d]]]) {
     // through a one-way passage: to the cell beyond it in one step
     const k = j + OFF[d], tk = grid[k];
-    grid[i] = E; grid[k] = p.cell; moved[k] = 1; src[k] = i; srcAt[k] = nowT; src[i] = -1; p.actAt = nowT; p.x = k % W; p.y = k / W | 0; p.walking = true; p.stepN++; p.push = 0;
+    if (TAKE[tk]) take(p, k);
+    vacate(i); grid[k] = p.cell; moved[k] = 1; src[k] = i; srcAt[k] = nowT; src[i] = -1; p.actAt = nowT; p.x = k % W; p.y = k / W | 0; p.walking = true; p.stepN++; p.push = 0;
     if (tk === DIRT || tk === LDIRT) { dugAt[k] = nowT; if (tk === LDIRT) regrowLater(k); sfx.step(); }
     else if (tk === GEM) { p.gems++; p.score += gemVal; flyGem(p, k); sfx.gem(); }
-    else if (tk === KEY) { p.keys = (p.keys || 0) + 1; sfx.gem(); }
-    else sfx.step();
+    else if (!TAKE[tk]) sfx.step();
   }
   else if (t === GSW) {
     // the gravity switch: a push on it turns the whole cave's gravity a quarter round (not again for a moment)
@@ -3657,18 +3814,18 @@ function stepPlayer(p){
   }
   else if (t === EXIT && exitOpenFor(p)) {
     if (p.ai && aiKind === 'astar') hlEnd('x');
-    grid[i] = E; p.alive = false; p.exited = true; p.x += dx; p.y += dy;
+    vacate(i); p.alive = false; p.exited = true; p.x += dx; p.y += dy;
     p.score += timeLeft * 2; sfx.exit();
     if (p.ai && aiKind !== 'astar') { AI.exits++; aiTerminal(p, 60, 'x'); }
     if ((mode === 'versus' || mode === 'pc') && netRole !== 'guest') roundWin(p);
   }
-  else if (pushable(t) && canPush(d) && grid[j + OFF[d]] === E && caveRules()) {
+  else if (pushable(t) && canPush(d) && ofree(j + OFF[d]) && caveRules()) {
     // original caves: each tick of pushing moves the rock with probability 1/2, so on average it takes two ticks,
     // as long as a rock takes to start falling and drop one cell; with luck it goes at once, even while falling
     if (crng() < .5) { const first = untouched[j], f = fall[j]; move(j, j + OFF[d]); fall[j + OFF[d]] = f; go(); p.push = 0; if (first) critterFromRock(j + OFF[d], d, p); }
     else p.push++;
   }
-  else if (pushable(t) && canPush(d) && grid[j + OFF[d]] === E && !fall[j]) {
+  else if (pushable(t) && canPush(d) && ofree(j + OFF[d]) && !fall[j]) {
     if (++p.push >= 2) { move(j, j + OFF[d]); fall[j + OFF[d]] = 0; go(); p.push = 0; }
   }
   else { p.push = 0; p.walking = false; if (p.ai) p.aiR -= .3; }
@@ -3714,12 +3871,12 @@ function fallObj(i, x, y){
   const G = GOFF, b = i + G, bt = grid[b], bx = b % W, by = b / W | 0;
   const SA = OFF[(gDir + 1) % 4], SB = OFF[(gDir + 3) % 4];   // its two sides: left then right when falling down
   // A resting rock or gem waits one tick before it starts to fall (aux marks it), so you can step out from under it.
-  if (bt === E) {
+  if (bt === E || (OBJON[bt] && ofree(b))) {
     if (!(fall[i] || aux[i])) { aux[i] = 1; return; }
     const steps = realGravity && caveRules() && fall[i] ? Math.min(3, 1 + fallT[i]) : 1, ft = fall[i] ? fallT[i] + 1 : 0;
     let cur = i;
     let k = 0;
-    for (; k < steps && grid[cur + G] === E; k++){ move(cur, cur + G); cur += G; fall[cur] = 1; }
+    for (; k < steps && ofree(cur + G); k++){ move(cur, cur + G); cur += G; fall[cur] = 1; if (under[cur]) { k = steps; break; } }   // a plate or tar stops it
     fallT[cur] = Math.min(250, ft);
     if (cur !== i + G) { src[cur] = i; fallN[cur] = Math.max(1, fallN[cur]); }   // glide the whole drop of this tick
     // real gravity: still carrying speed when it reaches someone below, it hits them now, not a tick later
@@ -3733,6 +3890,7 @@ function fallObj(i, x, y){
     return;
   }
   aux[i] = 0;
+  if (SINK[bt]) { sinkIn(i, b); return; }   // on water or a burning drum (map caves): gone
   // magic wall: a falling rock goes through as a gem and a gem as a rock, while the wall runs
   const mgi = INF && bt === MAGIC ? infMagicAt(b) : null;
   if (bt === MAGIC && fall[i] && (mgi ? mgi.state : magicState) !== 2) {
@@ -3768,7 +3926,7 @@ function fallObj(i, x, y){
     if (!netReplaying) { dust.push({ x: bx, y: by - 1, at: nowT }); shakeAt = nowT; } sfx.crash(); hardHits++;
     return;
   }
-  if (bt === ROCK || bt === GEM || bt === WALL || bt === NUT || bt === BARREL) {
+  if (ROUND[bt]) {
     if (grid[i+SA] === E && grid[b+SA] === E) { move(i, i+SA); fall[i+SA] = 1; return; }
     if (grid[i+SB] === E && grid[b+SB] === E) { move(i, i+SB); fall[i+SB] = 1; return; }
   }
@@ -3777,10 +3935,12 @@ function fallObj(i, x, y){
 }
 
 function enemy(i, x, y, t){
+  if (frozenT && frozen()) return;   // the amulet (map caves): enemies stand still and harmless
   for (let k=0;k<4;k++){
     const n = grid[i + OFF[k]];
     if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) {
       const p = players[n-P1];
+      if (p.sword > 0) { slay(p, i); return; }   // the sword (map caves): the enemy goes, the kid stays
       // endless lives: only the kid goes, and the enemy carries on
       if (endless(p)) { if (!p.doomed) { blastBy = p; blastOne = true; explode((i + OFF[k]) % W, (i + OFF[k]) / W | 0, false); blastOne = false; blastBy = null; } continue; }
       blastBy = p; explode(x, y, t === BUTT); blastBy = null; return;
@@ -3797,9 +3957,10 @@ function enemy(i, x, y, t){
 /* The eater (new caves): straight ahead through empty space, eating the gems on its way; it turns back when it
    meets anything else. It kills a kid it touches (only the kid goes). Crushed, it gives back all it ate and one more. */
 function eater(i, x, y){
+  if (frozen()) return;
   for (let k = 0; k < 4; k++) {
     const n = grid[i + OFF[k]];
-    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { const p = players[n-P1]; if (!p.doomed) { blastBy = p; blastOne = true; explode((i + OFF[k]) % W, (i + OFF[k]) / W | 0, false); blastOne = false; blastBy = null; } return; }
+    if ((n === P1 || n === P2) && players[n-P1].immune <= 0 && !friendly()) { const p = players[n-P1]; if (p.sword > 0) { slay(p, i); return; } if (!p.doomed) { blastBy = p; blastOne = true; explode((i + OFF[k]) % W, (i + OFF[k]) / W | 0, false); blastOne = false; blastBy = null; } return; }
   }
   const d = dir[i], j = i + OFF[d];
   if (grid[j] === GEM) { grid[j] = E; eatN[i] = Math.min(250, eatN[i] + 1); if (!netReplaying) nestPuff.push({ i: j, at: nowT }); }
@@ -3833,16 +3994,24 @@ function amoebaCell(i){
   }
 }
 
-/* The new caves, once a tick:
-   - Gates open while something (a kid, a rock) is on their plate, and shut when nothing is there and the gate is free.
+/* The map caves, once a tick (only what the cave has):
+   - Gates are open while something (a kid, a rock, a gem) is on a plate of their group, and shut when nothing is
+     and the gate is free.
    - Living earth grows back where it is due: on a firefly or butterfly it crushes it (a butterfly gives its 9
      gems); on a kid, a rock or anything else it waits.
-   - The water rises a row every few seconds; a kid in it has a few seconds of air, which comes back out of it. */
+   - The water rises a row every few seconds; a kid in it has a few seconds of air, which comes back out of it.
+   - The pieces with a rhythm: whoever is on one when it turns dangerous pays (a kid dies; tar swallows a thing, and
+     one that swallows a rock is filled for good).
+   - Belts carry what is on them (a kid only while standing still) a cell every two ticks, and all turn round now
+     and then. A burning drum burns a kid next to it.
+   - Each gorilla throws a barrel every few seconds; with all the rivets out, the gorillas fall (in gems). */
 function newCaveTick(){
+  if (!mapCave) return;
+  ctick++;
   if (gateCells.length) {
-    const on = [0, 0, 0, 0, 0, 0, 0, 0];
-    for (let i = 0; i < W*H; i++) if (plateA[i]) { const t = grid[i]; if (t === P1 || t === P2 || pushable(t) || t === GEM) on[plateA[i]] = 1; }
-    for (const g of gateCells) { if (on[gateA[g]] && grid[g] === GATE) grid[g] = E; else if (!on[gateA[g]] && grid[g] === E) grid[g] = GATE; }
+    const on = new Uint8Array(256);
+    for (const i of plateCells) if (grid[i] !== PLATE && grid[i] !== BOOM) on[grp[i]] = 1;
+    for (const g of gateCells) { if (on[grp[g]] && grid[g] === GATE) grid[g] = E; else if (!on[grp[g]] && grid[g] === E) grid[g] = GATE; }
   }
   if (regrowN) {
     let left = 0;
@@ -3861,13 +4030,106 @@ function newCaveTick(){
     if (waterMs && (waterAcc += tickMs) >= waterMs && waterY > 1) { waterAcc -= waterMs; waterY--; }
     players.forEach(p => {
       if (!p.alive || p.doomed) return;
-      if (p.y >= waterY) { p.air -= tickMs; if (p.air <= 0 && p.immune <= 0) { blastBy = p; blastOne = true; explode(p.x, p.y, false); blastOne = false; blastBy = null; p.air = AIR_MS; } }
+      if (p.y >= waterY) { p.air -= tickMs; if (p.air <= 0 && p.immune <= 0) { killOne(p); p.air = AIR_MS; } }
       else p.air = Math.min(AIR_MS, p.air + tickMs * 2);
     });
   }
+  for (const i of rhyCells) {
+    const t = under[i]; if (!t || !danger(i)) continue;   // nothing on it, or safe now
+    const o = grid[i];
+    if (o === P1 || o === P2) killOne(players[o - P1]);
+    else if (t === TAR && o !== BOOM) { under[i] = 0; grid[i] = PUSH[o] ? E : TAR; fall[i] = 0; aux[i] = 0; sfx.land(); if (!netReplaying) dust.push({ x: i % W, y: (i / W | 0) - 1, at: nowT }); }
+  }
+  if (beltCells.length && GOFF && !(ctick & 1)) {
+    const turn = Math.floor(ctick / secT(EPn('belt'))) & 1;
+    for (const i of beltCells) {
+      if (grid[i] !== BELT) continue;
+      const j = i - GOFF, o = grid[j], d = turn ? OPP[dir[i]] : dir[i], k = j + OFF[d];
+      if (moved[j]) continue;
+      if (FALLS[o] && !fall[j] && ofree(k)) move(j, k);
+      else if ((o === P1 || o === P2) && grid[k] === E) { const p = players[o - P1]; if (p.alive && !p.doomed && !p.held.length) shoveKid(p, k); }
+    }
+  }
+  for (const i of drumCells) for (const o of OFF) { const n = grid[i + o]; if (n === P1 || n === P2) killOne(players[n - P1]); }
+  if (apeCells.length) {
+    if (rivet0 && rivetN <= 0) {
+      // the rivets are out: the gorillas come down, in gems
+      for (const i of apeCells) for (const c of [i, i + 1, i + W, i + W + 1]) if (grid[c] === APE) { grid[c] = BOOM; aux[c] = 0; dir[c] = 1; fall[c] = 0; }
+      apeCells = []; sfx.boom(); if (!netReplaying) shakeAt = nowT;
+    } else if (EPn('ape') > 0 && !frozen() && ctick % secT(EPn('ape')) === 0) for (const i of apeCells) {
+      const r = i + W + 2, l = i + W - 1, [k, d] = grid[r] === E ? [r, 1] : grid[l] === E ? [l, 3] : [-1, 0];
+      if (k >= 0) { grid[k] = TONEL; dir[k] = d; fall[k] = 0; aux[k] = 0; moved[k] = 1; src[k] = -1; vari[k] = (ctick * 7) & 255; }
+    }
+  }
+}
+// a kid dies alone where they stand (water, a laser, a crocodile, tar, a barrel, a drum)
+function killOne(p){
+  if (!p.alive || p.doomed || p.immune > 0) return;
+  blastBy = p; blastOne = true; explode(p.x, p.y, false); blastOne = false; blastBy = null;
+}
+// a belt carries a standing kid a cell
+function shoveKid(p, k){
+  const i = p.y * W + p.x; vacate(i); standOn(k); grid[k] = p.cell; moved[k] = 1; src[k] = i; srcAt[k] = nowT; src[i] = -1;
+  p.x = k % W; p.y = k / W | 0; p.actAt = nowT;
+}
+// a log knocks a gem out of a kid: it flies to a free place nearby (the team has to pick it up again)
+function knockGem(p){
+  if (p.gems <= 0) return;
+  const c = p.y * W + p.x, seen = new Uint8Array(W * H), q = [[c, 0]]; seen[c] = 1; let best = -1, bs = 99;
+  for (let h = 0; h < q.length; h++) {
+    const [i, dd] = q[h];
+    if (dd >= 2 && (grid[i] === E || grid[i] === DIRT)) { const sc = dd + (grid[i] === E && grid[i + W] !== E ? 0 : 2); if (sc < bs) { bs = sc; best = i; } }
+    if (dd < 5) for (const o of OFF) { const j = i + o; if (!seen[j] && j > 0 && j < W * H && [E, DIRT, P1, P2, LOG].includes(grid[j])) { seen[j] = 1; q.push([j, dd + 1]); } }
+  }
+  if (best < 0) return;
+  p.gems--; grid[best] = GEM; fall[best] = 0; aux[best] = 0; vari[best] = (best * 7) & 255; src[best] = c; srcAt[best] = nowT; landAt[best] = nowT + tickMs;
+  if (!exitVisiblyOpen()) exitOpenShown = false;
+}
+// something falls into water or a burning drum: gone (a barrel in a drum lets out a firefly)
+function sinkIn(i, b){
+  const t = grid[i]; grid[i] = E; fall[i] = 0; aux[i] = 0; src[i] = -1;
+  if (!netReplaying) dust.push({ x: b % W, y: (b / W | 0) - 1, at: nowT });
+  if (grid[b] === DRUM && t === TONEL) burnAt(b); else sfx.land();
+}
+function burnAt(b){
+  sfx.boom(); let n = 0; for (let i = 0; i < W * H; i++) if (grid[i] === FIRE) n++;
+  if (n >= 6) return;
+  for (const o of [-W, -1, 1]) { const j = b + o; if (grid[j] === E) { grid[j] = FIRE; dir[j] = 3; moved[j] = 1; src[j] = -1; vari[j] = (j * 13) & 255; return; } }
+}
+/* A log rolls along its lane, a cell every few ticks: over a kid (they swap places and a gem jumps out of the kid)
+   or a gem; a rock, a barrel or another log in the way stops it; at the end of the lane it starts again at the
+   other end. */
+function logTick(i){
+  if (frozen() || ctick % Math.max(1, EPn('log') | 0)) return;
+  const d = dir[i], k = i + OFF[d], t = grid[k];
+  if (t === E) { move(i, k); return; }
+  if ((t === P1 || t === P2 || t === GEM) && !under[i] && !under[k]) {
+    const p = t === GEM ? null : players[t - P1];
+    if (p && p.doomed) return;
+    grid[k] = LOG; dir[k] = d; moved[k] = 1; src[k] = i; srcAt[k] = nowT; vari[k] = vari[i];
+    grid[i] = t; moved[i] = 1; src[i] = k; srcAt[i] = nowT;
+    if (p) { p.x = i % W; p.y = i / W | 0; p.walking = false; p.actAt = nowT; if (p.immune <= 0) knockGem(p); sfx.crash(); }
+    return;
+  }
+  if (FALLS[t] || FOE[t]) return;
+  let m = i; while ([E, LOG, P1, P2, GEM].includes(grid[m - OFF[d]])) m -= OFF[d];
+  if (m !== i && grid[m] === E) { grid[m] = LOG; dir[m] = d; vari[m] = vari[i]; moved[m] = 1; src[m] = -1; grid[i] = E; }
+}
+/* A barrel from a gorilla (tonel) rolls along the girders a cell every few ticks; it falls where there is nothing
+   under it and, landed, goes on the other way. It kills a kid it reaches, unless the kid has the hammer (then it
+   breaks into a gem). Into a burning drum: a firefly comes out. */
+function tonelTick(i, x, y){
+  if (frozen()) return;
+  if (fall[i] || (GOFF && ofree(i + GOFF))) { const was = fall[i]; fallObj(i, x, y); if (grid[i] === TONEL && was && !fall[i]) dir[i] = OPP[dir[i]]; return; }
+  if (ctick % Math.max(1, EPn('tonel') | 0)) return;
+  const d = dir[i] === 3 ? 3 : 1, k = i + OFF[d], t = grid[k];
+  if (t === P1 || t === P2) { const p = players[t - P1]; if (p.hamT > ctick) { grid[i] = GEM; vari[i] = (i * 7) & 255; fall[i] = 0; aux[i] = 0; sfx.crash(); } else killOne(p); return; }
+  if (t === DRUM) { grid[i] = E; burnAt(k); return; }
+  if (ofree(k)) { move(i, k); return; }
+  dir[i] = OPP[d];
 }
 let regrowN = 0;
-const regrowLater = j => { regrowAt[j] = tickN + Math.round(6000 / tickMs); regrowN++; };
+const regrowLater = j => { regrowAt[j] = tickN + secT(EPn('regrow')); regrowN++; };
 let tickN = 0, lastDeathTick = -99;
 function tick(){
   tickN++; moved.fill(0);
@@ -3892,7 +4154,9 @@ function tick(){
     if (t === ROCK || t === GEM || t === NUT || t === BARREL) fallObj(i, x, y);
     else if (t === FIRE || t === BUTT) enemy(i, x, y, t);
     else if (t === EATER) eater(i, x, y);
-    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = i === starPending ? STAR : dir[i] ? GEM : E; if (i === starPending) { starPending = -1; starIsGem = !!dir[i]; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; } dir[i] = 0; fall[i] = 0; } }
+    else if (t === TONEL) tonelTick(i, x, y);
+    else if (t === LOG) logTick(i);
+    else if (t === BOOM) { if (++aux[i] >= 4) { grid[i] = under[i] ? under[i] : i === starPending ? STAR : dir[i] ? GEM : E; under[i] = 0; if (i === starPending) { starPending = -1; starIsGem = !!dir[i]; starFlash = { at: nowT, x: i % W, y: i / W | 0, drop: 1 }; } dir[i] = 0; fall[i] = 0; } }
     else if (t === AMOEBA) amoebaCell(i);
     else if (t === NEST) {
       // a butterfly comes out every few seconds while it has fewer than 8 of its own about
@@ -3997,6 +4261,7 @@ function menu(){
   state = 'menu'; document.body.classList.remove('needland'); lockOrientation();
   if (touchPref) { realGravity = false; $('views').classList.remove('duo', 'netguest'); $('views').classList.add('solo'); }   // phones: no real gravity, one board behind the menu
   fitBoards();
+  if (edTesting) { edTesting = false; caveSet = edPrevSet; mode = 'coop'; initLevel(startN()); openEditor(); return; }   // done trying a cave: back to the editor
   if (netRole === 'host' && netLink) return hostPick();   // connected: the next game is with the other phone
   if (touchPref === null && isTouchDevice) return askTouch();
   showOverlay(`<div class="card">
@@ -4014,6 +4279,7 @@ function menu(){
     ${BT ? '<div class="row"><button id="bbt" class="b1">DOS CELULARES (BLUETOOTH)</button></div>' : ''}
     <div class="row">
       <button id="bpick">ELEGIR CUEVA · ${caveLabel(startN())}</button>
+      <button id="bedit">EDITOR DE CUEVAS</button>
     </div>
     <div class="row sets">
       ${touchPref ? '' : `<button id="bgrav" class="${realGravity ? 'on' : ''}">GRAVEDAD REAL: ${realGravity ? 'SÍ' : 'NO'}</button>`}
@@ -4032,6 +4298,8 @@ function menu(){
       <button id="bset4" class="${caveSet === 'inf' ? 'on' : ''}">CUEVA INFINITA</button>
       <button id="bset5" class="${caveSet === 'str' ? 'on' : ''}">INFINITA ALEATORIA</button>
       <button id="bset6" class="${caveSet === 'new' ? 'on' : ''}">CUEVAS NUEVAS</button>
+      <button id="bset7" class="${caveSet === 'cls' ? 'on' : ''}">CUEVAS CLÁSICAS</button>
+      ${CAVE_SETS.mine.caves.length ? `<button id="bset8" class="${caveSet === 'mine' ? 'on' : ''}">MIS CUEVAS (${CAVE_SETS.mine.caves.length})</button>` : ''}
     </div>
     <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega.${touchPref ? '' : ' Entrenar PC: el PC juega solo y puedes acelerar el tiempo.'}</p>
   </div>`);
@@ -4051,7 +4319,8 @@ function menu(){
   $('btilt').onclick = () => { tilt3d = !tilt3d; try { localStorage.setItem('boulder-duo-tilt', tilt3d ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
-  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str'); $('bset6').onclick = () => pickSet('new');
+  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str'); $('bset6').onclick = () => pickSet('new'); $('bset7').onclick = () => pickSet('cls'); if ($('bset8')) $('bset8').onclick = () => pickSet('mine');
+  $('bedit').onclick = () => openEditor();
   onEnter = () => startGame('coop');
 }
 
@@ -4066,7 +4335,7 @@ function startN(){
   return 1;
 }
 function setStartN(n){ startMem[caveSet] = n; try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
-function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(?:Aleatoria|Nueva) (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
+function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(?:Aleatoria|Nueva|Clásica|Mía|Prueba) (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
 function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
   // random caves: just the one of the seed, at the chosen level (the ones after it follow when it is won)
@@ -4857,7 +5126,7 @@ function updateHud(){
   const team = players[0].gems + players[1].gems;
   players.forEach((p, k) => {
     // cooperative with two kids: the team's total and, small, how many this kid got
-    const own = (mode === 'coop' && !solo ? `<span class="mine">TÚ ${p.gems}</span>` : '') + (p.keys ? `<span class="mine">🔑${p.keys}</span>` : '');
+    const own = (mode === 'coop' && !solo ? `<span class="mine">TÚ ${p.gems}</span>` : '') + keysHud(p);
     const gt = (INF ? String(mode === 'versus' ? p.gems : team) : mode === 'versus' ? `${p.gems}/${needEach}` : `${team}/${need}`) + own;
     if ($('g'+k).dataset.v !== gt) { $('g'+k).dataset.v = gt; $('g'+k).innerHTML = gt; }
     $('l'+k).textContent = mode === 'train' && k === 0 ? '—' : p.exited ? 'SALIÓ' : p.ai || endless(p) ? '∞' : p.lives;
@@ -5051,6 +5320,124 @@ function NEW_T(){
   }));
   return NEW_TC = { nut, key, door, port, barrel, target, eater, gsw, gate, gateOpen, plate };
 }
+/* Pictures of the other map pieces (64 x 64, made once): keys and doors in five colours, the laser, the torch,
+   amulet, sword and hammer, water, the crocodile and the tar (safe and dangerous), the log and the gorilla's barrel
+   rolling, the gorilla (2 x 2, a quarter per cell), the burning drum, the rivet and the belt. */
+const KEY_COL = ['#f2c632', '#e8443a', '#3f8cff', '#3fcf5a', '#c86bff', '#ff9a3c', '#e8e8e8'];
+let MAP_TC = null;
+function MAP_T(){
+  if (MAP_TC) return MAP_TC;
+  const mk = (f, w = 64) => { const c = document.createElement('canvas'); c.width = c.height = w; const g = c.getContext('2d'); g.lineJoin = g.lineCap = 'round'; f(g); return c; };
+  const OL = '#1e140e', shade = (g, y = 56, r = 20) => { g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(32, y, r, 4, 0, 0, 7); g.fill(); };
+  const key = KEY_COL.map(col => [0, 1].map(f => mk(g => {
+    g.translate(32, 32); g.rotate(-.5); g.fillStyle = col; g.strokeStyle = OL; g.lineWidth = 3;
+    g.beginPath(); g.arc(-12, 0, 10, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#2a1c10'; g.beginPath(); g.arc(-12, 0, 4, 0, 7); g.fill();
+    g.fillStyle = col; g.beginPath(); g.rect(-3, -4, 26, 8); g.rect(14, 4, 4, 8); g.rect(20, 4, 3, 6); g.fill(); g.stroke();
+    if (f) { g.fillStyle = 'rgba(255,255,255,.55)'; g.beginPath(); g.arc(-15, -4, 3, 0, 7); g.fill(); }
+  })));
+  const door = KEY_COL.map(col => mk(g => {
+    g.fillStyle = '#6b4a2a'; g.fillRect(4, 2, 56, 62); g.strokeStyle = OL; g.lineWidth = 3; g.strokeRect(4, 2, 56, 62);
+    g.strokeStyle = 'rgba(40,25,10,.6)'; g.lineWidth = 2; for (const x of [18, 32, 46]) { g.beginPath(); g.moveTo(x, 4); g.lineTo(x, 62); g.stroke(); }
+    g.fillStyle = col; g.fillRect(4, 14, 56, 6); g.fillRect(4, 44, 56, 6);
+    g.beginPath(); g.arc(32, 32, 8, 0, 7); g.fill(); g.strokeStyle = OL; g.lineWidth = 2; g.stroke(); g.fillStyle = OL; g.beginPath(); g.arc(32, 30, 2.5, 0, 7); g.fill(); g.fillRect(31, 31, 2, 6);
+  }));
+  const laser = [0, 1].map(on => mk(g => {
+    g.fillStyle = '#4a4e5a'; g.fillRect(24, 0, 16, 5); g.fillRect(24, 59, 16, 5);
+    if (on) { const gr = g.createLinearGradient(14, 0, 50, 0); gr.addColorStop(0, 'rgba(255,40,40,0)'); gr.addColorStop(.5, 'rgba(255,60,60,.7)'); gr.addColorStop(1, 'rgba(255,40,40,0)');
+      g.fillStyle = gr; g.fillRect(14, 0, 36, 64); g.fillStyle = '#ffe0e0'; g.fillRect(29, 0, 6, 64); }
+    else { g.strokeStyle = 'rgba(255,90,90,.45)'; g.lineWidth = 2; g.setLineDash([3, 6]); g.beginPath(); g.moveTo(32, 4); g.lineTo(32, 60); g.stroke(); }
+  }));
+  const torch = mk(g => { shade(g); g.fillStyle = '#7a4a22'; g.strokeStyle = OL; g.lineWidth = 3; g.beginPath(); g.moveTo(28, 56); g.lineTo(36, 56); g.lineTo(38, 26); g.lineTo(26, 26); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#ff9a2a'; g.beginPath(); g.moveTo(32, 4); g.quadraticCurveTo(46, 18, 38, 28); g.lineTo(26, 28); g.quadraticCurveTo(18, 18, 32, 4); g.fill(); g.fillStyle = '#fff0a0'; g.beginPath(); g.ellipse(32, 21, 4, 7, 0, 0, 7); g.fill(); });
+  const amulet = mk(g => { g.strokeStyle = '#d8b040'; g.lineWidth = 3; g.beginPath(); g.arc(32, 22, 16, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+    g.fillStyle = '#f2c632'; g.strokeStyle = OL; g.lineWidth = 3; g.beginPath(); g.arc(32, 38, 15, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#3fd0c0'; g.beginPath(); g.arc(32, 38, 7, 0, 7); g.fill(); g.fillStyle = '#fff'; g.fillRect(29, 34, 3, 3); });
+  const sword = mk(g => { g.translate(32, 32); g.rotate(-.8); g.fillStyle = '#d8dde8'; g.strokeStyle = OL; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(-4, -28); g.lineTo(4, -28); g.lineTo(4, 10); g.lineTo(0, 16); g.lineTo(-4, 10); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#c8a040'; g.fillRect(-12, -30, 24, 6); g.strokeRect(-12, -30, 24, 6); g.fillStyle = '#6a3a20'; g.fillRect(-3, -42, 6, 12); g.strokeRect(-3, -42, 6, 12); });
+  const hammer = mk(g => { shade(g); g.translate(32, 34); g.rotate(-.5); g.fillStyle = '#8a5a2a'; g.strokeStyle = OL; g.lineWidth = 3; g.fillRect(-3, -6, 6, 32); g.strokeRect(-3, -6, 6, 32);
+    g.fillStyle = '#9aa0ac'; g.fillRect(-16, -22, 32, 16); g.strokeRect(-16, -22, 32, 16); g.fillStyle = 'rgba(255,255,255,.4)'; g.fillRect(-14, -20, 28, 4); });
+  const pond = [0, 1].map(f => mk(g => { g.fillStyle = '#1f4f8a'; g.fillRect(0, 0, 64, 64); g.strokeStyle = 'rgba(160,210,255,.55)'; g.lineWidth = 3;
+    for (const y of [14, 34, 54]) { g.beginPath(); for (let x = -8; x <= 72; x += 16) { const o = f ? 8 : 0; g.moveTo(x + o, y); g.quadraticCurveTo(x + o + 4, y - 4, x + o + 8, y); } g.stroke(); } }));
+  const croc = [0, 1].map(open => mk(g => {
+    g.fillStyle = '#1f4f8a'; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#3d8a3a'; g.strokeStyle = OL; g.lineWidth = 3;
+    if (!open) { g.beginPath(); g.roundRect ? g.roundRect(4, 26, 56, 22, 10) : g.rect(4, 26, 56, 22); g.fill(); g.stroke();
+      g.fillStyle = '#fff'; for (let x = 14; x < 56; x += 9) { g.beginPath(); g.moveTo(x, 37); g.lineTo(x + 3, 42); g.lineTo(x + 6, 37); g.fill(); } }
+    else { g.beginPath(); g.moveTo(4, 44); g.lineTo(60, 44); g.lineTo(60, 52); g.lineTo(4, 52); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(8, 40); g.lineTo(60, 8); g.lineTo(60, 18); g.lineTo(12, 44); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#c8303a'; g.beginPath(); g.moveTo(12, 43); g.lineTo(58, 19); g.lineTo(58, 43); g.closePath(); g.fill();
+      g.fillStyle = '#fff'; for (let x = 18; x < 58; x += 9) { g.beginPath(); g.moveTo(x, 44); g.lineTo(x + 3, 37); g.lineTo(x + 6, 44); g.fill(); } }
+    g.fillStyle = '#ffe680'; g.beginPath(); g.arc(12, open ? 40 : 28, 5, 0, 7); g.fill(); g.stroke(); g.fillStyle = OL; g.fillRect(11, open ? 37 : 25, 2.5, 6);
+  }));
+  const tar = [0, 1].map(open => mk(g => {
+    if (!open) { g.fillStyle = '#5a4030'; g.fillRect(0, 22, 64, 42); g.fillStyle = '#7a5a40'; g.fillRect(0, 22, 64, 6); g.strokeStyle = 'rgba(30,20,10,.6)'; g.lineWidth = 2;
+      for (const [x, y] of [[10, 36], [30, 46], [48, 34], [20, 56]]) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 8, y + 3); g.stroke(); } }
+    else { g.fillStyle = '#0c0806'; g.fillRect(0, 22, 64, 42); g.fillStyle = '#2a1c14'; for (const [x, y, r] of [[16, 34, 5], [40, 44, 7], [52, 30, 4], [26, 54, 4]]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+      g.strokeStyle = 'rgba(255,150,60,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, 23); g.lineTo(64, 23); g.stroke(); }
+  }));
+  const roll = (body) => [0, 1, 2, 3].map(f => mk(g => { shade(g, 58, 22); g.translate(32, 34); body(g, f * Math.PI / 2); }));
+  const log = roll((g, a) => { g.fillStyle = '#8a5a2a'; g.strokeStyle = OL; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 24, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#c8945a'; g.beginPath(); g.arc(0, 0, 18, 0, 7); g.fill(); g.strokeStyle = 'rgba(110,60,25,.8)'; g.lineWidth = 2; for (const r of [6, 12]) { g.beginPath(); g.arc(0, 0, r, a, a + 5.4); g.stroke(); } });
+  const tonel = roll((g, a) => { g.rotate(a); g.fillStyle = '#b8743a'; g.strokeStyle = OL; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, 24, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#3a3a40'; g.fillRect(-24, -9, 48, 5); g.fillRect(-24, 5, 48, 5); g.strokeStyle = 'rgba(70,35,10,.6)'; g.lineWidth = 2; for (const x of [-12, 0, 12]) { g.beginPath(); g.moveTo(x, -22); g.lineTo(x, 22); g.stroke(); } });
+  const ape = [0, 1].map(f => { const big = mk(g => {
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(64, 122, 50, 6, 0, 0, 7); g.fill();
+    g.fillStyle = '#6a3a1a'; g.strokeStyle = OL; g.lineWidth = 4;
+    g.beginPath(); g.ellipse(64, 80, 46, 40, 0, 0, 7); g.fill(); g.stroke();                       // body
+    for (const s of [-1, 1]) { g.save(); g.translate(64 + s * 44, f ? 40 : 76); g.rotate(s * (f ? -.5 : .3)); g.beginPath(); g.ellipse(0, 0, 13, 28, 0, 0, 7); g.fill(); g.stroke(); g.restore(); }   // arms (up when throwing)
+    g.beginPath(); g.ellipse(64, 38, 30, 28, 0, 0, 7); g.fill(); g.stroke();                        // head
+    g.fillStyle = '#d8a070'; g.beginPath(); g.ellipse(64, 48, 22, 15, 0, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.ellipse(64, 92, 26, 22, 0, 0, 7); g.fill();
+    g.fillStyle = '#fff'; for (const s of [-1, 1]) { g.beginPath(); g.arc(64 + s * 11, 30, 7, 0, 7); g.fill(); g.stroke(); } g.fillStyle = OL; for (const s of [-1, 1]) { g.beginPath(); g.arc(64 + s * 10, 31, 3, 0, 7); g.fill(); }
+    g.strokeStyle = OL; g.lineWidth = 3; g.beginPath(); g.moveTo(52, 54); g.quadraticCurveTo(64, f ? 46 : 60, 76, 54); g.stroke();
+  }, 128); return [0, 1, 2, 3].map(q => mk(g => g.drawImage(big, (q & 1) * 64, (q >> 1) * 64, 64, 64, 0, 0, 64, 64))); });
+  const drum = [0, 1, 2].map(f => mk(g => {
+    g.fillStyle = '#3a5aa8'; g.strokeStyle = OL; g.lineWidth = 3; g.fillRect(10, 26, 44, 36); g.strokeRect(10, 26, 44, 36); g.fillStyle = '#e8e8e8'; g.font = 'bold 13px monospace'; g.textAlign = 'center'; g.fillText('OIL', 32, 50);
+    g.fillStyle = '#2a3a70'; g.fillRect(10, 30, 44, 3); g.fillRect(10, 56, 44, 3);
+    for (const [x, h, c] of [[20, 16, '#ff6a20'], [32, 22, '#ffb030'], [44, 14, '#ff6a20']]) { const hh = h + [0, 4, -3][(f + x) % 3]; g.fillStyle = c; g.beginPath(); g.moveTo(x - 7, 26); g.quadraticCurveTo(x, 26 - hh * 2, x + 7, 26); g.fill(); }
+  }));
+  const rivet = mk(g => { g.fillStyle = '#c8303a'; g.fillRect(0, 8, 64, 48); g.strokeStyle = OL; g.lineWidth = 3; g.strokeRect(0, 8, 64, 48);
+    g.fillStyle = '#ffd84a'; g.beginPath(); g.arc(32, 32, 12, 0, 7); g.fill(); g.stroke(); g.fillStyle = '#fff4b0'; g.beginPath(); g.arc(28, 28, 4, 0, 7); g.fill(); });
+  const belt = [1, 3].map(d => [0, 1, 2, 3].map(f => mk(g => {
+    g.fillStyle = '#4a4e5a'; g.fillRect(0, 10, 64, 44); g.strokeStyle = OL; g.lineWidth = 3; g.strokeRect(-2, 10, 68, 44);
+    g.fillStyle = '#ffd84a'; const o = (f * 8) * (d === 1 ? 1 : -1);
+    for (let x = -32; x < 96; x += 32) { const cx = x + o; g.beginPath(); if (d === 1) { g.moveTo(cx, 20); g.lineTo(cx + 12, 32); g.lineTo(cx, 44); g.lineTo(cx + 6, 44); g.lineTo(cx + 18, 32); g.lineTo(cx + 6, 20); }
+      else { g.moveTo(cx + 18, 20); g.lineTo(cx + 6, 32); g.lineTo(cx + 18, 44); g.lineTo(cx + 12, 44); g.lineTo(cx, 32); g.lineTo(cx + 12, 20); } g.closePath(); g.fill(); }
+  })));
+  return MAP_TC = { key, door, laser, torch, amulet, sword, hammer, pond, croc, tar, log, tonel, ape, drum, rivet, belt };
+}
+// what a kid carries (map caves), for the bar: keys of each colour, the torch, swords, the hammer's seconds
+function keysHud(p){
+  let h = '';
+  for (let c = 0; c < 7; c++) { const n = keyN(p, c); if (n) h += `<span class="mine" style="color:${KEY_COL[c]}">🔑${n > 1 ? n : ''}</span>`; }
+  if (p.torch) h += '<span class="mine">🔥</span>';
+  if (p.sword) h += `<span class="mine">🗡${p.sword > 1 ? p.sword : ''}</span>`;
+  if (p.hamT > ctick) h += `<span class="mine">🔨${Math.ceil((p.hamT - ctick) * tickMs / 1000)}</span>`;
+  return h;
+}
+// a belt's way now (they all turn round together now and then)
+const beltDir = i => (Math.floor(ctick / secT(EPn('belt'))) & 1) ? OPP[dir[i]] : dir[i];
+// a piece of the map caves as drawn (also under a kid or a thing standing on it)
+function mapSprite(t, i){
+  const M = MAP_T(), N = NEW_T();
+  switch (t) {
+    case KEY: return M.key[Math.min(6, grp[i])][(frame >> 3) % 2];
+    case DOOR: return M.door[Math.min(6, grp[i])];
+    case PLATE: return N.plate[grid[i] !== PLATE ? 1 : 0];
+    case LASER: return M.laser[danger(i) ? 1 : 0];
+    case TORCH: return M.torch; case AMULET: return M.amulet; case SWORD: return M.sword; case HAMMER: return M.hammer;
+    case POND: return M.pond[(frame >> 4) & 1];
+    case CROC: return M.croc[danger(i) ? 1 : 0];
+    case TAR: return M.tar[danger(i) ? 1 : 0];
+    case LOG: return M.log[(frame >> 2) & 3];
+    case TONEL: return M.tonel[((frame >> 2) + (dir[i] === 3 ? 2 : 0)) & 3];
+    case APE: { const q = (grid[i - 1] === APE ? 1 : 0) + (grid[i - W] === APE ? 2 : 0), a = apeCells.find(c => c === i || c === i - 1 || c === i - W || c === i - W - 1);
+      return M.ape[a !== undefined && ctick % secT(EPn('ape')) < 3 ? 1 : 0][q]; }
+    case DRUM: return M.drum[(frame >> 2) % 3];
+    case RIVET: return M.rivet;
+    case BELT: return M.belt[beltDir(i) === 1 ? 0 : 1][(frame >> 2) & 3];
+  }
+  return null;
+}
 // living earth: the cave's earth with green roots in it
 const LDIRT_C = new Map();
 function ldirtSprite(v){
@@ -5061,11 +5448,12 @@ function ldirtSprite(v){
   for (let n = 0; n < 4; n++) { const x = R() * 64, y = R() * 64; g.beginPath(); g.moveTo(x * k, y * k); g.quadraticCurveTo((x + 10) * k, (y + 6) * k, (x + 6) * k, (y + 18) * k); g.stroke(); }
   LDIRT_C.set(base, c); return c;
 }
-// what lies under a cell (new caves): a plate, lit while something is on it, or an open gate's frame
+// what lies under a cell (map caves): the piece someone stands on (a lit plate, a laser, a crocodile, tar), or an open
+// gate's frame
+const gateMark = new Uint8Array(MAXN);
 function drawUnder(g, i, px, py){
-  const N = NEW_T();
-  if (plateA[i]) { const t = grid[i]; g.drawImage(N.plate[t === P1 || t === P2 || pushable(t) || t === GEM ? 1 : 0], px, py, T, T); }
-  if (gateA[i] && grid[i] !== GATE) g.drawImage(N.gateOpen, px, py, T, T);
+  if (under[i]) { const sp = mapSprite(under[i], i); if (sp) g.drawImage(sp, px, py, T, T); }
+  if (gateMark[i] && grid[i] !== GATE) g.drawImage(NEW_T().gateOpen, px, py, T, T);
 }
 function tileSprite(t, i, x, y, af, open){
   if (INF) TL = infTL[infSlotOf(i)] || TL;   // the endless cave: each piece in its own cave's colours
@@ -5086,8 +5474,8 @@ function tileSprite(t, i, x, y, af, open){
     case NEST: return NEST_T[(frame >> 4) & 1];
     case STAR: return starSprite(starLetter(), !!starsGot[starKey(level)], (frame >> 3) % 4);
     case NUT: return NEW_T().nut;
-    case KEY: return NEW_T().key[(frame >> 3) % 2];
-    case DOOR: return NEW_T().door;
+    case KEY: case DOOR: case PLATE: case LASER: case TORCH: case AMULET: case SWORD: case HAMMER: case POND: case CROC: case TAR:
+    case LOG: case TONEL: case APE: case DRUM: case RIVET: case BELT: return mapSprite(t, i);
     case PORTU: case PORTR: case PORTD: case PORTL: return NEW_T().port[PORT_D[t]];
     case BARREL: return NEW_T().barrel;
     case TARGET: return NEW_T().target[grid[i - W] === ROCK ? 1 : 0];
@@ -5333,11 +5721,11 @@ function renderView(k){
   const x0 = Math.floor(ox / T), y0 = Math.floor(oy / T);
   const pv = players[k], af = Math.floor(frame / 6) % 4, open = pv && !pv.ai ? exitOpenFor(pv) : exitVisiblyOpen();
   infViewP = pv;
-  const glide = [], bills = [], bb = tilt && !(darkCaves && mode !== 'train' && state !== 'menu');
+  const glide = [], bills = [], bb = tilt && !darkNow();
   if (tilt) drawRelief(g, ox, oy, x0, y0);
   for (let y = Math.max(0, y0 - 2); y <= Math.min(H-1, y0 + Math.ceil(CH) + 2); y++) for (let x = Math.max(0, x0 - 2); x <= Math.min(W-1, x0 + Math.ceil(CW) + 2); x++){
     const i = y*W + x, s = tileSprite(grid[i], i, x, y, af, open);
-    if (plateA[i] || gateA[i]) drawUnder(g, i, x*T - ox, y*T - oy);
+    if (under[i] || gateMark[i]) drawUnder(g, i, x*T - ox, y*T - oy);
     if (isOpenCell(grid[i]) && x > 0 && y > 0 && x < W-1 && y < H-1) {
       // round the corners of the hole where two dirt sides meet
       const up = grid[i - W] === DIRT, rt = grid[i + 1] === DIRT, dn = grid[i + W] === DIRT, lf = grid[i - 1] === DIRT;
@@ -5378,7 +5766,7 @@ function renderView(k){
     for (let x = 0; x <= W * T; x += 4) g.lineTo(x - ox, wy + wv + Math.sin(x / 9 + simT / 300) * 1); g.stroke();
   }
   drawCrowns(g, ox, oy, x0, y0);
-  if (darkCaves && mode !== 'train' && state !== 'menu') drawDark(g, k, ox, oy, x0, y0);
+  if (darkNow()) drawDark(g, k, ox, oy, x0, y0);
   drawCritters(g, ox, oy);
   if (simT - exitOpenAt < 2200) {
     // the exit opens: golden rings and sparkles burst out of the door
@@ -5587,7 +5975,7 @@ function drawMiniMap(g, k){
     if (!mmImg) mmImg = MMG.createImageData(W, H);
     const d = mmImg.data;
     for (let i = 0; i < W*H; i++) {
-      const c = darkCaves ? (grid[i] === STEEL ? MM_COL[STEEL] : MM_COL[E]) : MM_COL[grid[i]] || (grid[i] === EXIT ? MM_COL[STEEL] : MM_COL[E]);
+      const c = darkNow() ? (grid[i] === STEEL ? MM_COL[STEEL] : MM_COL[E]) : MM_COL[grid[i]] || (grid[i] === EXIT ? MM_COL[STEEL] : MM_COL[E]);
       d[i*4] = c[0]; d[i*4 + 1] = c[1]; d[i*4 + 2] = c[2]; d[i*4 + 3] = 255;
     }
     MMG.putImageData(mmImg, 0, 0);
@@ -5670,6 +6058,7 @@ const KEYMAP = {
 };
 window.addEventListener('keydown', e => {
   audioOn();
+  if (edOpen) { edKey(e); return; }   // the editor has its own keys
   if (e.target && e.target.tagName === 'INPUT' && e.target.type !== 'range') {   // typing a seed: only Enter means something
     if ((e.code === 'Enter' || e.code === 'NumpadEnter') && onEnter) { e.preventDefault(); onEnter(); }
     return;
@@ -5806,16 +6195,16 @@ let netRngS = 0, netReplaying = false, netLog = [], netHist = new Map(), netSeq 
 // no sound twice: going back over ticks already played is silent
 Object.keys(sfx).forEach(k => { const f = sfx[k]; sfx[k] = (...a) => netReplaying ? undefined : f(...a); });
 function netRng(){ netRngS = netRngS + 0x6D2B79F5 | 0; let t = Math.imul(netRngS ^ netRngS >>> 15, 1 | netRngS); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
-const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt', 'waitMove', 'keys', 'air', 'gswAt'];
+const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt', 'waitMove', 'keys', 'air', 'gswAt', 'torch', 'sword', 'hamT'];
 // a copy of everything the game needs (taken after each tick when two phones play, and by the start-spot check)
 function stateSnap(){
-  return { t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt].map(a => a.slice()), inf: INF && JSON.stringify(INF), nw: [waterY, waterAcc, gDirSet, gravSwitched],
+  return { t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt, under].map(a => a.slice()), inf: INF && JSON.stringify(INF), nw: [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN, apeCells.slice()],
     pb: pendingBooms.map(e => ({ ...e })), p: players.map(q => PKEYS.map(k => q[k])),
     sc: [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS, tickN, exitOpenAt, starFlash] };
 }
 function stateLoad(h){
-  [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt].forEach((a, i) => a.set(h.A[i]));
-  [waterY, waterAcc, gDirSet, gravSwitched] = h.nw; applyGravity();
+  [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt, under].forEach((a, i) => a.set(h.A[i]));
+  [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN] = h.nw; apeCells = h.nw[7].slice(); applyGravity();
   regrowN = 0; for (let i = 0; i < W*H; i++) if (regrowAt[i]) regrowN++;
   if (h.inf) { const old = INF && INF.lay.slice(); INF = JSON.parse(h.inf); infCamShift(old, INF.lay); }
   pendingBooms = h.pb.map(e => ({ ...e })); players.forEach((q, i) => PKEYS.forEach((k2, j) => { q[k2] = h.p[i][j]; }));
@@ -5988,6 +6377,7 @@ function netGot(o){
   if (o.t === 'pause' && netRole === 'host') { if (state === 'play' || state === 'pause') togglePause(); return; }
   if (netRole !== 'guest') return;
   if (o.t === 'start') {
+    if (o.cv) CAVE_SETS[o.set] = { name: 'Del otro celular', caves: o.cv.map(props => ({ props, objects: [] })) };   // the host's own caves
     caveSet = o.set; if (o.bt) setBigType(o.bt); if (o.bs) setBigSeed(o.bs); friendlyOn = o.fr; realGravity = o.rg; gDirSet = o.gd; infLives = !!o.il;
     startGame(o.m); fxSeed = o.fs | 0; initLevel(o.lv); tickN = o.tk | 0; netT0 = null; netNewCave(); return;
   }
@@ -6085,7 +6475,7 @@ function hostPick(){
   showOverlay(`<div class="card"><h2>CONECTADO</h2><p>Con ${netPeer.replace(/[<&]/g, '')}. Tú eres J1 y el otro celular es J2. Parten en ${caveLabel(startN())}.</p>
     <div class="row"><button id="bnetc" class="b1">COOPERATIVO</button><button id="bnetv" class="b2">VERSUS</button></div>
     <div class="row"><button id="bnetq">DESCONECTAR</button></div></div>`);
-  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, bs: bigSeed, bt: bigType, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
+  const go = m => { startGame(m); netSend({ t: 'start', m, set: caveSet, cv: caveSet === 'mine' || caveSet === 'edit' ? CAVE_SETS[caveSet].caves.map(c => c.props) : undefined, bs: bigSeed, bt: bigType, lv: level, fr: friendlyOn, rg: realGravity, gd: gDirSet, il: infLives, fs: fxSeed, tk: tickN }); };
   $('bnetc').onclick = () => go('coop'); $('bnetv').onclick = () => go('versus'); $('bnetq').onclick = netQuit;
   onEnter = () => go('coop');
 }
@@ -6182,6 +6572,318 @@ $('ai-reset').onclick = () => {
   else { resetArm = Date.now(); b.textContent = '¿SEGURO? CLIC OTRA VEZ'; setTimeout(() => { if (Date.now() - resetArm >= 2900) b.textContent = 'BORRAR APRENDIZAJE'; }, 3000); }
 };
 window.addEventListener('pagehide', aiSave);
+
+/* ---------- the cave editor ----------
+   Caves are made here, with nothing but pieces: each piece is a letter of the legend (LEGEND) and what it does is in
+   EL, the same for every map. Paint them (pencil, rectangle, bucket, picker; right click picks), set what the cave
+   asks for (gems, time, colours, darkness, rhythms), try it at once alone or two, keep it among MIS CUEVAS, and pass
+   it on as text: the text a map is exported as is what the editor (and any game) reads back. */
+const ED_W = 40, ED_H = 22;
+const ED_PAL = [
+  ['Básico', ' .W#o*X12FB'],
+  ['Cuevas nuevas', 'naA^>v<%_Yy:G~'],
+  ['Placas y compuertas', 'pqrstuPQRSTU'],
+  ['Montezuma', 'kKmMjJ=-ieh'],
+  ['Pitfall', 'wcCzZlL'],
+  ['Donkey Kong', 'dbfHx{}'],
+];
+const ED_COLN = ['dorada', 'roja', 'azul', 'verde', 'morada', 'naranja', 'blanca'];
+const ED_DIRN = ['↑', '→', '↓', '←'];
+const ED_KEYS = ['Name', 'Hint', 'DiamondsRequired', 'CaveTime', 'Colors', 'DiamondValue', 'WaterRise', 'Dark', 'Params', 'Legend'];
+let edOpen = false, edTesting = false, edPrevSet = 'new', edCave = null, edMine = -1, edSel = '.', edTool = 'pen', edUndo = [], edDrag = null, edEl = null;
+
+// my caves: kept in this browser, played as the set MIS CUEVAS (and sent to the other phone when two play)
+function loadMine(){ try { const a = JSON.parse(localStorage.getItem('boulder-duo-mine') || '[]'); return Array.isArray(a) ? a.filter(p => p && p.Map) : []; } catch (e) { return []; } }
+function mineSet(list){ return { name: 'Mías', caves: list.map((p, k) => ({ props: { ...p, Name: `Mía ${k + 1}. ${p.Name || 'Sin nombre'}` }, objects: [] })) }; }
+function saveMine(list){ try { localStorage.setItem('boulder-duo-mine', JSON.stringify(list)); } catch (e) {} CAVE_SETS.mine = mineSet(list); }
+
+// a cave as text and back: "Key: value" lines, then "Map:" and its 22 rows (a bare map is read too)
+function caveToText(P){
+  const L = ED_KEYS.filter(k => P[k] !== undefined && P[k] !== '').map(k => `${k}: ${P[k]}`);
+  return L.join('\n') + '\nMap:\n' + P.Map + '\n';
+}
+function textToCave(txt){
+  const lines = txt.replace(/\r/g, '').split('\n'), P = {};
+  let k = 0;
+  for (; k < lines.length; k++) {
+    const l = lines[k];
+    if (/^Map:\s*$/.test(l)) { k++; break; }
+    const m = l.match(/^([A-Za-z]+):\s?(.*)$/);
+    if (m && ED_KEYS.includes(m[1])) P[m[1]] = m[2];
+    else if (l.length >= 30 && /^#/.test(l)) break;   // no header: the map starts here
+  }
+  const rows = lines.slice(k).filter(l => l.length).slice(0, ED_H);
+  if (rows.length < 3) return null;
+  P.Map = edNormal(rows).join('\n');
+  return P;
+}
+// any rows to a 40 x 22 map with a steel border
+function edNormal(rows){
+  const out = [];
+  for (let y = 0; y < ED_H; y++) {
+    let r = '';
+    for (let x = 0; x < ED_W; x++) r += x === 0 || y === 0 || x === ED_W - 1 || y === ED_H - 1 ? '#' : ((rows[y] || '')[x] ?? '.');
+    out.push(r);
+  }
+  return out;
+}
+function edBlank(){
+  const rows = edNormal([]).map((r, y) => y === 0 || y === ED_H - 1 ? r : '#' + '.'.repeat(ED_W - 2) + '#');
+  rows[1] = '#12' + rows[1].slice(3); rows[20] = rows[20].slice(0, 38) + 'X#';
+  return { Name: 'Mi cueva', Hint: '', DiamondsRequired: '10', CaveTime: '150', Colors: 'Orange Gray1 White', DiamondValue: '10 20', Map: rows.join('\n') };
+}
+const edLegend = () => edCave.Legend ? parseLegend(edCave.Legend, { ...LEGEND }) : LEGEND;
+// what a letter is called in the palette
+function edName(ch, leg = LEGEND){
+  const L = leg[ch]; if (!L) return '?';
+  if (L.id === -1) return 'inicio J1'; if (L.id === -2) return 'inicio J2'; if (L.id === -3) return 'agua que sube (desde esta fila)';
+  let n = EL[L.id]?.name || '?';
+  if (L.id === KEY || L.id === DOOR) n += ' ' + (ED_COLN[L.g] || L.g);
+  else if (L.id === PLATE || L.id === GATE) n += ' ' + L.g;
+  else if (EL[L.id]?.rhythm) n += ' (turno ' + (L.g & 1 ? 'b' : 'a') + ')';
+  else if ([EATER, LOG, TONEL, BELT, FIRE, BUTT].includes(L.id)) n += ' ' + ED_DIRN[L.d];
+  return n;
+}
+// the picture of a letter (the cave's colours for earth, brick, steel)
+function edSprite(L, nb){
+  const N = NEW_T(), M = MAP_T();
+  switch (L.id) {
+    case -1: return PL_T[0].idle[0]; case -2: return PL_T[1].idle[0];
+    case DIRT: return TL.DIRT[0]; case WALL: return TL.WALL; case STEEL: return TL.STEEL; case EXIT: return TL.EXIT[0];
+    case ROCK: return ROCK_T[0]; case GEM: return GEM_T[0][0]; case FIRE: return FIRE_T[0]; case BUTT: return BUTT_T[0][0];
+    case NUT: return N.nut; case BARREL: return N.barrel; case TARGET: return N.target[0]; case GATE: return N.gate; case PLATE: return N.plate[0];
+    case PORTU: case PORTR: case PORTD: case PORTL: return N.port[L.id - PORTU];
+    case EATER: return N.eater[L.d][0]; case LDIRT: return ldirtSprite(0); case GSW: return N.gsw[2];
+    case KEY: return M.key[Math.min(6, L.g)][0]; case DOOR: return M.door[Math.min(6, L.g)];
+    case LASER: return M.laser[L.g & 1 ? 0 : 1]; case CROC: return M.croc[L.g & 1 ? 1 : 0]; case TAR: return M.tar[L.g & 1 ? 1 : 0];
+    case TORCH: return M.torch; case AMULET: return M.amulet; case SWORD: return M.sword; case HAMMER: return M.hammer;
+    case POND: return M.pond[0]; case LOG: return M.log[0]; case TONEL: return M.tonel[0]; case DRUM: return M.drum[0];
+    case RIVET: return M.rivet; case BELT: return M.belt[L.d === 1 ? 0 : 1][0];
+    case APE: return M.ape[0][nb || 0];
+  }
+  return null;
+}
+function edRows(){ return edCave.Map.split('\n').map(r => [...r]); }
+function edSetRows(R){ edCave.Map = R.map(r => r.join('')).join('\n'); edDraft(); }
+function edDraft(){ try { localStorage.setItem('boulder-duo-draft', JSON.stringify({ c: edCave, m: edMine })); } catch (e) {} }
+function edPush(){ edUndo.push(edCave.Map); if (edUndo.length > 80) edUndo.shift(); }
+
+function openEditor(P, mineIdx = -1){
+  if (!edEl) edBuild();
+  if (P) { edCave = { ...P }; edMine = mineIdx; edUndo = []; }
+  if (!edCave) { try { const d = JSON.parse(localStorage.getItem('boulder-duo-draft') || 'null'); if (d && d.c && d.c.Map) { edCave = d.c; edMine = d.m ?? -1; } } catch (e) {} }
+  if (!edCave) edCave = edBlank();
+  edCave.Map = edNormal(edCave.Map.split('\n')).join('\n');
+  state = 'menu'; hideOverlay(); onEnter = null; edOpen = true; edEl.hidden = false; document.body.classList.add('editing');
+  edFill(); edPalette(); edDraw();
+}
+function closeEditor(){ edOpen = false; edEl.hidden = true; document.body.classList.remove('editing'); }
+
+function edBuild(){
+  edEl = document.createElement('div'); edEl.id = 'ed'; edEl.hidden = true;
+  const col = Object.keys(C64).map(k => `<option>${k}</option>`).join('');
+  edEl.innerHTML = `
+    <div class="edtop">
+      <b>EDITOR DE CUEVAS</b>
+      <button id="ednew">NUEVA</button>
+      <select id="edopen"><option value="">ABRIR…</option></select>
+      <button id="edsave" class="b1">GUARDAR EN MIS CUEVAS</button>
+      <button id="eddel">BORRAR</button>
+      <button id="edtry1" class="b1">PROBAR SOLO</button>
+      <button id="edtry2" class="b2">PROBAR DE A DOS</button>
+      <button id="edexp">EXPORTAR</button>
+      <button id="edimp">IMPORTAR</button>
+      <button id="edquit">SALIR</button>
+    </div>
+    <div class="edmain">
+      <div class="edpal" id="edpal"></div>
+      <div class="edcenter">
+        <div class="edtools">
+          <button data-tool="pen" title="Pinta cuadro a cuadro">LÁPIZ</button>
+          <button data-tool="rect" title="Arrastra para llenar un rectángulo">RECTÁNGULO</button>
+          <button data-tool="fill" title="Llena la zona del mismo tipo">BALDE</button>
+          <button data-tool="pick" title="Toma la pieza de un cuadro (o clic derecho)">GOTERO</button>
+          <button id="edundo" title="Ctrl+Z">DESHACER</button>
+          <span id="edsel"></span>
+        </div>
+        <canvas id="edcv"></canvas>
+        <div id="edstat"></div>
+      </div>
+      <div class="edprops">
+        <label>Nombre <input id="ed_Name" maxlength="40"></label>
+        <label>Pista al entrar <input id="ed_Hint" maxlength="120"></label>
+        <label>Diamantes necesarios <input id="ed_DiamondsRequired" inputmode="numeric"></label>
+        <label>Tiempo (s; uno por nivel, separados por espacios) <input id="ed_CaveTime"></label>
+        <label>Valor del diamante (y después de juntar) <input id="ed_DiamondValue"></label>
+        <label>Colores <span class="edcols"><select id="edc0">${col}</select><select id="edc1">${col}</select><select id="edc2">${col}</select></span></label>
+        <label>El agua sube una fila cada (s; vacío: no sube) <input id="ed_WaterRise"></label>
+        <label class="edchk"><input type="checkbox" id="ed_Dark"> Cueva oscura</label>
+        <label>Ritmos <input id="ed_Params" placeholder="laser=1.5,1.5 croc=2,2 tar=2,2 belt=6 ape=3 log=2 tonel=2 hammer=8 amulet=10 regrow=6"></label>
+        <label>Letras propias <input id="ed_Legend" placeholder="por ejemplo: Q=gate:7 y=eater:l"></label>
+        <p class="edhelp">Ritmos: rayo, cocodrilo y brea (segundos peligrosos y seguros), cintas (cada cuánto se dan vuelta), gorila (cada cuánto tira un tonel; 0: nunca), tronco y tonel (turnos por cuadro), martillo y amuleto (cuánto duran), tierra viva (cuánto tarda en crecer).</p>
+      </div>
+    </div>
+    <div id="edmodal" hidden><div class="card"><textarea id="edtext" spellcheck="false"></textarea><div class="row" id="edmbtn"></div></div></div>`;
+  document.body.appendChild(edEl);
+  const cv = $('edcv');
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); cv.setPointerCapture(e.pointerId); edPointer(e, 'down'); });
+  cv.addEventListener('pointermove', e => { if (edDrag) edPointer(e, 'move'); });
+  cv.addEventListener('pointerup', e => { if (edDrag) edPointer(e, 'up'); });
+  cv.addEventListener('pointercancel', () => { edDrag = null; edDraw(); });
+  edEl.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => { edTool = b.dataset.tool; edFill(); });
+  $('edundo').onclick = edUndoNow;
+  $('ednew').onclick = () => { edCave = edBlank(); edMine = -1; edUndo = []; edDraft(); edFill(); edPalette(); edDraw(); };
+  $('edsave').onclick = () => {
+    const err = edCheck().err; if (err.length && !confirm('La cueva tiene problemas:\n- ' + err.join('\n- ') + '\n¿Guardar igual?')) return;
+    const list = loadMine();
+    if (edMine >= 0 && edMine < list.length) list[edMine] = { ...edCave }; else { list.push({ ...edCave }); edMine = list.length - 1; }
+    saveMine(list); edDraft(); edFill(); edMsg('Guardada en MIS CUEVAS (n.º ' + (edMine + 1) + ').');
+  };
+  $('eddel').onclick = () => {
+    if (edMine < 0) { edMsg('Esta cueva no está guardada.'); return; }
+    if (!confirm('¿Borrar «' + (edCave.Name || 'Sin nombre') + '» de MIS CUEVAS?')) return;
+    const list = loadMine(); list.splice(edMine, 1); saveMine(list); edMine = -1; edDraft(); edFill(); edMsg('Borrada de MIS CUEVAS.');
+  };
+  $('edopen').onchange = e => {
+    const v = e.target.value; e.target.value = ''; if (!v) return;
+    const [set, k] = v.split(':'), list = loadMine();
+    if (set === 'mine') openEditor(list[+k], +k);
+    else { const P = { ...CAVE_SETS[set].caves[+k].props }; P.Name = (P.Name || '').replace(/^[^.]*\d+\.\s*/, ''); openEditor(P, -1); }
+  };
+  $('edtry1').onclick = () => edTry('solo'); $('edtry2').onclick = () => edTry('coop');
+  $('edexp').onclick = () => edModal(caveToText(edCave), [['COPIAR', () => { const t = $('edtext'); t.select(); try { navigator.clipboard.writeText(t.value); } catch (e) { document.execCommand('copy'); } edMsg('Copiada.'); }],
+    ['DESCARGAR', () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([caveToText(edCave)], { type: 'text/plain' })); a.download = (edCave.Name || 'cueva').replace(/[^\w\-áéíóúñÁÉÍÓÚÑ ]+/g, '') + '.txt'; a.click(); }], ['CERRAR', null]]);
+  $('edimp').onclick = () => edModal('', [['LEER', () => { const P = textToCave($('edtext').value); if (!P) { edMsg('No encontré un mapa en el texto.'); return false; } openEditor({ ...edBlank(), ...P }, -1); }], ['CERRAR', null]]);
+  $('edquit').onclick = () => { closeEditor(); if (caveSet === 'edit') caveSet = edPrevSet; mode = 'coop'; initLevel(startN()); menu(); };
+  ED_KEYS.filter(k => $('ed_' + k)).forEach(k => {
+    const el = $('ed_' + k);
+    el.addEventListener('input', () => { if (el.type === 'checkbox') { if (el.checked) edCave.Dark = 'true'; else delete edCave.Dark; } else edCave[k] = el.value.trim(); edDraft(); edStat(); if (k === 'Legend') { edPalette(); edDraw(); } });
+  });
+  [0, 1, 2].forEach(c => $('edc' + c).onchange = () => { edCave.Colors = [0, 1, 2].map(k => $('edc' + k).value).join(' '); edDraft(); edDraw(); edPalette(); });
+  window.addEventListener('resize', () => { if (edOpen) edDraw(); });
+}
+function edMsg(t){ $('edstat').dataset.msg = t; edStat(); setTimeout(() => { if ($('edstat').dataset.msg === t) { $('edstat').dataset.msg = ''; edStat(); } }, 3500); }
+function edModal(text, btns){
+  const m = $('edmodal'), t = $('edtext'); t.value = text; m.hidden = false;
+  const row = $('edmbtn'); row.innerHTML = '';
+  btns.forEach(([label, f]) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { if (f && f() === false) return; if (!f || label !== 'COPIAR' && label !== 'DESCARGAR') m.hidden = true; }; row.appendChild(b); });
+  setTimeout(() => t.focus(), 0);
+}
+// the form, the list to open from, the selected tool
+function edFill(){
+  ED_KEYS.filter(k => $('ed_' + k)).forEach(k => { const el = $('ed_' + k); if (el.type === 'checkbox') el.checked = edCave.Dark === 'true' || edCave.Dark === '1'; else el.value = edCave[k] ?? ''; });
+  const cs = (edCave.Colors || 'Orange Gray1 White').split(/\s+/); [0, 1, 2].forEach(c => { $('edc' + c).value = C64[cs[c]] ? cs[c] : ['Orange', 'Gray1', 'White'][c]; });
+  const mine = loadMine(), o = ['<option value="">ABRIR…</option>'];
+  if (mine.length) o.push('<optgroup label="Mis cuevas">' + mine.map((p, k) => `<option value="mine:${k}">${k + 1}. ${(p.Name || 'Sin nombre').replace(/</g, '')}</option>`).join('') + '</optgroup>');
+  for (const set of ['new', 'cls']) o.push(`<optgroup label="${set === 'new' ? 'Cuevas nuevas' : 'Cuevas clásicas'}">` + CAVE_SETS[set].caves.map((c, k) => `<option value="${set}:${k}">${c.props.Name}</option>`).join('') + '</optgroup>');
+  $('edopen').innerHTML = o.join('');
+  edEl.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === edTool));
+  $('eddel').disabled = edMine < 0;
+  edStat();
+}
+function edPalette(){
+  TL = tilesFor(palFromColors((edCave.Colors || 'Orange Gray1 White').split(/\s+/)));
+  const leg = edLegend(), extra = Object.keys(leg).filter(ch => !ED_PAL.some(([, s]) => s.includes(ch)));
+  const groups = extra.length ? [...ED_PAL, ['Letras propias', extra.join('')]] : ED_PAL;
+  $('edpal').innerHTML = groups.map(([t, chars]) => `<div class="edgrp"><h4>${t}</h4><div class="edgrid">` +
+    [...chars].map(ch => `<button class="edpc${ch === edSel ? ' on' : ''}" data-ch="${ch === ' ' ? '_sp_' : ch.replace(/"/g, '&quot;')}" title="${edName(ch, leg)} (${ch === ' ' ? 'espacio' : ch})"><canvas width="32" height="32"></canvas></button>`).join('') + '</div></div>').join('');
+  $('edpal').querySelectorAll('.edpc').forEach(b => {
+    const ch = b.dataset.ch === '_sp_' ? ' ' : b.dataset.ch, c = b.querySelector('canvas'), g = c.getContext('2d');
+    edCell(g, ch, leg, 0, 0, 32, null);
+    b.onclick = () => { edSel = ch; if (edTool === 'pick') edTool = 'pen'; edPalette(); edFill(); };
+  });
+  $('edsel').textContent = 'Pieza: ' + edName(edSel, leg);
+}
+// one cell drawn: the background, the piece, and its number or turn when it has one
+function edCell(g, ch, leg, x, y, cs, R){
+  const L = leg[ch] || leg['.'];
+  g.fillStyle = '#07060a'; g.fillRect(x, y, cs, cs);
+  if (L.id === -3) { g.fillStyle = 'rgba(60,120,220,.55)'; g.fillRect(x, y, cs, cs); g.fillStyle = '#cfe6ff'; g.font = `${cs * .55 | 0}px monospace`; g.textAlign = 'center'; g.fillText('~', x + cs / 2, y + cs * .7); return; }
+  let nb = 0;
+  if (L.id === APE && R) { const cx = x / cs | 0, cy = y / cs | 0, is = (a, b) => (leg[(R[b] || [])[a]] || {}).id === APE; nb = (is(cx - 1, cy) ? 1 : 0) + (is(cx, cy - 1) ? 2 : 0); }
+  const sp = edSprite(L, nb); if (sp) g.drawImage(sp, x, y, cs, cs);
+  const tag = L.id === PLATE || L.id === GATE ? String(L.g) : EL[L.id]?.rhythm && L.g & 1 ? 'b' : L.id === LOG || L.id === TONEL ? ED_DIRN[L.d] : '';
+  if (tag) { g.font = `bold ${Math.max(8, cs * .42 | 0)}px monospace`; g.textAlign = 'right'; g.lineWidth = 3; g.strokeStyle = '#000'; g.fillStyle = '#ffd24a'; g.strokeText(tag, x + cs - 1, y + cs - 2); g.fillText(tag, x + cs - 1, y + cs - 2); }
+}
+function edDraw(){
+  if (!edOpen) return;
+  const cv = $('edcv'), box = cv.parentElement.getBoundingClientRect(), cs = Math.max(8, Math.floor(Math.min((box.width - 4) / ED_W, (innerHeight - cv.getBoundingClientRect().top - 60) / ED_H)));
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  cv.width = ED_W * cs * dpr; cv.height = ED_H * cs * dpr; cv.style.width = ED_W * cs + 'px'; cv.style.height = ED_H * cs + 'px'; cv.dataset.cs = cs;
+  const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.imageSmoothingEnabled = true;
+  const R = edRows(), leg = edLegend();
+  for (let y = 0; y < ED_H; y++) for (let x = 0; x < ED_W; x++) edCell(g, R[y][x], leg, x * cs, y * cs, cs, R);
+  g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1;
+  for (let x = 1; x < ED_W; x++) { g.beginPath(); g.moveTo(x * cs + .5, 0); g.lineTo(x * cs + .5, ED_H * cs); g.stroke(); }
+  for (let y = 1; y < ED_H; y++) { g.beginPath(); g.moveTo(0, y * cs + .5); g.lineTo(ED_W * cs, y * cs + .5); g.stroke(); }
+  if (edDrag && edDrag.tool === 'rect') {
+    const [x0, y0, x1, y1] = edBox(edDrag);
+    g.strokeStyle = '#ffd24a'; g.lineWidth = 2; g.strokeRect(x0 * cs + 1, y0 * cs + 1, (x1 - x0 + 1) * cs - 2, (y1 - y0 + 1) * cs - 2);
+  }
+  edStat();
+}
+const edBox = d => [Math.min(d.x0, d.x), Math.min(d.y0, d.y), Math.max(d.x0, d.x), Math.max(d.y0, d.y)];
+function edPointer(e, kind){
+  const cv = $('edcv'), r = cv.getBoundingClientRect(), cs = +cv.dataset.cs;
+  const x = Math.max(0, Math.min(ED_W - 1, Math.floor((e.clientX - r.left) / cs))), y = Math.max(0, Math.min(ED_H - 1, Math.floor((e.clientY - r.top) / cs)));
+  const tool = kind === 'down' && e.button === 2 ? 'pick' : edDrag ? edDrag.tool : edTool;
+  if (kind === 'down') { edDrag = { tool, x0: x, y0: y, x, y }; if (tool !== 'pick') edPush(); }
+  else { edDrag.x = x; edDrag.y = y; }
+  const R = edRows();
+  if (tool === 'pick') { if (kind === 'up' || kind === 'down') { edSel = R[y][x]; if (e.button !== 2) edTool = 'pen'; edPalette(); edFill(); } }
+  else if (tool === 'pen') { edPaint(R, x, y, edSel); edSetRows(R); }
+  else if (tool === 'fill' && kind === 'down') { edFlood(R, x, y, edSel); edSetRows(R); }
+  else if (tool === 'rect' && kind === 'up') { const [x0, y0, x1, y1] = edBox(edDrag); for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) edPaint(R, xx, yy, edSel, true); edSetRows(R); }
+  if (kind === 'up') edDrag = null;
+  edDraw();
+}
+// a letter into a cell: never on the border; the starts are one each; a gorilla takes 2 x 2
+function edPaint(R, x, y, ch, many){
+  if (x <= 0 || y <= 0 || x >= ED_W - 1 || y >= ED_H - 1) return;
+  const L = edLegend()[ch];
+  if (L && (L.id === -1 || L.id === -2)) for (const r of R) for (let k = 0; k < r.length; k++) if (r[k] === ch) r[k] = ' ';
+  if (L && L.id === APE && !many) { for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (x + dx < ED_W - 1 && y + dy < ED_H - 1) R[y + dy][x + dx] = ch; return; }
+  R[y][x] = ch;
+}
+function edFlood(R, x, y, ch){
+  const from = R[y][x]; if (from === ch) return;
+  const q = [[x, y]];
+  while (q.length) { const [a, b] = q.pop(); if (a <= 0 || b <= 0 || a >= ED_W - 1 || b >= ED_H - 1 || R[b][a] !== from) continue; R[b][a] = ch; q.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]); }
+}
+function edUndoNow(){ if (!edUndo.length) return; edCave.Map = edUndo.pop(); edDraft(); edDraw(); }
+// what is wrong with the cave (it cannot be played) and what may be (it can, but check)
+function edCheck(){
+  const leg = edLegend(), R = edRows(), n = {}, err = [], warn = [];
+  for (const r of R) for (const ch of r) { const id = (leg[ch] || leg['.']).id; n[id] = (n[id] || 0) + 1; }
+  if (!n[-1]) err.push('falta el inicio de J1 (1)');
+  if (!n[EXIT]) err.push('falta la salida (X)');
+  const need = +edCave.DiamondsRequired || 0, gems = n[GEM] || 0;
+  if (need > gems + (n[BUTT] || 0) * 9 + (n[NUT] || 0) + (n[EATER] || 0) + (n[APE] ? 99 : 0)) warn.push(`pide ${need} diamantes y hay ${gems} a la vista`);
+  if (!n[-2]) warn.push('sin inicio de J2 (2): J2 empieza junto a J1');
+  if (n[APE] && n[APE] % 4) warn.push('un gorila ocupa 2 × 2 cuadros');
+  if (n[GATE] && !n[PLATE]) warn.push('hay compuertas sin placas');
+  if (n[DOOR] && !n[KEY]) warn.push('hay puertas sin llaves');
+  return { err, warn, gems, need };
+}
+function edStat(){
+  if (!edEl) return;
+  const { err, warn, gems, need } = edCheck(), msg = $('edstat').dataset.msg;
+  $('edstat').innerHTML = (msg ? `<span class="edok">${msg}</span> · ` : '') + `Diamantes: ${gems} en el mapa, pide ${need}` + (edMine >= 0 ? ` · MIS CUEVAS n.º ${edMine + 1}` : ' · sin guardar') +
+    err.map(t => ` · <span class="ederr">${t}</span>`).join('') + warn.map(t => ` · <span class="edwarn">${t}</span>`).join('');
+}
+// try it now: the cave alone in a set of its own; back to the editor at the menu
+function edTry(m){
+  const { err } = edCheck(); if (err.length) { edMsg('No se puede probar: ' + err.join(', ') + '.'); return; }
+  CAVE_SETS.edit = { name: 'Editor', caves: [{ props: { ...edCave, Name: 'Prueba 1. ' + (edCave.Name || 'Sin nombre') }, objects: [] }] };
+  if (caveSet !== 'edit') edPrevSet = caveSet;
+  caveSet = 'edit'; startMem.edit = 1; edTesting = true; closeEditor(); startGame(m);
+}
+function edKey(e){
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { e.preventDefault(); edUndoNow(); }
+  else if (e.code === 'Escape') { if (!$('edmodal').hidden) $('edmodal').hidden = true; }
+}
 
 /* Test hook: drives the simulation tick by tick from outside (rl/tests/gen_js_traces.mjs).
    Inert unless something calls it; the normal game never does. */
