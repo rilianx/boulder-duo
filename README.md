@@ -26,6 +26,7 @@ Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**
 
 **[Catálogo de cuevas de BD1 y BD2 (nivel 1)](docs/catalogo-cuevas.md):** cada una de las 41 cuevas con su mapa, qué hay, el desafío y cómo pasarla.
 **[10 cuevas nuevas propuestas](docs/cuevas-propuestas.md):** ideas de desafíos tomadas de Emerald Mine, Supaplex, Lode Runner, Sokoban, Mr. Driller y otros (nueces, pasos de un sentido, barriles, inundación, cueva giratoria, placas para dos…), con sus mapas de 40 × 22. **Ya se juegan** con el botón **CUEVAS NUEVAS** del menú.
+**[9 cuevas inspiradas en Montezuma's Revenge, Pitfall! y Donkey Kong](docs/cuevas-clasicos.md):** llaves de colores, rayos, oscuridad con antorcha, cocodrilos, brea, troncos, toneles del gorila, remaches y cintas transportadoras, con sus mapas de 40 × 22 (propuestas).
 
 Empujar una roca no cuesta siempre lo mismo: en cada tick que empujas se mueve con probabilidad 1/2, así que en promedio tarda dos ticks (lo que tarda una roca en empezar a caer y bajar una casilla); con suerte se mueve de inmediato, incluso si va cayendo junto a ti. En Entrenar PC se mantiene la regla fija de dos ticks.
 
