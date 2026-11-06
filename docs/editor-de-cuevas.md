@@ -194,6 +194,13 @@ Por ejemplo, `7=plate:7 8=gate:7` agrega un séptimo par de placa y compuerta, y
 
 Un grupo está encendido si alguna de sus placas tiene algo encima, si su palanca está encendida o si su placa con reloj todavía cuenta. Cada grupo tiene un color, que se ve como una luz en la esquina de sus piezas.
 
+**Portales** (ver [cuevas con portales](cuevas-portales.md))
+
+| Letra | Pieza | Qué hace | En «Letras propias» |
+|---|---|---|---|
+| `3` `4` `5` `6` | portal azul (grupo 1), boca ↑ → ↓ ← | Lo que entra por la boca sale por la del otro portal del grupo. | `3=portal:1:u` … `6=portal:1:l` |
+| `7` `8` `9` `0` | portal naranja (grupo 2), boca ↑ → ↓ ← | Igual, del grupo 2. | `7=portal:2:u` … `0=portal:2:l` |
+
 ## Cómo está hecho
 
 En el juego, cada pieza se describe con propiedades:

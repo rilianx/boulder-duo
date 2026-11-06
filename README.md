@@ -32,6 +32,8 @@ Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**
 
 **[10 cuevas cooperativas](docs/cuevas-cooperativas.md):** para dos, cada vez más difíciles, en las que ninguno puede salir solo: placas, palancas, placas con reloj, compuertas inversas y barreras que solo cruza uno (ideas de Fireboy & Watergirl y Portal 2). Cada una se comprobó con un resolvedor y jugando su solución en el juego. Botón **CUEVAS COOPERATIVAS**.
 
+**[Cuevas con portales](docs/cuevas-portales.md):** seis cuevas para probar los portales. Por ellos pasan niños, enemigos, rocas y diamantes, y lo que cae en un portal del suelo y sale por uno de pared avanza dos cuadros en el aire y baja en curva. Botón **CUEVAS CON PORTALES**.
+
 **[Editor de cuevas](docs/editor-de-cuevas.md):** con el botón **EDITOR DE CUEVAS** del menú se pintan cuevas con todas las piezas (las de Boulder Dash, las nuevas y las clásicas), se prueban al tiro, se guardan en **MIS CUEVAS** y se pasan como texto. Cada pieza funciona igual en cualquier mapa: ninguna cueva tiene reglas propias.
 
 ![Editor de cuevas](docs/editor.png)
