@@ -1501,7 +1501,8 @@ const NEST=16, STAR=17;   // a butterfly nest (cave M*) and the collectible star
    docs/cuevas-clasicos.md). Each piece is described once, in EL: what it is and how it behaves. A map is only letters
    that name pieces (LEGEND), so any piece can go in any map and no cave has rules of its own. */
 const NUT=18, KEY=19, DOOR=20, PORTU=21, PORTR=22, PORTD=23, PORTL=24, BARREL=25, TARGET=26, PLATE=27, EATER=28, LDIRT=29, GSW=30, GATE=31,
-  LASER=32, TORCH=33, AMULET=34, SWORD=35, HAMMER=36, POND=37, CROC=38, TAR=39, LOG=40, APE=41, TONEL=42, DRUM=43, RIVET=44, BELT=45;
+  LASER=32, TORCH=33, AMULET=34, SWORD=35, HAMMER=36, POND=37, CROC=38, TAR=39, LOG=40, APE=41, TONEL=42, DRUM=43, RIVET=44, BELT=45,
+  LEVER=46, TPLATE=47, GATEI=48, BAR1=49, BAR2=50;
 const PORT_D = { [PORTU]: 0, [PORTR]: 1, [PORTD]: 2, [PORTL]: 3 };
 const isPort = t => t >= PORTU && t <= PORTL;
 /* What each piece is (only what differs from plain solid ground):
@@ -1524,7 +1525,12 @@ const EL = {
   [CROC]: { name: 'cocodrilo', hard: 1, kid: 1, rhythm: 'croc' }, [TAR]: { name: 'brea', hard: 1, kid: 1, obj: 1, rhythm: 'tar' },
   [LOG]: { name: 'tronco', foe: 1 }, [APE]: { name: 'gorila', hard: 1 }, [TONEL]: { name: 'tonel', falls: 1, round: 1, foe: 1 },
   [DRUM]: { name: 'bidón', hard: 1, sink: 1 }, [RIVET]: { name: 'remache', hard: 1 }, [BELT]: { name: 'cinta', hard: 1 },
+  // cooperation (docs/cuevas-cooperativas.md): a lever stays as it is left, a plate with a clock keeps its group on a
+  // few seconds after it is let go, an inverted gate is shut while its group is on, and the barriers let only one kid by
+  [LEVER]: { name: 'palanca', hard: 1 }, [TPLATE]: { name: 'placa con reloj', hard: 1, kid: 1, obj: 1 }, [GATEI]: { name: 'compuerta inversa', hard: 1 },
+  [BAR1]: { name: 'barrera de J1', hard: 1, kid: 1, only: 0 }, [BAR2]: { name: 'barrera de J2', hard: 1, kid: 1, only: 1 },
 };
+const kidOk = (p, t) => EL[t].only === undefined || EL[t].only === p.id;   // a barrier lets only its own kid by
 const ELT = k => { const a = new Uint8Array(64); for (const t in EL) if (EL[t][k]) a[t] = 1; return a; };
 const FALLS = ELT('falls'), ROUND = ELT('round'), PUSH = ELT('push'), HARD = ELT('hard'), KIDON = ELT('kid'), OBJON = ELT('obj'), TAKE = ELT('take'), SINK = ELT('sink'), FOE = ELT('foe');
 const pushable = t => PUSH[t] === 1;
@@ -1532,7 +1538,7 @@ const fallsLike = t => FALLS[t] === 1;
 /* How long the pieces with a rhythm or a clock take, in seconds (a map can change them, Params line):
    laser, croc, tar: dangerous, then safe · belt: the belts turn round every so often · ape: the gorilla throws a
    barrel every so often · log, tonel: ticks per cell · hammer, amulet: how long they last · regrow: living earth. */
-const EP_DEF = { laser: [1.5, 1.5], croc: [2, 2], tar: [2, 2], belt: [6], ape: [3], log: [2], tonel: [2], hammer: [8], amulet: [10], regrow: [6] };
+const EP_DEF = { laser: [1.5, 1.5], croc: [2, 2], tar: [2, 2], belt: [6], ape: [3], log: [2], tonel: [2], hammer: [8], amulet: [10], regrow: [6], timer: [3] };
 let EP = EP_DEF;
 /* The letters of a map. Each names a piece and, for some, its direction (u r d l), its turn (a, b: the b ones are
    dangerous while the a ones are safe), its colour (keys and doors: 0 gold, 1 red, 2 blue, 3 green, 4 purple) or its
@@ -1541,12 +1547,14 @@ let EP = EP_DEF;
 const PIECE = { steel: STEEL, wall: WALL, dirt: DIRT, empty: E, rock: ROCK, gem: GEM, exit: EXIT, firefly: FIRE, butterfly: BUTT,
   nut: NUT, key: KEY, door: DOOR, port: PORTU, barrel: BARREL, target: TARGET, plate: PLATE, gate: GATE, eater: EATER, ldirt: LDIRT,
   switch: GSW, laser: LASER, torch: TORCH, amulet: AMULET, sword: SWORD, hammer: HAMMER, pond: POND, croc: CROC, tar: TAR, log: LOG,
-  ape: APE, tonel: TONEL, drum: DRUM, rivet: RIVET, belt: BELT, start1: -1, start2: -2, water: -3 };
+  ape: APE, tonel: TONEL, drum: DRUM, rivet: RIVET, belt: BELT,
+  lever: LEVER, tplate: TPLATE, gatei: GATEI, bar1: BAR1, bar2: BAR2, start1: -1, start2: -2, water: -3 };
 const LEGEND_DEF = ("#=steel W=wall .=dirt _sp_=empty o=rock *=gem X=exit F=firefly:l B=butterfly:r 1=start1 2=start2 n=nut " +
   "a=key:0 A=door:0 k=key:1 K=door:1 m=key:2 M=door:2 j=key:3 J=door:3 ^=port:u >=port:r v=port:d <=port:l %=barrel _=target " +
   "p=plate:1 q=plate:2 r=plate:3 s=plate:4 t=plate:5 u=plate:6 P=gate:1 Q=gate:2 R=gate:3 S=gate:4 T=gate:5 U=gate:6 " +
   "Y=eater:r y=eater:l :=ldirt G=switch ~=water ==laser:a -=laser:b i=torch e=amulet h=sword H=hammer w=pond c=croc:a C=croc:b " +
-  "z=tar:a Z=tar:b l=log:l L=log:r d=ape b=tonel:r f=drum x=rivet {=belt:l }=belt:r");
+  "z=tar:a Z=tar:b l=log:l L=log:r d=ape b=tonel:r f=drum x=rivet {=belt:l }=belt:r " +
+  "D=lever:1 E=lever:2 N=gatei:1 V=gatei:2 [=tplate:1 ]=tplate:2 (=bar1 )=bar2");
 const DIRS = { u: 0, r: 1, d: 2, l: 3 };
 function parseLegend(txt, into = {}){
   for (const w of (txt || '').split(/\s+/).filter(Boolean)) {
@@ -2129,6 +2137,8 @@ CAVE_SETS.inf = { name: 'Infinita', caves: [{ props: { Name: 'Infinita', Colors:
 CAVE_SETS.new = { name: 'Nuevas', caves: [{"Name": "Nueva 1. Nueces", "Hint": "Una roca que cae sobre una nuez la rompe y deja un diamante.", "Map": "########################################\n#12....o.......o.......o.......o.......#\n#......................................#\n#......n.......n.......n.......n.......#\n#WWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWW#\n#......................................#\n#..o...o...o...o......o...o...o...o....#\n#......................................#\n#                                      #\n#    F                                 #\n#                                      #\n#    n     n        n      n      n    #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW...W#\n#...o.....o.....o.........o.....o......#\n#......................................#\n#...n.....n.....n.........n.....n......#\n#...n...........n...............n......#\n#........   ...........................#\n#........ B ...........................#\n#........   ...........................#\n#....................................X.#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "Orange Gray1 White", "DiamondValue": "10 15"}, {"Name": "Nueva 2. Llaves que se gastan", "Hint": "Cada llave abre una sola puerta. Hay tres puertas y dos llaves.", "Map": "########################################\n#12..o.....o.....o......o.....o....o...#\n#.........a....................a.......#\n#..o....o.....o....o......o.....o....o.#\n#......................................#\n#....o.......o..........o........o.....#\n#......................................#\n#WWWWWWAWWWWWWWWWWWWAWWWWWWWWWWWWAWWWWW#\n#............Wo.o.o.o.o.o.W            #\n#.*..*..*..*.W.*o*o*o*o*o.W            #\n#............W.o.o.o.o.o..W  F         #\n#..*..*..*...W............W            #\n#............W.....*......W            #\n#.*.....*....W............W            #\n#............W............W            #\n#............W..o.........W        F   #\n#...o........W............W            #\n#........o...W........o...W            #\n#............W............W            #\n#.....o......W............W            #\n#............W............W *   *   * X#\n########################################", "DiamondsRequired": "12", "CaveTime": "150 135 120 105 90", "Colors": "LightRed Purple White", "DiamondValue": "20 50"}, {"Name": "Nueva 3. Pasos de un sentido", "Hint": "Las flechas se cruzan solo hacia donde apuntan: no hay vuelta atrás.", "Map": "########################################\n#12...o.*....W....o...*...W.....o..*...#\n#...*........>..*.........>...*........#\n#............W............W............#\n#WWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWvWWWW#\n#......*..W...*.o...........W.......*..#\n#..*......<.................<..*.......#\n#.........W............*....W......o...#\n#WWWWvWWWWWWWWWWWWWWWWWWvWWWWWWWWWWWWWW#\n#........*..o......W...*...o...........#\n#...*..............>.............*.....#\n#..............*...W...................#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWvWWWWWWWW#\n#.......o...W.........*..W....*..o.....#\n#...........<....*.......<.............#\n#.....*.....W............W.........*...#\n#WWWvWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..........o........W.....*..o.........#\n#.......*...........W..................#\n#...................>...........*......#\n#.............*.....W................X.#\n########################################", "DiamondsRequired": "22", "CaveTime": "180 165 150 135 120", "Colors": "Cyan Blue White", "DiamondValue": "15"}, {"Name": "Nueva 4. Barriles", "Hint": "Un barril que cae, o al que le cae algo, explota y rompe el ladrillo.", "Map": "########################################\n#12.........o...........o..............#\n#...o...............o.......o......o...#\n#.......%.......o..............%.......#\n#......................................#\n#.....o...........o.......o..........o.#\n#.............o........................#\n#......................................#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W * * * *W....W * * * W...#\n#..W       W.W        W....W       W...#\n#..W * * * W.W  * * * W....W * * * W...#\n#..WWWWWWWWW.WWWWWWWWWW....WWWWWWWWW...#\n#......................................#\n#......................................#\n#....o...........   .....o.............#\n#................ F ................o..#\n#.........o......   ...................#\n#.............................o........#\n#....................................X.#\n########################################", "DiamondsRequired": "16", "CaveTime": "180 165 150 135 120", "Colors": "Yellow Brown White", "DiamondValue": "20"}, {"Name": "Nueva 5. Placas", "Hint": "Pon una roca sobre cada placa para abrir la salida.", "Map": "########################################\n#12...................................X#\n#......................................#\n#......................................#\n#....o......o.......o......o...........#\n#......................................#\n#......................................#\n#                                      #\n#                                      #\n#                                      #\n#                                      #\n#WWWWWWWW_WWWWWWWW_WWWWWWWWWWW_WWWWW..W#\n#......................................#\n#                                      #\n#            o                         #\n#           WWW                    F   #\n#                                      #\n#                           o    o     #\n#WWWWWW_WWWWWWWWWWWWWW_WWWWWWWWWWWWWWWW#\n#......................................#\n#......................................#\n########################################", "DiamondsRequired": "0", "CaveTime": "200 185 170 155 140", "Colors": "LightBlue Gray2 White", "DiamondValue": "10"}, {"Name": "Nueva 6. Inundación", "Hint": "El agua sube. Bajo el agua el aire dura poco.", "Map": "########################################\n#........o...X.............o.......*...#\n#....*..............o..................#\n#.............................*........#\n#WWWWWWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWW#\n#..o..............*...........o........#\n#.........*...o.....................*..#\n#.........................*............#\n#WWW..WWWWWWWWWWWWWWWWWWWWWWWWWWWW..WWW#\n#..........o....*........o.............#\n#.......*....................*......o..#\n#.....................*................#\n#WWWWWWWWWWWWWWWWW..WWWWWWWWWWWWWWWWWWW#\n#......o....*...............o..........#\n#...*............o...............*.....#\n#.......................*..............#\n#WWWWWWW..WWWWWWWWWWWWWWWWWWWW..WWWWWWW#\n#.........o...*........o...........*...#\n#.....*....................*.....o.....#\n#.12................*..................#\n#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#\n########################################", "DiamondsRequired": "16", "CaveTime": "150 135 120 105 90", "Colors": "Blue Cyan White", "DiamondValue": "15 30", "WaterRise": "7.5 7 6.5 6 5.5"}, {"Name": "Nueva 7. El comelón", "Hint": "El comelón se come los diamantes. Aplastado, los devuelve todos.", "Map": "########################################\n#.......o.......o.......o.......o......#\n#......................................#\n#.Y                                   .#\n#.  * * * * * * * * * * * * * * * *   .#\n#......................................#\n#.12...................................#\n#......................................#\n#.....o.......o.......o.......o........#\n#......................................#\n#.                                   y.#\n#.   *   *   *   *   *   *   *   *    .#\n#......................................#\n#......................................#\n#......................................#\n#.........o.........o.......o..........#\n#......................................#\n#.                                    .#\n#. * * * * * * * * * * * * * * * * *  .#\n#......................................#\n#....................................X.#\n########################################", "DiamondsRequired": "30", "CaveTime": "150 135 120 105 90", "Colors": "Purple LightRed White", "DiamondValue": "10 20"}, {"Name": "Nueva 8. Tierra viva", "Hint": "La tierra verde se vuelve a cerrar: atrapa a las mariposas.", "Map": "########################################\n#12::::::::::::::::::::::::::::::::::::#\n#:::::::::::::*::::::::::::::::::::::::#\n#::::::::::::::::::::::::*:::::::::::::#\n#:::::B::::::::::::::::::::::::::B:::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#:::::::::::::::::::::::::::::::::::*::#\n#:::*::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#.......o.........o........o.......o...#\n#......................................#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::*:::::::#\n#::::::::*:::::::::::::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#:::::::::::B:::::::::::::::B::::::::::#\n#:::::::::::::::::::F::::::::::::::::::#\n#::::::::::::::::::::::::::::::::::::::#\n#::::::::::::::::*:::::::::::::::::::::#\n#:::::::::::::::::::::::*:::::::::::::X#\n########################################", "DiamondsRequired": "20", "CaveTime": "150 135 120 105 90", "Colors": "Green LightGreen White", "DiamondValue": "10 20"}, {"Name": "Nueva 9. Cueva giratoria", "Hint": "Empuja un interruptor G para girar la gravedad de toda la cueva.", "Map": "########################################\n#12....................................#\n#...........G..............G...........#\n#..WWWWWWW.......o....o.......WWWWWWW..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....................W*****W..#\n#..Wooooo.....            ....WoooooW..#\n#..W*****.....            ....WoooooW..#\n#..W*****.....  B         ....WoooooW..#\n#..WWWWWWW....            ....W.....W..#\n#.............            .............#\n#.............            .............#\n#..W.....W....            ....WWWWWWW..#\n#..WoooooW....         B  .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..WoooooW....            .....oooooW..#\n#..W*****W.....................*****W..#\n#..W*****W.....................*****W..#\n#..WWWWWWW........o..o........WWWWWWW..#\n#...........G..............G...........#\n#....................................X.#\n########################################", "DiamondsRequired": "24", "CaveTime": "180 165 150 135 120", "Colors": "Gray1 Purple White", "DiamondValue": "10 20"}, {"Name": "Nueva 10. Dos llaves, una puerta", "Hint": "Cada placa abre una compuerta del otro piso: túrnense, o usen las rocas.", "Map": "########################################\n#.1.......W.........W.........W........#\n#.........W....r.o..W....t.o..W........#\n#.........W.........W.........W..*.....#\n#...*.....W.........W.........W........#\n#.........Q.........S.........U........#\n#.........W...*.....W.........W........#\n#.........W.........W...*.....W........#\n#.....p.o.W.........W.........W........#\n#.........W..*......W.........W........#\n#.........#####################....X...#\n#.........#####################........#\n#.........W.........W.........W........#\n#.........W.........W.....*...W........#\n#......*..W......*..W.........W........#\n#.........W.........W.........W........#\n#.........P.........R.........T........#\n#.........W.........W.........W....u.o.#\n#.........W.........W.......*.W........#\n#.........W....q.o..W....s.o..W........#\n#.2.......W.........W.........W.....*..#\n########################################", "DiamondsRequired": "8", "CaveTime": "240 225 210 195 180", "Colors": "Orange Brown White", "DiamondValue": "15 30"}].map(props => ({ props, objects: [] })) };
 // the caves after Montezuma's Revenge, Pitfall! and Donkey Kong (docs/cuevas-clasicos.md): maps, like the new ones
 CAVE_SETS.cls = { name: 'Clásicas', caves: [{"Name": "Clásica 1. La pirámide", "Hint": "Hay llaves justas: una puerta abierta en el orden equivocado te deja sin salida. Piensa antes de abrir (R reinicia).", "Map": "########################################\n#12..........W............W............#\n#............W............W............#\n#...*.....*..M...*.....*..J...*.....*..#\n#...j..m.....W......k.....W......k.....#\n#............W............W............#\n#............W..*.........W............#\n#WWWWWJWWWWWWWWWWWWKWWWWWWWWWWWWKWWWWWW#\n#............W............W............#\n#............W............W............#\n#...*.....*..J...*.....*..M...*.....*..#\n#......*.....W............W......m.....#\n#............W............W............#\n#..*.......*.W..*.......*.W..*.......*.#\n#WWWWWMWWWWWWWWWWWWMWWWWWWWWWWWWKWWWWWW#\n#............W............W............#\n#............W............W............#\n#...*.....*..W...*.....*..J...*.....*..#\n#......*.....W......*.....W............#\n#............W............W..........X.#\n#..*.......*.W..*.......*.W..*.........#\n########################################", "DiamondsRequired": "19", "CaveTime": "240 225 210 195 180", "Colors": "Yellow Brown White", "DiamondValue": "15 30"}, {"Name": "Clásica 2. Rayos", "Hint": "Los rayos se encienden y se apagan. Cruza cuando estén apagados.", "Map": "########################################\n#1       =  *  -      = -  *   =       #\n#2  *    =     -      =*-      =  *    #\n#        =     -  *   = -      =       #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#.....o...*....o..............*...o....#\n#...................*....o.............#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#       = -      =  *  - =    -        #\n#   *   =*-      =  F  -*=    -   *    #\n#       = -  *   =     - = *  -        #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#.......*...o.........o.....*..........#\n#.................*.............o......#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#       =*- =       -   *  = -   =  *  #\n#    *  = - =   *   -      =*-   =    X#\n#       = -*=       -      = - * =     #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..W#\n#.....*...o.........o....*.............#\n#..............*..............o..*.....#\n########################################", "DiamondsRequired": "24", "CaveTime": "180 165 150 135 120", "Colors": "Gray1 Red White", "DiamondValue": "10 20"}, {"Name": "Clásica 3. La antorcha", "Hint": "Oscuro y sin diamantes sueltos: están en las mariposas. Cada espada acaba con un enemigo; no la gastes en una luciérnaga.", "Map": "########################################\n#12..h..i..............................#\n#.          B               F         .#\n#.                                    .#\n#..................  ...............  .#\n#..................  ...............  .#\n#..................  ...............  .#\n#.             B              F       .#\n#.                                    .#\n#.  ...................................#\n#.  ..........h......e........h........#\n#.  ...................................#\n#.                       B            .#\n#.                                    .#\n#..................  ...............  .#\n#..................  ...h...........  .#\n#..................  ...............  .#\n#.      B           F            B    .#\n#.                                    .#\n#......................................#\n#........h............................X#\n########################################", "DiamondsRequired": "27", "CaveTime": "200 185 170 155 140", "Colors": "Brown Gray1 White", "DiamondValue": "10 20", "Dark": "true"}, {"Name": "Clásica 4. Cocodrilos", "Hint": "Pisa a los cocodrilos cuando cierran la boca. Abajo hay un túnel.", "Map": "########################################\n#12.....WWWWW......WWWWW.....WWWWWWWW..#\n#.......WWWWW.*....WWWWW.....WWWWWWWW..#\n#...*...WWWWW......WWWWW.*...WWWWWWWW*.#\n#.......WWWWW..o...WWWWW.....WWWWWWWW..#\n#.......WWWWW......WWWWW..o..WWWWWWWW..#\n#....o..WWWWW...*..WWWWW.....WWWWWWWW.*#\n#.......WWWWW......WWWWW...*.WWWWWWWW..#\n#.......WWWWW......WWWWW.....WWWWWWWW..#\n#.......cc*CC......ccccc.....cc*CC*cc..#\n#.......wwwww...o..wwwww.....wwwwwwww..#\n#.......wwwww......wwwww....*wwwwwwww..#\n#.....*.wwwww..*...wwwww.....wwwwwwww.X#\n#.......wwwww......wwwww*....wwwwwwww..#\n#.......wwwww....*.wwwww.....wwwwwwww..#\n#.......wwwww......wwwww.....wwwwwwww..#\n#W.WWWWWWWWWWWWWWWWWWWWWWW.WWWWWWWWWWWW#\n#                           WWWWWWWWWWW#\n#       F           F       WWWWWWWWWWW#\n#                           WWWWWWWWWWW#\n#....*.....*.....*.....*....WWWWWWWWWWW#\n########################################", "DiamondsRequired": "15", "CaveTime": "150 135 120 105 90", "Colors": "Green Brown White", "DiamondValue": "15 30"}, {"Name": "Clásica 5. Brea", "Hint": "La brea se abre y se cierra. Empuja una roca adentro y queda tapada.", "Map": "########################################\n#....o....WW...*........WWW.....o......#\n#...*.....WW.....o......WWW...*........#\n#.......*.WW............WWW........*...#\n#.........WW......*.....WWW............#\n#12   o   zz        o   ZZZ            #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#.............WWW...........WW.........#\n#........*....WWW... F ..o..WW...*.....#\n#..........o..WWW...   .*...WW.........#\n#....*........WWW..*........WW*........#\n#.............WWW...........WW.........#\n#             ZZZ  o        zz   o     #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#........WW.........WWW........WW......#\n#....*..oWW......*..WWW.o......WW..*...#\n#........WW.........WWW...*....WW......#\n#........WW..*......WWW........WW..o...#\n#........WW.........WWW......*.WW......#\n#     o  zz    o    ZZZ    o   zz     X#\n#........WW.........WWW........WW......#\n########################################", "DiamondsRequired": "14", "CaveTime": "180 165 150 135 120", "Colors": "Brown Orange White", "DiamondValue": "15 30"}, {"Name": "Clásica 6. Troncos", "Hint": "Escóndete en los huecos. Una roca en el carril detiene los troncos.", "Map": "########################################\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#WWWWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWWWW#\n#12WW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WWWW#\n#..WW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WWWW#\n#           l           l           l  #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW..#\n#WWWWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWW..#\n#WWWW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WW..#\n#WWWW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WW..#\n#   L            L           L         #\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#..WWWWWWW*WWWWWWWWW*WWWWWWWWW*WWWWWWWW#\n#..WW*WWWWoWWWW*WWWWoWWWW*WWWWoWWW*WWWW#\n#..WW.WWWW.WWWW.WWWW.WWWW.WWWW.WWW.WWWW#\n#        l         l        l        lX#\n########################################", "DiamondsRequired": "15", "CaveTime": "150 135 120 105 90", "Colors": "Green Brown White", "DiamondValue": "10 20"}, {"Name": "Clásica 7. Vigas y toneles", "Hint": "Sube hasta la salida. Con el martillo, los toneles se vuelven diamantes.", "Map": "########################################\n#                   X                  #\n#dd                                    #\n#dd             *         *            #\n#WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW    #\n#                                      #\n#                                      #\n#         H *             *       *    #\n#    WWWWWWWWWWWWWWW WWWWWWWWWWWWWWWWWW#\n#                                      #\n#                                      #\n#             *         *       *      #\n#WWWWWWWWWWW WWWWWWWWWWWWWWW WWWWWW    #\n#                                      #\n#                                      #\n#       *       *             H *      #\n#    WWWWWWWWWWWWWWWWW WWWWWWWWWWWWWWWW#\n#                                      #\n#                                      #\n#                                      #\n#         * 12    *       *     *     f#\n########################################", "DiamondsRequired": "18", "CaveTime": "150 135 120 105 90", "Colors": "Red Blue White", "DiamondValue": "15 30"}, {"Name": "Clásica 8. Remaches", "Hint": "Saca los 8 remaches pisándolos y el gorila caerá.", "Map": "########################################\n#                                      #\n#                                    X #\n#                  dd                  #\n#              *   dd    *     o *     #\n#WWWWWWWxWWW WWWWWWWWWWWWWW WWWxWWWWWWW#\n#                                      #\n#         F                            #\n#    *  o        *           *         #\n#WW WWWWxWWWWWWWWWWWWWWWWWWWWWWxWWWW WW#\n#                                      #\n#                        F             #\n#       o  *          *            *   #\n#WWWWWWWxWWWWW WWWWWWWWWWW WWWWxWWWWWWW#\n#                                      #\n#              F                       #\n#     *            *           o  *    #\n#WW WWWWxWWWWWWWWWWW WWWWWWWWWWxWWWW WW#\n#                                      #\n#                                      #\n# 12 *        *          *       *     #\n########################################", "DiamondsRequired": "10", "CaveTime": "180 165 150 135 120", "Colors": "Red Blue White", "DiamondValue": "10 20", "Params": "ape=0"}, {"Name": "Clásica 9. Cintas", "Hint": "Las cintas cambian de sentido. ¡Que los diamantes no caigan al fuego!", "Map": "########################################\n#WWWWW12..o.....*..............*..WWWWW#\n#WWWWW..*..............*.....o....WWWWW#\n#WWWWW......*..............*......WWWWW#\n#WWWW                              WWWW#\n#WWWW     *                        WWWW#\n#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#\n#WWWWW.....o......*...............WWWWW#\n#WWWWW...*...............*.o......WWWWW#\n#WWWWW........*...............*...WWWWW#\n#WWWW       F                      WWWW#\n#WWWW                    *         WWWW#\n#WWWWf{{{{{{{{{{{{{  {{{{{{{{{{{{{fWWWW#\n#WWWWW...........o....*...........WWWWW#\n#WWWWW..*....................o..*.WWWWW#\n#WWWWW.......*............*.......WWWWW#\n#WWWW                     F        WWWW#\n#WWWW          *                   WWWW#\n#WWWWf}}}}}}}}}}}}}  }}}}}}}}}}}}}fWWWW#\n#WWWWW                            WWWWW#\n#WWWWW              X             WWWWW#\n########################################", "DiamondsRequired": "14", "CaveTime": "150 135 120 105 90", "Colors": "Gray1 Cyan White", "DiamondValue": "15 30"}].map(props => ({ props, objects: [] })) };
+// caves for two, after Fireboy & Watergirl and Portal 2 (docs/cuevas-cooperativas.md): neither kid can get out alone
+CAVE_SETS.coop = { name: 'Cooperativas', caves: [{"Name": "Cooperativa 1. Turnos", "Hint": "Uno pisa la placa y el otro pasa. Después, al revés.", "Map": "########################################\n#............W............W............#\n#.......*....W.......*....W.......*....#\n#...1.2......W............W............#\n#............W............W......X.....#\n#..*.........W..*.........W..*.........#\n#......p.....W............W......p.....#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............P............P............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n########################################", "DiamondsRequired": "4", "CaveTime": "240 220 200 180 160", "Colors": "Orange Gray1 White", "DiamondValue": "10 20"}, {"Name": "Cooperativa 2. Dos pisos", "Hint": "Cada placa abre las compuertas de su color: mira la luz de la esquina.", "Map": "########################################\n#............W............W............#\n#.......*....W.......*....W.......*....#\n#...1........W............W............#\n#............W............W............#\n#..*.........W..*.........P..*.........#\n#............W......r.....W......p.....#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#WWWWWRWWWWWWWWWWWW.WWWWWWWWWWWW.WWWWWW#\n#............W............W............#\n#.......*....W.......*....W.......*....#\n#............W.....2......W............#\n#............W............W......X.....#\n#..*.........Q..*.........R..*.........#\n#............W......q.....W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n########################################", "DiamondsRequired": "8", "CaveTime": "240 220 200 180 160", "Colors": "Cyan Blue White", "DiamondValue": "10 20"}, {"Name": "Cooperativa 3. La palanca", "Hint": "La palanca queda como la dejas: no hace falta quedarse ahí.", "Map": "########################################\n#............W............W............#\n#.......*....W.......*....W.......*....#\n#...1.2......W............W............#\n#............W............W............#\n#..*.........P..*............*.........#\n#......p.....W............W......q.....#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#WWWWWQWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW#\n#............W............W............#\n#.E.....*....W.......*....W.......*....#\n#............W............W............#\n#............W............W......X.....#\n#..*.........Q..*.........Q..*.........#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n#............W............W............#\n########################################", "DiamondsRequired": "8", "CaveTime": "240 220 200 180 160", "Colors": "Yellow Brown White", "DiamondValue": "10 20"}, {"Name": "Cooperativa 4. Esclusa", "Hint": "La compuerta con la X se cierra cuando su color se abre: nunca están abiertas las dos.", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#...1.2...W.........W.........W........#\n#.........W.........W.........W........#\n#..*......N..*......P..*......W..*.....#\n#.........W.........W......p..W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#WWWWWWWWWWWWWW.WWWWWWWWWNWWWWWWWWVWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........W.........W.........W........#\n#.........W.........W.........W......X.#\n#..*.........*......Q..*.........*.....#\n#......q..W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n########################################", "DiamondsRequired": "9", "CaveTime": "240 220 200 180 160", "Colors": "LightRed Purple White", "DiamondValue": "10 20"}, {"Name": "Cooperativa 5. Con reloj", "Hint": "La placa con reloj sigue apretada unos segundos después de soltarla. ¡Corre!", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#...1.2...W.........W.........W........#\n#.........W.........W.........W........#\n#..*......Q..*......P..*......P..*.....#\n#......]..W.........W......[..W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#WWWW.WWWWWWWWWQWWWWWWWWWQWWWWWWWWPWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........W.........W.........W........#\n#.........W.........W.........W......X.#\n#..*......Q..*......Q..*......W..*.....#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n#.........W.........W.........W........#\n########################################", "DiamondsRequired": "9", "CaveTime": "240 220 200 180 160", "Colors": "Green Gray1 White", "DiamondValue": "10 20", "Params": "timer=5"}, {"Name": "Cooperativa 6. Fuego y agua", "Hint": "La barrera azul solo deja pasar a J1; la naranja, solo a J2.", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........)...1.....R.....2...P........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W.........W.........W........#\n#WWWW(WWWWWWWWWRWWWWWWWWW)WWWWWWWWRWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........(.........(.........W........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W.........W......r..W........#\n#WWWW(WWWWWWWWW)WWWWWWWWWQWWWWWWWW.WWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........(.........P.........Q........#\n#.........W.........W.........W......X.#\n#..*......W..*......W..*......W..*.....#\n#.........W......p..W.........W......q.#\n########################################", "DiamondsRequired": "14", "CaveTime": "240 220 200 180 160", "Colors": "Red Blue White", "DiamondValue": "10 20"}, {"Name": "Cooperativa 7. Relevo", "Hint": "Palancas y compuertas al revés: piensen el orden juntos.", "Map": "########################################\n#.........W.........W.........W........#\n#.4.....*.W.......*.W.......*.W.......*#\n#...1.2...Q.........R.........W........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#......q..W.........W.........W........#\n#WWWWWWWWWWWWWWWWWWWWWWWWVWWWWWWWWRWWWW#\n#.........W.........W.........W........#\n#.......*.W.E.....*.W.......*.W.......*#\n#.........W.........Q.........3........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W.........W.........W........#\n#WWWW3WWWWWWWWWWWWWWWWWWW3WWWWWWWW.WWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........R.........V.........W........#\n#.........W.........W.........W......X.#\n#..*......W..*......W..*......W..*.....#\n#.........W......p..W......r..W........#\n########################################", "DiamondsRequired": "10", "CaveTime": "240 220 200 180 160", "Colors": "Purple Gray1 White", "DiamondValue": "10 20", "Legend": "3=gatei:3 4=lever:3"}, {"Name": "Cooperativa 8. Contrarreloj", "Hint": "Relojes y barreras: cuando uno suelta, el otro corre.", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#...1.2...(...................)........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W......3..W.........W........#\n#WWWWRWWWWWWWWW)WWWWWWWWW(WWWWWWWWWWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........P.........R..................#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#......q..W.........W.........W........#\n#WWWW.WWWWWWWWW.WWWWWWWWW)WWWWWWWW)WWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........).........Q.........P........#\n#.........W.........W.........W......X.#\n#..*......W..*......W..*......W..*.....#\n#.........W......[..W.........W........#\n########################################", "DiamondsRequired": "13", "CaveTime": "240 220 200 180 160", "Colors": "LightBlue Brown White", "DiamondValue": "10 20", "Legend": "3=tplate:3", "Params": "timer=6"}, {"Name": "Cooperativa 9. Engranaje", "Hint": "Placas, relojes, palancas y compuertas al revés, todo junto.", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.......*.W.E.....*.W.......*#\n#...1.2.............Q.........R........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W.........W......s..W........#\n#WWWWVWWWWWWWWWWWWWWWWWWWPWWWWWWWW.WWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#...................P.........R........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#.........W......3..W......[..W......q.#\n#WWWWWWWWWWWWWW.WWWWWWWWWVWWWWWWWWQWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.4.....*#\n#.........R.........P.........R........#\n#.........W.........W.........W......X.#\n#..*......W..*......W..*......W..*.....#\n#......p..W.........W.........W......3.#\n########################################", "DiamondsRequired": "12", "CaveTime": "240 220 200 180 160", "Colors": "Brown Orange White", "DiamondValue": "10 20", "Legend": "3=tplate:3 4=lever:4", "Params": "timer=6"}, {"Name": "Cooperativa 10. Gran final", "Hint": "Empiezan separados. Todo lo aprendido, y un solo camino.", "Map": "########################################\n#.........W.........W.........W........#\n#.......*.W.D.....*.W.......*.W.......*#\n#.........V.........(.....2...W...1....#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#......q..W.........W......3..W........#\n#WWWW(WWWWWWWWW.WWWWWWWWW)WWWWWWWWQWWWW#\n#.........W.........W.........W........#\n#.......*.W.......*.W.......*.W.......*#\n#.........(.........V.........R........#\n#.........W.........W.........W........#\n#..*......W..*......W..*......W..*.....#\n#......s..W......p..W.........W........#\n#WWWWQWWWWWWWWW)WWWWWWWWW(WWWWWWWWSWWWW#\n#.........W.........W.........W........#\n#.4.....*.W.......*.W.......*.W.......*#\n#.........Q.........(.........Q........#\n#.........W.........W.........W......X.#\n#..*......W..*......W..*......W..*.....#\n#......p..W.........W.........W........#\n########################################", "DiamondsRequired": "16", "CaveTime": "240 220 200 180 160", "Colors": "Gray1 Red White", "DiamondValue": "10 20", "Legend": "3=tplate:3 4=lever:4", "Params": "timer=6"}].map(props => ({ props, objects: [] })) };
 CAVE_SETS.rnd = { name: 'Aleatorias', caves: Array.from({ length: BIG_N }, () =>
   ({ props: { Name: '', Colors: CAVE_SETS.bd1.caves[0].props.Colors, Big: true }, objects: [] })) };
 /* And the type, with the button next to the seed: A, the cave (like BD1's cave A), or B, the building (cave B). */
@@ -2163,7 +2173,7 @@ const caveOf = n => { const cs = CAVE_SETS[caveSet].caves; return { cave: cs[(n 
 function caveLabel(n){
   if (mode === 'train' && !hlTrain()) return 'NIVEL ' + n;
   const { cave, lvl } = caveOf(n), nm = cave.props.Name || '';
-  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(Aleatoria|Edificio|Nueva|Clásica|Mía|Prueba) (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
+  const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(Aleatoria|Edificio|Nueva|Clásica|Cooperativa|Mía|Prueba) (\d+)/.exec(nm), lv = lvl ? ' · ' + (lvl + 1) : '';
   return (m ? 'CUEVA ' + m[1] : im ? 'INTERMEDIO ' + im[1] : rm ? rm[1].toUpperCase() + ' ' + rm[2] : nm.toUpperCase()) + lv;
 }
 const caveTitle = n => { if (mode === 'train' && !hlTrain()) return ''; const nm = caveOf(n).cave.props.Name || '', d = nm.indexOf('. '); return d > 0 ? nm.slice(d + 2) : ''; };
@@ -2504,6 +2514,7 @@ let src = new Int32Array(MAXN).fill(-1), srcAt = new Float64Array(MAXN), dugAt =
 const under = new Uint8Array(MAXN), grp = new Uint8Array(MAXN), eatN = new Uint8Array(MAXN), regrowAt = new Int32Array(MAXN);
 let waterY = 99, waterAcc = 0, waterMs = 0, targets = [], gateCells = [], plateCells = [], rhyCells = [], beltCells = [], apeCells = [], drumCells = [], gravSwitched = false;
 let mapCave = false, caveDark = false, ctick = 0, frozenT = 0, rivetN = 0, rivet0 = 0;
+const leverOn = new Uint8Array(256), tUntil = new Int32Array(256);   // each group's levers, and until when its plates with a clock hold it
 const AIR_MS = 4000;
 const frozen = () => ctick < frozenT;
 const vacate = i => { grid[i] = under[i] || E; under[i] = 0; };          // a kid or a thing leaves cell i
@@ -2675,6 +2686,7 @@ function resetCaveRules(n){
   magicTime = 0; magicState = 0; magicLeft = 0; amoebaSlow = 0; amoebaTicks = 0; slimePerm = 0;
   under.fill(0); grp.fill(0); gateMark.fill(0); eatN.fill(0); regrowAt.fill(0); regrowN = 0; waterY = 99; waterAcc = 0; waterMs = 0;
   targets = []; gateCells = []; plateCells = []; rhyCells = []; beltCells = []; apeCells = []; drumCells = [];
+  leverOn.fill(0); tUntil.fill(0);
   mapCave = false; caveDark = false; ctick = 0; frozenT = 0; rivetN = 0; rivet0 = 0; EP = EP_DEF;
   // a cave that turned the gravity with its switches: the next one starts with it the normal way again
   if (gravSwitched) { gravSwitched = false; gDirSet = 2; applyGravity(); }
@@ -2910,10 +2922,10 @@ function genCave(n){
     mapCave = true; grp.set(L.mapX.grp); EP = parseParams(P.Params); caveDark = P.Dark === 'true' || P.Dark === '1';
     for (let i = 0; i < W*H; i++) {
       const t = grid[i];
-      if (t === TARGET) targets.push(i); else if (t === GATE) gateCells.push(i); else if (t === PLATE) plateCells.push(i);
+      if (t === TARGET) targets.push(i); else if (t === GATE || t === GATEI) gateCells.push(i); else if (t === PLATE || t === TPLATE) plateCells.push(i);
       else if (t === BELT) beltCells.push(i); else if (t === DRUM) drumCells.push(i); else if (t === RIVET) rivetN++;
       else if (t === APE && grid[i - 1] !== APE && grid[i - W] !== APE) apeCells.push(i);   // a gorilla: its top-left cell
-      if (t === GATE) gateMark[i] = 1;
+      if (t === GATE) gateMark[i] = 1; else if (t === GATEI) gateMark[i] = 2;
       if (EL[t]?.rhythm) rhyCells.push(i);
     }
     rivet0 = rivetN;
@@ -3713,7 +3725,7 @@ function heldDirs(p){
 }
 function canEnter(p, d){
   const j = p.y * W + p.x + OFF[d], t = grid[j];
-  return t === E || t === DIRT || t === LDIRT || t === GEM || t === STAR || TAKE[t] === 1 || t === RIVET || KIDON[t] === 1 ||
+  return t === E || t === DIRT || t === LDIRT || t === GEM || t === STAR || TAKE[t] === 1 || t === RIVET || (KIDON[t] === 1 && kidOk(p, t)) ||
     (t === DOOR && keyN(p, Math.min(6, grp[j])) > 0) || (isPort(t) && PORT_D[t] === d) || (t === EXIT && exitOpenFor(p)) || (pushable(t) && d % 2 === 1 && ofree(j + OFF[d]));
 }
 function slantDir(p, h){
@@ -3785,7 +3797,12 @@ function stepPlayer(p){
   // the map caves: things to pick up, doors of a colour, pieces to stand on, rivets to take out, barrels to smash
   else if (TAKE[t]) { take(p, j); go(); p.push = 0; }
   else if (t === DOOR && keyN(p, Math.min(6, grp[j])) > 0) { p.keys -= 1 << (Math.min(6, grp[j]) * 4); grid[j] = E; go(); p.push = 0; sfx.open(); }
-  else if (KIDON[t]) { go(); p.push = 0; sfx.step(); }   // dangerous now: the next tick it kills
+  else if (KIDON[t] && kidOk(p, t)) { go(); p.push = 0; sfx.step(); }   // dangerous now: the next tick it kills
+  else if (t === LEVER) {
+    // a lever: a push turns it over (not again for a moment); it stays as it is left
+    p.push = 0; p.walking = false;
+    if (tickN - (p.gswAt ?? -1e9) > secT(.5)) { p.gswAt = tickN; leverOn[grp[j]] ^= 1; sfx.open(); }
+  }
   else if (t === RIVET) { grid[j] = E; rivetN--; go(); p.push = 0; sfx.step(); }
   else if (t === TONEL && p.hamT > ctick) { grid[j] = GEM; fall[j] = 0; aux[j] = 0; vari[j] = (j * 7) & 255; p.push = 0; p.walking = false; sfx.crash(); if (!netReplaying) dust.push({ x: j % W, y: (j / W | 0) - 1, at: nowT }); }
   else if (isPort(t) && PORT_D[t] === d && [E, DIRT, LDIRT, GEM].includes(grid[j + OFF[d]]) || isPort(t) && PORT_D[t] === d && TAKE[grid[j + OFF[d]]]) {
@@ -4009,9 +4026,14 @@ function newCaveTick(){
   if (!mapCave) return;
   ctick++;
   if (gateCells.length) {
+    // a group is on while one of its plates holds something, its lever is on, or a plate with a clock still counts
     const on = new Uint8Array(256);
-    for (const i of plateCells) if (grid[i] !== PLATE && grid[i] !== BOOM) on[grp[i]] = 1;
-    for (const g of gateCells) { if (on[grp[g]] && grid[g] === GATE) grid[g] = E; else if (!on[grp[g]] && grid[g] === E) grid[g] = GATE; }
+    for (const i of plateCells) if (grid[i] !== PLATE && grid[i] !== TPLATE && grid[i] !== BOOM) { on[grp[i]] = 1; if (under[i] === TPLATE) tUntil[grp[i]] = ctick + secT(EPn('timer')); }
+    for (let g = 0; g < 256; g++) if (leverOn[g] || tUntil[g] > ctick) on[g] = 1;
+    for (const g of gateCells) {
+      const inv = gateMark[g] === 2, shut = inv ? GATEI : GATE, open = inv ? !on[grp[g]] : on[grp[g]];
+      if (open && grid[g] === shut) grid[g] = E; else if (!open && grid[g] === E) grid[g] = shut;
+    }
   }
   if (regrowN) {
     let left = 0;
@@ -4274,13 +4296,13 @@ function menu(){
     <h2>BOULDER DÚO</h2>
     <p class="long">Caven túneles, junten gemas y lleguen a la salida antes de que se acabe el tiempo. Las rocas caen, ruedan y aplastan. Las luciérnagas explotan al tocarte; las mariposas, al caerles una roca, se vuelven gemas.</p>
     <div class="row">
-      <button id="bsolo" class="b1">1 JUGADOR</button>
+      <button id="bsolo" class="b1"${caveSet === 'coop' ? ' disabled title="Estas cuevas son para dos"' : ''}>1 JUGADOR</button>
       <button id="bcoop" class="b1">COOPERATIVO</button>
       <button id="bvs" class="b2">VERSUS</button>
     </div>
     <div class="row">
-      ${caveSet === 'inf' || caveSet === 'str' ? '' : '<button id="bpc" class="b2">CONTRA PC</button>'}
-      ${touchPref || caveSet === 'inf' || caveSet === 'str' ? '' : '<button id="btrain">ENTRENAR PC</button>'}
+      ${caveSet === 'inf' || caveSet === 'str' || caveSet === 'coop' ? '' : '<button id="bpc" class="b2">CONTRA PC</button>'}
+      ${touchPref || caveSet === 'inf' || caveSet === 'str' || caveSet === 'coop' ? '' : '<button id="btrain">ENTRENAR PC</button>'}
     </div>
     ${BT ? '<div class="row"><button id="bbt" class="b1">DOS CELULARES (BLUETOOTH)</button></div>' : ''}
     <div class="row">
@@ -4305,6 +4327,7 @@ function menu(){
       <button id="bset5" class="${caveSet === 'str' ? 'on' : ''}">INFINITA ALEATORIA</button>
       <button id="bset6" class="${caveSet === 'new' ? 'on' : ''}">CUEVAS NUEVAS</button>
       <button id="bset7" class="${caveSet === 'cls' ? 'on' : ''}">CUEVAS CLÁSICAS</button>
+      <button id="bset9" class="${caveSet === 'coop' ? 'on' : ''}">CUEVAS COOPERATIVAS</button>
       ${CAVE_SETS.mine.caves.length ? `<button id="bset8" class="${caveSet === 'mine' ? 'on' : ''}">MIS CUEVAS (${CAVE_SETS.mine.caves.length})</button>` : ''}
     </div>
     <p class="long">1 jugador: solo J1, con la pantalla completa para ti. Cooperativo: juntan gemas entre los dos y ambos deben salir. Versus: cada uno junta las suyas y gana el primero en salir. Contra PC: el rival aprende con Q-learning mientras juega.${touchPref ? '' : ' Entrenar PC: el PC juega solo y puedes acelerar el tiempo.'}</p>
@@ -4325,7 +4348,7 @@ function menu(){
   $('btilt').onclick = () => { tilt3d = !tilt3d; try { localStorage.setItem('boulder-duo-tilt', tilt3d ? '1' : '0'); } catch (e) {} menu(); };
   $('bdark').onclick = () => { darkCaves = !darkCaves; try { localStorage.setItem('boulder-duo-dark', darkCaves ? '1' : '0'); } catch (e) {} menu(); };
   if (!touchPref) $('bgrav').onclick = () => { realGravity = !realGravity; try { localStorage.setItem('boulder-duo-gravity', realGravity ? '1' : '0'); } catch (e) {} menu(); };
-  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str'); $('bset6').onclick = () => pickSet('new'); $('bset7').onclick = () => pickSet('cls'); if ($('bset8')) $('bset8').onclick = () => pickSet('mine');
+  $('bset1').onclick = () => pickSet('bd1'); $('bset2').onclick = () => pickSet('bd2'); $('bset3').onclick = () => pickSet('rnd'); $('bset4').onclick = () => pickSet('inf'); $('bset5').onclick = () => pickSet('str'); $('bset6').onclick = () => pickSet('new'); $('bset7').onclick = () => pickSet('cls'); $('bset9').onclick = () => pickSet('coop'); if ($('bset8')) $('bset8').onclick = () => pickSet('mine');
   $('bedit').onclick = () => openEditor();
   onEnter = () => startGame('coop');
 }
@@ -4341,7 +4364,7 @@ function startN(){
   return 1;
 }
 function setStartN(n){ startMem[caveSet] = n; try { localStorage.setItem(startKey(), String(n)); } catch (e) {} }
-function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(?:Aleatoria|Nueva|Clásica|Mía|Prueba) (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
+function caveShort(nm){ const m = /^Cave ([A-Z]\*?)/.exec(nm), im = /^Intermission (\d+)/.exec(nm), rm = /^(?:Aleatoria|Nueva|Clásica|Cooperativa|Mía|Prueba) (\d+)/.exec(nm); return m ? m[1] : im ? 'INT ' + im[1] : rm ? rm[1] : nm.slice(0, 5); }
 function caveMenu(){
   const cs = CAVE_SETS[caveSet].caves, n0 = startN(), idx = (n0 - 1) % cs.length, lvl = Math.floor((n0 - 1) / cs.length);
   // random caves: just the one of the seed, at the chosen level (the ones after it follow when it is won)
@@ -5409,7 +5432,26 @@ function MAP_T(){
     for (let x = -32; x < 96; x += 32) { const cx = x + o; g.beginPath(); if (d === 1) { g.moveTo(cx, 20); g.lineTo(cx + 12, 32); g.lineTo(cx, 44); g.lineTo(cx + 6, 44); g.lineTo(cx + 18, 32); g.lineTo(cx + 6, 20); }
       else { g.moveTo(cx + 18, 20); g.lineTo(cx + 6, 32); g.lineTo(cx + 18, 44); g.lineTo(cx + 12, 44); g.lineTo(cx, 32); g.lineTo(cx + 12, 20); } g.closePath(); g.fill(); }
   })));
-  return MAP_TC = { key, door, laser, torch, amulet, sword, hammer, pond, croc, tar, log, tonel, ape, drum, rivet, belt };
+  const lever = [0, 1].map(on => mk(g => {
+    g.fillStyle = '#4a4e5a'; g.strokeStyle = OL; g.lineWidth = 3; g.fillRect(10, 44, 44, 14); g.strokeRect(10, 44, 44, 14);
+    g.save(); g.translate(32, 46); g.rotate(on ? .6 : -.6); g.fillStyle = '#9aa0ac'; g.fillRect(-3, -30, 6, 30); g.strokeRect(-3, -30, 6, 30);
+    g.fillStyle = on ? '#7dffa0' : '#ff6a5a'; g.beginPath(); g.arc(0, -32, 7, 0, 7); g.fill(); g.stroke(); g.restore();
+  }));
+  const tplate = [0, 1].map(on => mk(g => {
+    g.fillStyle = on ? '#3a6a4a' : '#4a4640'; g.strokeStyle = on ? '#7dffa0' : '#8a847a'; g.lineWidth = 3; g.beginPath(); g.rect(8, 46, 48, 12); g.fill(); g.stroke();
+    if (on) { g.fillStyle = 'rgba(125,255,160,.25)'; g.fillRect(4, 20, 56, 28); }
+    g.fillStyle = '#f4f1ea'; g.strokeStyle = OL; g.lineWidth = 2; g.beginPath(); g.arc(32, 28, 11, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.moveTo(32, 28); g.lineTo(32, 20); g.moveTo(32, 28); g.lineTo(38, 30); g.stroke();
+  }));
+  const gatei = mk(g => {
+    g.fillStyle = '#1a1a20'; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#b85a6a'; g.strokeStyle = OL; g.lineWidth = 2; for (const x of [10, 23, 36, 49]) { g.fillRect(x, 0, 6, 64); g.strokeRect(x, 0, 6, 64); }
+    g.fillRect(0, 8, 64, 6); g.fillRect(0, 50, 64, 6); g.strokeStyle = '#ffd24a'; g.lineWidth = 3; g.beginPath(); g.moveTo(20, 24); g.lineTo(44, 40); g.moveTo(44, 24); g.lineTo(20, 40); g.stroke();
+  });
+  const bar = ['rgba(95,180,255,', 'rgba(255,138,76,'].map(c => [0, 1].map(f => mk(g => {
+    g.fillStyle = c + '.28)'; g.fillRect(0, 0, 64, 64); g.strokeStyle = c + '.85)'; g.lineWidth = 3;
+    for (let x = 6; x < 64; x += 14) { g.beginPath(); for (let y = 0; y <= 64; y += 8) g.lineTo(x + Math.sin((y + f * 8) / 8) * 3, y); g.stroke(); }
+  })));
+  return MAP_TC = { key, door, laser, torch, amulet, sword, hammer, pond, croc, tar, log, tonel, ape, drum, rivet, belt, lever, tplate, gatei, bar };
 }
 // what a kid carries (map caves), for the bar: keys of each colour, the torch, swords, the hammer's seconds
 function keysHud(p){
@@ -5420,6 +5462,18 @@ function keysHud(p){
   if (p.hamT > ctick) h += `<span class="mine">🔨${Math.ceil((p.hamT - ctick) * tickMs / 1000)}</span>`;
   return h;
 }
+// each group's colour (plates, gates, levers), so it can be seen which plate opens which gate: a little lamp in the corner
+const GROUP_COL = ['#f4f1ea', '#ffd24a', '#5fb4ff', '#ff6a5a', '#7dffa0', '#c86bff', '#ff9a3c', '#3fd0c0'];
+const BADGED = new Map();
+function badged(base, gid){
+  let a = BADGED.get(base); if (!a) BADGED.set(base, a = []);
+  const k = gid & 7; if (a[k]) return a[k];
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.drawImage(base, 0, 0, 64, 64); g.fillStyle = GROUP_COL[k]; g.strokeStyle = '#1e140e'; g.lineWidth = 3;
+  g.beginPath(); g.arc(53, 11, 8, 0, 7); g.fill(); g.stroke();
+  return a[k] = c;
+}
+const groupOn = gid => { for (const i of plateCells) if (grp[i] === gid && grid[i] !== PLATE && grid[i] !== TPLATE) return true; return !!leverOn[gid] || tUntil[gid] > ctick; };
 // a belt's way now (they all turn round together now and then)
 const beltDir = i => (Math.floor(ctick / secT(EPn('belt'))) & 1) ? OPP[dir[i]] : dir[i];
 // a piece of the map caves as drawn (also under a kid or a thing standing on it)
@@ -5428,7 +5482,12 @@ function mapSprite(t, i){
   switch (t) {
     case KEY: return M.key[Math.min(6, grp[i])][(frame >> 3) % 2];
     case DOOR: return M.door[Math.min(6, grp[i])];
-    case PLATE: return N.plate[grid[i] !== PLATE ? 1 : 0];
+    case PLATE: return badged(N.plate[grid[i] !== PLATE ? 1 : 0], grp[i]);
+    case GATE: return badged(N.gate, grp[i]);
+    case TPLATE: return badged(M.tplate[groupOn(grp[i]) ? 1 : 0], grp[i]);
+    case GATEI: return badged(M.gatei, grp[i]);
+    case LEVER: return badged(M.lever[leverOn[grp[i]] ? 1 : 0], grp[i]);
+    case BAR1: return M.bar[0][(frame >> 3) & 1]; case BAR2: return M.bar[1][(frame >> 3) & 1];
     case LASER: return M.laser[danger(i) ? 1 : 0];
     case TORCH: return M.torch; case AMULET: return M.amulet; case SWORD: return M.sword; case HAMMER: return M.hammer;
     case POND: return M.pond[(frame >> 4) & 1];
@@ -5459,7 +5518,7 @@ function ldirtSprite(v){
 const gateMark = new Uint8Array(MAXN);
 function drawUnder(g, i, px, py){
   if (under[i]) { const sp = mapSprite(under[i], i); if (sp) g.drawImage(sp, px, py, T, T); }
-  if (gateMark[i] && grid[i] !== GATE) g.drawImage(NEW_T().gateOpen, px, py, T, T);
+  if (gateMark[i] && grid[i] !== GATE && grid[i] !== GATEI) g.drawImage(badged(NEW_T().gateOpen, grp[i]), px, py, T, T);
 }
 function tileSprite(t, i, x, y, af, open){
   if (INF) TL = infTL[infSlotOf(i)] || TL;   // the endless cave: each piece in its own cave's colours
@@ -5481,14 +5540,13 @@ function tileSprite(t, i, x, y, af, open){
     case STAR: return starSprite(starLetter(), !!starsGot[starKey(level)], (frame >> 3) % 4);
     case NUT: return NEW_T().nut;
     case KEY: case DOOR: case PLATE: case LASER: case TORCH: case AMULET: case SWORD: case HAMMER: case POND: case CROC: case TAR:
-    case LOG: case TONEL: case APE: case DRUM: case RIVET: case BELT: return mapSprite(t, i);
+    case LOG: case TONEL: case APE: case DRUM: case RIVET: case BELT: case GATE: case LEVER: case TPLATE: case GATEI: case BAR1: case BAR2: return mapSprite(t, i);
     case PORTU: case PORTR: case PORTD: case PORTL: return NEW_T().port[PORT_D[t]];
     case BARREL: return NEW_T().barrel;
     case TARGET: return NEW_T().target[grid[i - W] === ROCK ? 1 : 0];
     case EATER: return NEW_T().eater[dir[i]][(frame >> 2) % 2];
     case LDIRT: return ldirtSprite(DV[i]);
     case GSW: return NEW_T().gsw[gDir < 0 ? 2 : gDir];
-    case GATE: return NEW_T().gate;
     case P1: case P2: {
       const p = players[t-P1];
       if (p.immune > 0 && (frame >> 2) % 2) return null;
@@ -6204,13 +6262,13 @@ function netRng(){ netRngS = netRngS + 0x6D2B79F5 | 0; let t = Math.imul(netRngS
 const PKEYS = ['x', 'y', 'alive', 'exited', 'gems', 'lives', 'respawn', 'immune', 'push', 'doomed', 'dieX', 'dieY', 'score', 'face', 'stepN', 'dig', 'walking', 'idle', 'wins', 'actAt', 'waitMove', 'keys', 'air', 'gswAt', 'torch', 'sword', 'hamT', 'stepT'];
 // a copy of everything the game needs (taken after each tick when two phones play, and by the start-spot check)
 function stateSnap(){
-  return { t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt, under].map(a => a.slice()), inf: INF && JSON.stringify(INF), nw: [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN, apeCells.slice()],
+  return { t: worldT, A: [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt, under].map(a => a.slice()), inf: INF && JSON.stringify(INF), nw: [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN, apeCells.slice(), leverOn.slice(), tUntil.slice()],
     pb: pendingBooms.map(e => ({ ...e })), p: players.map(q => PKEYS.map(k => q[k])),
     sc: [timeLeft, timeAcc, magicState, magicLeft, amoebaTicks, starPending, starIsGem, exitOpenShown, lastDeathTick, hardHits, netRngS, tickN, exitOpenAt, starFlash] };
 }
 function stateLoad(h){
   [grid, fall, dir, aux, vari, src, srcAt, dugAt, fallN, rot, landAt, fallT, untouched, boss, holdCell, infDV, eatN, regrowAt, under].forEach((a, i) => a.set(h.A[i]));
-  [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN] = h.nw; apeCells = h.nw[7].slice(); applyGravity();
+  [waterY, waterAcc, gDirSet, gravSwitched, ctick, frozenT, rivetN] = h.nw; apeCells = h.nw[7].slice(); leverOn.set(h.nw[8]); tUntil.set(h.nw[9]); applyGravity();
   regrowN = 0; for (let i = 0; i < W*H; i++) if (regrowAt[i]) regrowN++;
   if (h.inf) { const old = INF && INF.lay.slice(); INF = JSON.parse(h.inf); infCamShift(old, INF.lay); }
   pendingBooms = h.pb.map(e => ({ ...e })); players.forEach((q, i) => PKEYS.forEach((k2, j) => { q[k2] = h.p[i][j]; }));
@@ -6592,6 +6650,7 @@ const ED_PAL = [
   ['Montezuma', 'kKmMjJ=-ieh'],
   ['Pitfall', 'wcCzZlL'],
   ['Donkey Kong', 'dbfHx{}'],
+  ['Cooperación', 'DE[]NV()'],
 ];
 const ED_COLN = ['dorada', 'roja', 'azul', 'verde', 'morada', 'naranja', 'blanca'];
 const ED_DIRN = ['↑', '→', '↓', '←'];
@@ -6645,7 +6704,7 @@ function edName(ch, leg = LEGEND){
   if (L.id === -1) return 'inicio J1'; if (L.id === -2) return 'inicio J2'; if (L.id === -3) return 'agua que sube (desde esta fila)';
   let n = EL[L.id]?.name || '?';
   if (L.id === KEY || L.id === DOOR) n += ' ' + (ED_COLN[L.g] || L.g);
-  else if (L.id === PLATE || L.id === GATE) n += ' ' + L.g;
+  else if ([PLATE, GATE, LEVER, TPLATE, GATEI].includes(L.id)) n += ' ' + L.g;
   else if (EL[L.id]?.rhythm) n += ' (turno ' + (L.g & 1 ? 'b' : 'a') + ')';
   else if ([EATER, LOG, TONEL, BELT, FIRE, BUTT].includes(L.id)) n += ' ' + ED_DIRN[L.d];
   return n;
@@ -6657,7 +6716,7 @@ function edSprite(L, nb){
     case -1: return PL_T[0].idle[0]; case -2: return PL_T[1].idle[0];
     case DIRT: return TL.DIRT[0]; case WALL: return TL.WALL; case STEEL: return TL.STEEL; case EXIT: return TL.EXIT[0];
     case ROCK: return ROCK_T[0]; case GEM: return GEM_T[0][0]; case FIRE: return FIRE_T[0]; case BUTT: return BUTT_T[0][0];
-    case NUT: return N.nut; case BARREL: return N.barrel; case TARGET: return N.target[0]; case GATE: return N.gate; case PLATE: return N.plate[0];
+    case NUT: return N.nut; case BARREL: return N.barrel; case TARGET: return N.target[0]; case GATE: return badged(N.gate, L.g); case PLATE: return badged(N.plate[0], L.g);
     case PORTU: case PORTR: case PORTD: case PORTL: return N.port[L.id - PORTU];
     case EATER: return N.eater[L.d][0]; case LDIRT: return ldirtSprite(0); case GSW: return N.gsw[2];
     case KEY: return M.key[Math.min(6, L.g)][0]; case DOOR: return M.door[Math.min(6, L.g)];
@@ -6666,6 +6725,8 @@ function edSprite(L, nb){
     case POND: return M.pond[0]; case LOG: return M.log[0]; case TONEL: return M.tonel[0]; case DRUM: return M.drum[0];
     case RIVET: return M.rivet; case BELT: return M.belt[L.d === 1 ? 0 : 1][0];
     case APE: return M.ape[0][nb || 0];
+    case LEVER: return badged(M.lever[0], L.g); case TPLATE: return badged(M.tplate[0], L.g); case GATEI: return badged(M.gatei, L.g);
+    case BAR1: return M.bar[0][0]; case BAR2: return M.bar[1][0];
   }
   return null;
 }
@@ -6724,9 +6785,9 @@ function edBuild(){
         <label>Colores <span class="edcols"><select id="edc0">${col}</select><select id="edc1">${col}</select><select id="edc2">${col}</select></span></label>
         <label>El agua sube una fila cada (s; vacío: no sube) <input id="ed_WaterRise"></label>
         <label class="edchk"><input type="checkbox" id="ed_Dark"> Cueva oscura</label>
-        <label>Ritmos <input id="ed_Params" placeholder="laser=1.5,1.5 croc=2,2 tar=2,2 belt=6 ape=3 log=2 tonel=2 hammer=8 amulet=10 regrow=6"></label>
+        <label>Ritmos <input id="ed_Params" placeholder="timer=3 laser=1.5,1.5 croc=2,2 tar=2,2 belt=6 ape=3 log=2 tonel=2 hammer=8 amulet=10 regrow=6"></label>
         <label>Letras propias <input id="ed_Legend" placeholder="por ejemplo: Q=gate:7 y=eater:l"></label>
-        <p class="edhelp">Ritmos: rayo, cocodrilo y brea (segundos peligrosos y seguros), cintas (cada cuánto se dan vuelta), gorila (cada cuánto tira un tonel; 0: nunca), tronco y tonel (turnos por cuadro), martillo y amuleto (cuánto duran), tierra viva (cuánto tarda en crecer).</p>
+        <p class="edhelp">Ritmos: rayo, cocodrilo y brea (segundos peligrosos y seguros), cintas (cada cuánto se dan vuelta), gorila (cada cuánto tira un tonel; 0: nunca), tronco y tonel (turnos por cuadro), martillo y amuleto (cuánto duran), tierra viva (cuánto tarda en crecer), placa con reloj (cuántos segundos sigue apretada).</p>
       </div>
     </div>
     <div id="edmodal" hidden><div class="card"><textarea id="edtext" spellcheck="false"></textarea><div class="row" id="edmbtn"></div></div></div>`;
@@ -6782,7 +6843,7 @@ function edFill(){
   const cs = (edCave.Colors || 'Orange Gray1 White').split(/\s+/); [0, 1, 2].forEach(c => { $('edc' + c).value = C64[cs[c]] ? cs[c] : ['Orange', 'Gray1', 'White'][c]; });
   const mine = loadMine(), o = ['<option value="">ABRIR…</option>'];
   if (mine.length) o.push('<optgroup label="Mis cuevas">' + mine.map((p, k) => `<option value="mine:${k}">${k + 1}. ${(p.Name || 'Sin nombre').replace(/</g, '')}</option>`).join('') + '</optgroup>');
-  for (const set of ['new', 'cls']) o.push(`<optgroup label="${set === 'new' ? 'Cuevas nuevas' : 'Cuevas clásicas'}">` + CAVE_SETS[set].caves.map((c, k) => `<option value="${set}:${k}">${c.props.Name}</option>`).join('') + '</optgroup>');
+  for (const set of ['new', 'cls', 'coop']) o.push(`<optgroup label="${{ new: 'Cuevas nuevas', cls: 'Cuevas clásicas', coop: 'Cuevas cooperativas' }[set]}">` + CAVE_SETS[set].caves.map((c, k) => `<option value="${set}:${k}">${c.props.Name}</option>`).join('') + '</optgroup>');
   $('edopen').innerHTML = o.join('');
   edEl.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === edTool));
   $('eddel').disabled = edMine < 0;
@@ -6809,7 +6870,7 @@ function edCell(g, ch, leg, x, y, cs, R){
   let nb = 0;
   if (L.id === APE && R) { const cx = x / cs | 0, cy = y / cs | 0, is = (a, b) => (leg[(R[b] || [])[a]] || {}).id === APE; nb = (is(cx - 1, cy) ? 1 : 0) + (is(cx, cy - 1) ? 2 : 0); }
   const sp = edSprite(L, nb); if (sp) g.drawImage(sp, x, y, cs, cs);
-  const tag = L.id === PLATE || L.id === GATE ? String(L.g) : EL[L.id]?.rhythm && L.g & 1 ? 'b' : L.id === LOG || L.id === TONEL ? ED_DIRN[L.d] : '';
+  const tag = [PLATE, GATE, LEVER, TPLATE, GATEI].includes(L.id) ? String(L.g) : EL[L.id]?.rhythm && L.g & 1 ? 'b' : L.id === LOG || L.id === TONEL ? ED_DIRN[L.d] : '';
   if (tag) { g.font = `bold ${Math.max(8, cs * .42 | 0)}px monospace`; g.textAlign = 'right'; g.lineWidth = 3; g.strokeStyle = '#000'; g.fillStyle = '#ffd24a'; g.strokeText(tag, x + cs - 1, y + cs - 2); g.fillText(tag, x + cs - 1, y + cs - 2); }
 }
 function edDraw(){
@@ -6868,7 +6929,7 @@ function edCheck(){
   if (need > gems + (n[BUTT] || 0) * 9 + (n[NUT] || 0) + (n[EATER] || 0) + (n[APE] ? 99 : 0)) warn.push(`pide ${need} diamantes y hay ${gems} a la vista`);
   if (!n[-2]) warn.push('sin inicio de J2 (2): J2 empieza junto a J1');
   if (n[APE] && n[APE] % 4) warn.push('un gorila ocupa 2 × 2 cuadros');
-  if (n[GATE] && !n[PLATE]) warn.push('hay compuertas sin placas');
+  if ((n[GATE] || n[GATEI]) && !n[PLATE] && !n[TPLATE] && !n[LEVER]) warn.push('hay compuertas sin placas ni palancas');
   if (n[DOOR] && !n[KEY]) warn.push('hay puertas sin llaves');
   return { err, warn, gems, need };
 }

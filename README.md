@@ -30,6 +30,8 @@ Como en Boulder Dash 2, los niveles son cuevas con letra, de la **A** a la **P**
 
 **[9 cuevas inspiradas en Montezuma's Revenge, Pitfall! y Donkey Kong](docs/cuevas-clasicos.md):** llaves de colores, rayos, oscuridad con antorcha, cocodrilos, brea, troncos, toneles del gorila, remaches y cintas transportadoras, con sus mapas de 40 × 22. **Ya se juegan** con el botón **CUEVAS CLÁSICAS**.
 
+**[10 cuevas cooperativas](docs/cuevas-cooperativas.md):** para dos, cada vez más difíciles, en las que ninguno puede salir solo: placas, palancas, placas con reloj, compuertas inversas y barreras que solo cruza uno (ideas de Fireboy & Watergirl y Portal 2). Cada una se comprobó con un resolvedor y jugando su solución en el juego. Botón **CUEVAS COOPERATIVAS**.
+
 **[Editor de cuevas](docs/editor-de-cuevas.md):** con el botón **EDITOR DE CUEVAS** del menú se pintan cuevas con todas las piezas (las de Boulder Dash, las nuevas y las clásicas), se prueban al tiro, se guardan en **MIS CUEVAS** y se pasan como texto. Cada pieza funciona igual en cualquier mapa: ninguna cueva tiene reglas propias.
 
 ![Editor de cuevas](docs/editor.png)

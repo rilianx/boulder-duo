@@ -71,6 +71,7 @@ Cambian lo que tardan las piezas con reloj. Los valores van en segundos, salvo e
 | `hammer=s` | 8 | cuánto dura el martillo |
 | `amulet=s` | 10 | cuánto dura el amuleto |
 | `regrow=s` | 6 | cuánto tarda en crecer la tierra viva |
+| `timer=s` | 4 | cuánto sigue encendida una placa con reloj después de soltarla |
 
 Pisar una pieza con ritmo mientras es peligrosa mata, igual que estar en ella cuando cambia. Las piezas con ritmo vienen en dos **turnos**, `a` y `b`. Si los dos tiempos son iguales, mientras las `a` son peligrosas las `b` son seguras. Así se arman cruces en dos tiempos, como en las cuevas «Rayos» y «Cocodrilos».
 
@@ -177,6 +178,21 @@ Por ejemplo, `7=plate:7 8=gate:7` agrega un séptimo par de placa y compuerta, y
 | `x` | remache | Se saca pisándolo. Mientras quede alguno, la salida no se abre. | `x=rivet` |
 | `{` | cinta ← | Lleva lo que tiene encima (a un niño, si está quieto). Todas se dan vuelta cada 6 segundos. | `{=belt:l` |
 | `}` | cinta → | Lleva lo que tiene encima (a un niño, si está quieto). Todas se dan vuelta cada 6 segundos. | `}=belt:r` |
+
+**Cooperación** (ver [cuevas cooperativas](cuevas-cooperativas.md))
+
+| Letra | Pieza | Qué hace | En «Letras propias» |
+|---|---|---|---|
+| `D` | palanca 1 | Un empujón la da vuelta: enciende o apaga su grupo, y queda así. | `D=lever:1` |
+| `E` | palanca 2 | Igual, del grupo 2. | `E=lever:2` |
+| `[` | placa con reloj 1 | Como la placa, pero su grupo sigue encendido unos segundos después de soltarla. | `[=tplate:1` |
+| `]` | placa con reloj 2 | Igual, del grupo 2. | `]=tplate:2` |
+| `N` | compuerta inversa 1 | Cerrada mientras su grupo está encendido, abierta si no. | `N=gatei:1` |
+| `V` | compuerta inversa 2 | Igual, del grupo 2. | `V=gatei:2` |
+| `(` | barrera de J1 | Solo J1 la cruza. | `(=bar1` |
+| `)` | barrera de J2 | Solo J2 la cruza. | `)=bar2` |
+
+Un grupo está encendido si alguna de sus placas tiene algo encima, si su palanca está encendida o si su placa con reloj todavía cuenta. Cada grupo tiene un color, que se ve como una luz en la esquina de sus piezas.
 
 ## Cómo está hecho
 
